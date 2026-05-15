@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AURA — A Cinematic Way to Shop</title>
+  <meta name="description" content="AURA is a cinematic shopping experience. Curated objects, told like films." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #07070a;
+      --bg-base: #0a0a0f;
+      --bg-elevated: #111118;
+      --surface: rgba(255, 255, 255, 0.04);
+      --fg: #ece9e2;
+      --fg-muted: #8d8a82;
+      --accent: #c8a26b;
+      --accent-soft: #d9c19a;
+      --accent-glow: rgba(200, 162, 107, 0.22);
+      --border: rgba(255, 255, 255, 0.08);
+      --serif: "Cormorant Garamond", "Times New Roman", serif;
+      --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --radius: 4px;
+      --max: 1440px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg-deep);
+      color: var(--fg);
+      font-family: var(--sans);
+      font-weight: 300;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+    /* Ambient cinematic backdrop */
+    .ambient {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(ellipse at 20% 10%, rgba(200, 162, 107, 0.08), transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(60, 70, 110, 0.10), transparent 55%),
+        radial-gradient(ellipse at 50% 50%, rgba(140, 90, 60, 0.04), transparent 60%),
+        linear-gradient(180deg, #0a0a0f 0%, #07070a 100%);
+    }
+    .ambient::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.92 0 0 0 0 0.89 0 0 0 0 0.83 0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+      opacity: 0.5;
+      mix-blend-mode: overlay;
+      pointer-events: none;
+    }
+
+    /* Nav */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px clamp(20px, 4vw, 56px);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: linear-gradient(180deg, rgba(7, 7, 10, 0.65), rgba(7, 7, 10, 0));
+      transition: background 400ms var(--ease);
+    }
+    .nav.scrolled {
+      background: rgba(7, 7, 10, 0.78);
+      border-bottom: 1px solid var(--border);
+    }
+    .brand {
+      font-family: var(--serif);
+      font-size: 1.5rem;
+      letter-spacing: 0.32em;
+      font-weight: 500;
+    }
+    .brand sup {
+      font-family: var(--sans);
+      font-size: 0.6rem;
+      color: var(--accent);
+      letter-spacing: 0.2em;
+      margin-left: 6px;
+      vertical-align: super;
+    }
+    .nav ul {
+      display: flex;
+      gap: 36px;
+      list-style: none;
+      margin: 0; padding: 0;
+      font-size: 0.78rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+    .nav ul a { transition: color 200ms var(--ease); }
+    .nav ul a:hover { color: var(--fg); }
+    .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      font-size: 0.78rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+    .bag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bag .count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px; height: 20px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #1a1308;
+      font-size: 0.62rem;
+      font-weight: 500;
+    }
+
+    @media (max-width: 860px) {
+      .nav ul { display: none; }
+    }
+
+    /* HERO */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-end;
+      padding: 0 clamp(20px, 4vw, 56px) clamp(60px, 8vh, 120px);
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: -8% -4% -4% -4%;
+      background:
+        radial-gradient(ellipse at 30% 40%, rgba(200, 162, 107, 0.18), transparent 60%),
+        radial-gradient(ellipse at 70% 60%, rgba(80, 60, 110, 0.20), transparent 65%),
+        linear-gradient(180deg, #0c0c12 0%, #07070a 80%);
+      filter: blur(0px);
+      will-change: transform;
+      z-index: -1;
+    }
+    .hero-bg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 30%, var(--bg-deep) 100%);
+    }
+    .hero-grain {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.07 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+      opacity: 0.7;
+      mix-blend-mode: overlay;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 0.7rem;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 28px;
+    }
+    .hero-eyebrow::before {
+      content: "";
+      width: 36px; height: 1px;
+      background: var(--accent);
+      opacity: 0.7;
+    }
+
+    .hero h1 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-style: italic;
+      font-size: clamp(3.4rem, 11vw, 12rem);
+      line-height: 0.92;
+      letter-spacing: -0.02em;
+      margin: 0 0 36px;
+      max-width: 1100px;
+    }
+    .hero h1 .word {
+      display: inline-block;
+      overflow: hidden;
+      vertical-align: bottom;
+    }
+    .hero h1 .word > span {
+      display: inline-block;
+      transform: translateY(110%);
+      animation: rise 1100ms var(--ease) forwards;
+    }
+    .hero h1 .word:nth-child(2) > span { animation-delay: 80ms; }
+    .hero h1 .word:nth-child(3) > span { animation-delay: 160ms; }
+    .hero h1 .word:nth-child(4) > span { animation-delay: 240ms; }
+    .hero h1 .accent {
+      font-style: normal;
+      font-family: var(--serif);
+      color: var(--accent);
+    }
+    @keyframes rise {
+      to { transform: translateY(0); }
+    }
+
+    .hero-foot {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 40px;
+      flex-wrap: wrap;
+      max-width: 1100px;
+    }
+    .hero-lede {
+      max-width: 420px;
+      color: var(--fg-muted);
+      font-size: 0.95rem;
+      line-height: 1.7;
+      opacity: 0;
+      animation: fade 1000ms var(--ease) 500ms forwards;
+    }
+    @keyframes fade { to { opacity: 1; } }
+
+    .cta-row {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      opacity: 0;
+      animation: fade 1000ms var(--ease) 700ms forwards;
+    }
+
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 28px;
+      font-size: 0.78rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      transition: all 300ms var(--ease);
+      overflow: hidden;
+    }
+    .btn::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent, rgba(200, 162, 107, 0.18), transparent);
+      transform: translateX(-100%);
+      transition: transform 800ms var(--ease);
+    }
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--fg);
+      box-shadow: 0 0 60px -10px var(--accent-glow);
+    }
+    .btn:hover::before { transform: translateX(100%); }
+    .btn .arrow {
+      display: inline-block;
+      width: 16px;
+      transition: transform 300ms var(--ease);
+    }
+    .btn:hover .arrow { transform: translateX(6px); }
+    .btn.primary {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .scroll-cue {
+      position: absolute;
+      bottom: 30px;
+      right: clamp(20px, 4vw, 56px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.68rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+    .scroll-cue .line {
+      width: 1px; height: 50px;
+      background: linear-gradient(180deg, transparent, var(--accent), transparent);
+      animation: cue 2.4s ease-in-out infinite;
+    }
+    @keyframes cue {
+      0%, 100% { transform: scaleY(1); opacity: 0.8; }
+      50% { transform: scaleY(0.5); opacity: 0.3; }
+    }
+
+    /* Marquee */
+    .marquee {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 22px 0;
+      overflow: hidden;
+      white-space: nowrap;
+      font-family: var(--serif);
+      font-size: 1.6rem;
+      letter-spacing: 0.08em;
+      color: var(--fg-muted);
+    }
+    .marquee-track {
+      display: inline-flex;
+      gap: 60px;
+      padding-right: 60px;
+      animation: scroll 40s linear infinite;
+    }
+    .marquee span { display: inline-flex; align-items: center; gap: 60px; }
+    .marquee .dot {
+      width: 6px; height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      display: inline-block;
+    }
+    .marquee i { font-style: italic; }
+    @keyframes scroll { to { transform: translateX(-50%); } }
+
+    /* SECTION shell */
+    section.scene {
+      position: relative;
+      padding: clamp(80px, 14vh, 180px) clamp(20px, 4vw, 56px);
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 40px;
+      flex-wrap: wrap;
+      margin-bottom: 80px;
+    }
+    .eyebrow {
+      font-size: 0.7rem;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 24px;
+    }
+    .section-head h2 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-style: italic;
+      font-size: clamp(2.4rem, 6vw, 5.5rem);
+      line-height: 1;
+      letter-spacing: -0.015em;
+      margin: 0;
+      max-width: 800px;
+    }
+    .section-head p {
+      max-width: 360px;
+      color: var(--fg-muted);
+      font-size: 0.95rem;
+      line-height: 1.7;
+      margin: 0;
+    }
+
+    /* Product grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 40px 24px;
+    }
+    .product {
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .product.span-7 { grid-column: span 7; }
+    .product.span-5 { grid-column: span 5; }
+    .product.span-6 { grid-column: span 6; }
+    .product.span-4 { grid-column: span 4; }
+    .product.span-8 { grid-column: span 8; }
+    @media (max-width: 900px) {
+      .product.span-4, .product.span-5, .product.span-6, .product.span-7, .product.span-8 {
+        grid-column: span 12;
+      }
+    }
+    .product-frame {
+      position: relative;
+      aspect-ratio: 4 / 5;
+      overflow: hidden;
+      background: var(--bg-elevated);
+    }
+    .product.wide .product-frame { aspect-ratio: 16 / 11; }
+    .product-art {
+      position: absolute;
+      inset: 0;
+      transition: transform 1400ms var(--ease), filter 800ms var(--ease);
+      transform: scale(1.05);
+      filter: saturate(0.85) contrast(1.02);
+    }
+    .product:hover .product-art {
+      transform: scale(1.0);
+      filter: saturate(1) contrast(1.05);
+    }
+    .product-art::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, transparent 50%, rgba(7, 7, 10, 0.7) 100%),
+        radial-gradient(ellipse at center, transparent 0%, rgba(7,7,10,0.25) 100%);
+    }
+    .product-tag {
+      position: absolute;
+      top: 18px; left: 18px;
+      font-size: 0.62rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--fg);
+      background: rgba(7, 7, 10, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+    }
+    .product-tag.featured {
+      color: var(--accent);
+      border-color: rgba(200, 162, 107, 0.4);
+    }
+    .product-meta {
+      position: absolute;
+      left: 24px; right: 24px; bottom: 24px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .product-meta h3 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: clamp(1.4rem, 2.5vw, 2.4rem);
+      margin: 0;
+      line-height: 1.05;
+    }
+    .product-meta .sub {
+      color: var(--fg-muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+    .product-price {
+      font-family: var(--serif);
+      font-size: 1.4rem;
+      color: var(--accent);
+    }
+    .product-quick {
+      position: absolute;
+      inset: auto 0 0 0;
+      transform: translateY(100%);
+      transition: transform 500ms var(--ease);
+      background: linear-gradient(0deg, rgba(7,7,10,0.95), rgba(7,7,10,0.6));
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.7rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--fg);
+    }
+    .product:hover .product-quick { transform: translateY(0); }
+    .product-quick .add { color: var(--accent); }
+
+    /* Product art generators (pure CSS scenes) */
+    .art-noir {
+      background:
+        radial-gradient(ellipse at 30% 30%, #2a2620, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, #1a1612, transparent 70%),
+        linear-gradient(135deg, #1b1714, #0c0a09);
+    }
+    .art-noir::before {
+      content: "";
+      position: absolute;
+      inset: 20% 32% 14% 30%;
+      background: linear-gradient(180deg, #c8a26b 0%, #8a6a40 60%, #463420 100%);
+      border-radius: 50% 50% 8% 8%;
+      box-shadow: inset 0 -40px 60px rgba(0,0,0,0.6), 0 30px 80px rgba(200,162,107,0.18);
+    }
+    .art-noir::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 30% 20%, rgba(255,220,180,0.18), transparent 40%);
+    }
+
+    .art-sienna {
+      background:
+        radial-gradient(ellipse at 70% 30%, #5a3a22, transparent 60%),
+        linear-gradient(160deg, #3a2718 0%, #1a1108 100%);
+    }
+    .art-sienna::before {
+      content: "";
+      position: absolute;
+      left: 12%; right: 12%; bottom: 10%;
+      height: 65%;
+      background:
+        radial-gradient(ellipse at 50% 30%, #e4c9a3, #a37c4a 60%, #5a3a22 100%);
+      border-radius: 12% 88% 6% 94% / 50% 30% 70% 50%;
+      filter: blur(0.4px);
+      box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+    }
+
+    .art-ink {
+      background:
+        radial-gradient(ellipse at 50% 60%, #1c1f2a, transparent 70%),
+        linear-gradient(180deg, #0d1018 0%, #07090f 100%);
+    }
+    .art-ink::before {
+      content: "";
+      position: absolute;
+      inset: 18% 24% 22% 26%;
+      background: linear-gradient(180deg, #c8c4bb, #67625a 70%, #2a2725 100%);
+      border-radius: 50% 50% 12% 12%;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.7), inset 0 -30px 50px rgba(0,0,0,0.5);
+    }
+    .art-ink::after {
+      content: "";
+      position: absolute;
+      left: 50%; top: 28%;
+      width: 22%; height: 12%;
+      transform: translateX(-50%);
+      background: radial-gradient(ellipse, rgba(255,255,255,0.35), transparent 70%);
+      filter: blur(8px);
+    }
+
+    .art-ember {
+      background:
+        radial-gradient(ellipse at 50% 60%, #4a1a14, transparent 65%),
+        radial-gradient(ellipse at 50% 100%, #c34a30, transparent 50%),
+        linear-gradient(180deg, #1c0a08, #0a0303);
+    }
+    .art-ember::before {
+      content: "";
+      position: absolute;
+      inset: 24% 30% 22% 30%;
+      background: linear-gradient(180deg, #f3e1ce, #c8a26b 60%, #6a3e22 100%);
+      clip-path: polygon(50% 0%, 95% 35%, 85% 100%, 15% 100%, 5% 35%);
+      box-shadow: 0 30px 70px rgba(195, 74, 48, 0.25);
+    }
+
+    .art-mist {
+      background:
+        radial-gradient(ellipse at 30% 40%, #2b3340, transparent 70%),
+        radial-gradient(ellipse at 70% 70%, #3d4a5e, transparent 65%),
+        linear-gradient(180deg, #0c1018 0%, #060810 100%);
+    }
+    .art-mist::before {
+      content: "";
+      position: absolute;
+      inset: 30% 20% 20% 20%;
+      background: linear-gradient(160deg, #d9d2c4, #88806f);
+      border-radius: 50%;
+      filter: blur(0.5px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset -30px -20px 60px rgba(0,0,0,0.3);
+    }
+    .art-mist::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 80% 20%, rgba(217, 193, 154, 0.20), transparent 40%);
+    }
+
+    .art-bronze {
+      background:
+        radial-gradient(ellipse at 60% 40%, #3c2618, transparent 60%),
+        linear-gradient(135deg, #1c1410 0%, #0a0604 100%);
+    }
+    .art-bronze::before {
+      content: "";
+      position: absolute;
+      inset: 20% 28% 22% 28%;
+      background:
+        linear-gradient(140deg, #d9c19a 0%, #a07a48 50%, #4b3520 100%);
+      border-radius: 4px;
+      transform: rotate(-3deg);
+      box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 40px rgba(217,193,154,0.12);
+    }
+    .art-bronze::after {
+      content: "";
+      position: absolute;
+      inset: 22% 30% 26% 30%;
+      border: 1px solid rgba(255, 230, 200, 0.25);
+      transform: rotate(-3deg);
+    }
+
+    /* Story / cinematic chapter */
+    .chapter {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 120px clamp(20px, 4vw, 56px);
+      overflow: hidden;
+    }
+    .chapter::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(200, 162, 107, 0.10), transparent 55%),
+        radial-gradient(ellipse at 80% 70%, rgba(80, 50, 30, 0.18), transparent 60%),
+        linear-gradient(180deg, #0a0a0f 0%, #07070a 100%);
+      z-index: -1;
+    }
+    .chapter-no {
+      position: absolute;
+      top: 50%; left: clamp(20px, 4vw, 56px);
+      transform: translateY(-50%) rotate(-90deg);
+      transform-origin: left center;
+      font-family: var(--serif);
+      font-size: 0.85rem;
+      letter-spacing: 0.5em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    .chapter-inner {
+      max-width: 920px;
+      text-align: center;
+    }
+    .chapter blockquote {
+      font-family: var(--serif);
+      font-style: italic;
+      font-weight: 300;
+      font-size: clamp(1.8rem, 4.5vw, 4rem);
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      margin: 0;
+      color: var(--fg);
+    }
+    .chapter blockquote .accent { color: var(--accent); }
+    .chapter cite {
+      display: block;
+      margin-top: 40px;
+      font-size: 0.7rem;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+      font-style: normal;
+    }
+
+    /* Editorial split */
+    .editorial {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    @media (max-width: 900px) {
+      .editorial { grid-template-columns: 1fr; gap: 40px; }
+    }
+    .editorial-text h2 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-style: italic;
+      font-size: clamp(2.2rem, 5vw, 4.4rem);
+      line-height: 1;
+      letter-spacing: -0.015em;
+      margin: 0 0 32px;
+    }
+    .editorial-text p {
+      color: var(--fg-muted);
+      font-size: 1rem;
+      line-height: 1.8;
+      max-width: 460px;
+      margin: 0 0 22px;
+    }
+    .editorial-image {
+      position: relative;
+      aspect-ratio: 4 / 5;
+      overflow: hidden;
+    }
+    .editorial-image .art-sienna,
+    .editorial-image > div {
+      position: absolute;
+      inset: 0;
+    }
+    .editorial-caption {
+      position: absolute;
+      left: 20px; bottom: 20px;
+      font-size: 0.65rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--fg);
+      background: rgba(7, 7, 10, 0.6);
+      backdrop-filter: blur(8px);
+      padding: 8px 12px;
+    }
+
+    /* Collections strip */
+    .collections {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 900px) {
+      .collections { grid-template-columns: 1fr; }
+    }
+    .col-card {
+      position: relative;
+      aspect-ratio: 3 / 4;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .col-card .art { position: absolute; inset: 0; transition: transform 1400ms var(--ease); transform: scale(1.05); }
+    .col-card:hover .art { transform: scale(1); }
+    .col-card .overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, transparent 30%, rgba(7,7,10,0.85) 100%);
+    }
+    .col-card .label {
+      position: absolute;
+      left: 26px; right: 26px; bottom: 26px;
+    }
+    .col-card .num {
+      font-size: 0.7rem;
+      letter-spacing: 0.4em;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .col-card h3 {
+      font-family: var(--serif);
+      font-style: italic;
+      font-weight: 400;
+      font-size: clamp(1.6rem, 3vw, 2.6rem);
+      margin: 0 0 6px;
+      line-height: 1;
+    }
+    .col-card .meta {
+      color: var(--fg-muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    /* Newsletter / CTA */
+    .finale {
+      text-align: center;
+      padding: clamp(100px, 16vh, 200px) clamp(20px, 4vw, 56px);
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .finale h2 {
+      font-family: var(--serif);
+      font-style: italic;
+      font-weight: 400;
+      font-size: clamp(2.6rem, 7vw, 6rem);
+      line-height: 1;
+      letter-spacing: -0.02em;
+      margin: 0 0 28px;
+    }
+    .finale p {
+      color: var(--fg-muted);
+      max-width: 520px;
+      margin: 0 auto 40px;
+      line-height: 1.8;
+    }
+    form.subscribe {
+      display: flex;
+      gap: 0;
+      max-width: 520px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      transition: border-color 300ms var(--ease);
+    }
+    form.subscribe:focus-within { border-color: var(--accent); box-shadow: 0 0 60px -10px var(--accent-glow); }
+    form.subscribe input {
+      flex: 1;
+      background: transparent;
+      border: 0;
+      padding: 18px 22px;
+      color: var(--fg);
+      font: inherit;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    form.subscribe input::placeholder { color: var(--fg-muted); }
+    form.subscribe button {
+      padding: 18px 26px;
+      background: var(--accent);
+      color: #1a1308;
+      font-size: 0.74rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      font-weight: 500;
+      transition: background 200ms var(--ease);
+    }
+    form.subscribe button:hover { background: var(--accent-soft); }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 60px clamp(20px, 4vw, 56px) 40px;
+      color: var(--fg-muted);
+      font-size: 0.78rem;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 60px;
+      margin-bottom: 60px;
+      max-width: var(--max);
+      margin-left: auto; margin-right: auto;
+    }
+    @media (max-width: 800px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    .footer-grid h4 {
+      font-family: var(--sans);
+      font-weight: 500;
+      font-size: 0.7rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--fg);
+      margin: 0 0 18px;
+    }
+    .footer-grid ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .footer-grid ul a:hover { color: var(--fg); }
+    .footer-brand .brand { display: inline-block; margin-bottom: 18px; }
+    .footer-brand p { max-width: 280px; line-height: 1.7; }
+    .footer-bottom {
+      max-width: var(--max);
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 30px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    /* Reveal on scroll */
+    .reveal { opacity: 0; transform: translateY(40px); transition: opacity 1000ms var(--ease), transform 1000ms var(--ease); }
+    .reveal.in { opacity: 1; transform: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        transition-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+      }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <header class="nav" id="nav">
+    <a href="#" class="brand">AURA<sup>2026</sup></a>
+    <nav>
+      <ul>
+        <li><a href="#collection">Collection</a></li>
+        <li><a href="#story">Story</a></li>
+        <li><a href="#journal">Journal</a></li>
+        <li><a href="#atelier">Atelier</a></li>
+      </ul>
+    </nav>
+    <div class="nav-cta">
+      <a href="#" aria-label="Search">Search</a>
+      <a href="#" class="bag" aria-label="Shopping bag">
+        Bag <span class="count">3</span>
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero" aria-label="Introduction">
+      <div class="hero-bg" id="heroBg" aria-hidden="true"></div>
+      <div class="hero-grain" aria-hidden="true"></div>
+
+      <div style="position: relative; z-index: 2; width: 100%;">
+        <div class="hero-eyebrow">Spring Film &mdash; Vol. 07</div>
+        <h1>
+          <span class="word"><span>Objects</span></span>
+          <span class="word"><span>that</span></span>
+          <span class="word"><span><em class="accent">linger</em></span></span>
+          <span class="word"><span>in&nbsp;memory.</span></span>
+        </h1>
+        <div class="hero-foot">
+          <p class="hero-lede">
+            AURA is a slow shop. Forty-two objects, sourced like scenes, photographed like films. New chapter every solstice.
+          </p>
+          <div class="cta-row">
+            <a href="#collection" class="btn primary">
+              Enter the Collection
+              <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </a>
+            <a href="#story" class="btn">Watch Film 02:14</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="scroll-cue" aria-hidden="true">
+        <span>Scroll</span>
+        <span class="line"></span>
+      </div>
+    </section>
+
+    <!-- MARQUEE -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>Hand&#8209;poured ceramics<span class="dot"></span><i>Tokyo</i><span class="dot"></span>Late&#8209;harvest linen<span class="dot"></span><i>Kyoto</i><span class="dot"></span>Smoked bronze<span class="dot"></span><i>Milano</i><span class="dot"></span>Ash glass<span class="dot"></span><i>Copenhagen</i><span class="dot"></span></span>
+        <span>Hand&#8209;poured ceramics<span class="dot"></span><i>Tokyo</i><span class="dot"></span>Late&#8209;harvest linen<span class="dot"></span><i>Kyoto</i><span class="dot"></span>Smoked bronze<span class="dot"></span><i>Milano</i><span class="dot"></span>Ash glass<span class="dot"></span><i>Copenhagen</i><span class="dot"></span></span>
+      </div>
+    </div>
+
+    <!-- FEATURED COLLECTION -->
+    <section class="scene" id="collection">
+      <div class="section-head reveal">
+        <div>
+          <div class="eyebrow">Featured &mdash; Act I</div>
+          <h2>Six objects, <em>one frame</em>.</h2>
+        </div>
+        <p>Every season, we cast six pieces and shoot them like a short film. Each has its own scene, lighting, and silence.</p>
+      </div>
+
+      <div class="grid">
+        <article class="product span-7 wide reveal">
+          <div class="product-frame">
+            <div class="product-art art-noir"></div>
+            <span class="product-tag featured">Cover</span>
+            <div class="product-meta">
+              <div>
+                <h3>Ash &amp; Honey Vessel</h3>
+                <div class="sub">Ceramic / smoked &middot; Edition of 24</div>
+              </div>
+              <div class="product-price">$420</div>
+            </div>
+            <div class="product-quick"><span>View piece</span><span class="add">+ Add</span></div>
+          </div>
+        </article>
+
+        <article class="product span-5 reveal">
+          <div class="product-frame">
+            <div class="product-art art-sienna"></div>
+            <span class="product-tag">No. 02</span>
+            <div class="product-meta">
+              <div>
+                <h3>Sienna Throw</h3>
+                <div class="sub">Heavy linen / dyed by hand</div>
+              </div>
+              <div class="product-price">$280</div>
+            </div>
+            <div class="product-quick"><span>View piece</span><span class="add">+ Add</span></div>
+          </div>
+        </article>
+
+        <article class="product span-4 reveal">
+          <div class="product-frame">
+            <div class="product-art art-ink"></div>
+            <span class="product-tag">No. 03</span>
+            <div class="product-meta">
+              <div>
+                <h3>Quiet Lamp</h3>
+                <div class="sub">Pearlstone / brass</div>
+              </div>
+              <div class="product-price">$640</div>
+            </div>
+            <div class="product-quick"><span>View piece</span><span class="add">+ Add</span></div>
+          </div>
+        </article>
+
+        <article class="product span-4 reveal">
+          <div class="product-frame">
+            <div class="product-art art-ember"></div>
+            <span class="product-tag">No. 04</span>
+            <div class="product-meta">
+              <div>
+                <h3>Ember Decanter</h3>
+                <div class="sub">Mouth&#8209;blown / Murano</div>
+              </div>
+              <div class="product-price">$520</div>
+            </div>
+            <div class="product-quick"><span>View piece</span><span class="add">+ Add</span></div>
+          </div>
+        </article>
+
+        <article class="product span-4 reveal">
+          <div class="product-frame">
+            <div class="product-art art-bronze"></div>
+            <span class="product-tag">No. 05</span>
+            <div class="product-meta">
+              <div>
+                <h3>Bronze Letter Tray</h3>
+                <div class="sub">Cast / patinated</div>
+              </div>
+              <div class="product-price">$190</div>
+            </div>
+            <div class="product-quick"><span>View piece</span><span class="add">+ Add</span></div>
+          </div>
+        </article>
+
+        <article class="product span-12 wide reveal">
+          <div class="product-frame" style="aspect-ratio: 21/9;">
+            <div class="product-art art-mist"></div>
+            <span class="product-tag featured">Closing scene</span>
+            <div class="product-meta">
+              <div>
+                <h3>Mist Series — Vase No. 06</h3>
+                <div class="sub">Slipcast porcelain &middot; Edition of 12</div>
+              </div>
+              <div class="product-price">$760</div>
+            </div>
+            <div class="product-quick"><span>View piece</span><span class="add">+ Add</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- CINEMATIC CHAPTER -->
+    <section class="chapter" id="story" aria-label="Brand quote">
+      <div class="chapter-no">Chapter II / The Hands</div>
+      <div class="chapter-inner reveal">
+        <blockquote>
+          &ldquo;We don&rsquo;t sell things.<br />
+          We sell the <span class="accent">long, quiet evening</span><br />
+          you&rsquo;ll spend with them.&rdquo;
+        </blockquote>
+        <cite>— Mira Okabe, Founder</cite>
+      </div>
+    </section>
+
+    <!-- EDITORIAL -->
+    <section class="scene" id="journal">
+      <div class="editorial">
+        <div class="editorial-text reveal">
+          <div class="eyebrow">The Journal &mdash; Issue 14</div>
+          <h2>Filmed on a Tuesday afternoon, in <em>Kyoto</em>.</h2>
+          <p>Our latest journal follows ceramicist Hana Watanabe through three days at her countryside studio &mdash; the kiln, the river, the long shadows after rain.</p>
+          <p>Six pages of stills, one essay, no advertising. Mailed quietly to members on the first of each month.</p>
+          <a href="#" class="btn">
+            Read the issue
+            <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+        <div class="editorial-image reveal">
+          <div class="art-sienna"></div>
+          <span class="editorial-caption">Still 03 / Hana&rsquo;s hands at the wheel</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLLECTIONS -->
+    <section class="scene" id="atelier">
+      <div class="section-head reveal">
+        <div>
+          <div class="eyebrow">Three Rooms</div>
+          <h2>Shop by <em>mood</em>, not category.</h2>
+        </div>
+        <p>Our pieces are organized the way you actually live with them — by the kind of evening they belong to.</p>
+      </div>
+
+      <div class="collections">
+        <a class="col-card reveal" href="#">
+          <div class="art art-noir"></div>
+          <div class="overlay"></div>
+          <div class="label">
+            <div class="num">No. 01</div>
+            <h3>The Long Dinner</h3>
+            <div class="meta">22 pieces &middot; ceramics, linen, candle</div>
+          </div>
+        </a>
+        <a class="col-card reveal" href="#">
+          <div class="art art-mist"></div>
+          <div class="overlay"></div>
+          <div class="label">
+            <div class="num">No. 02</div>
+            <h3>The Morning After</h3>
+            <div class="meta">14 pieces &middot; glass, robe, paper</div>
+          </div>
+        </a>
+        <a class="col-card reveal" href="#">
+          <div class="art art-ember"></div>
+          <div class="overlay"></div>
+          <div class="label">
+            <div class="num">No. 03</div>
+            <h3>A Quiet Apartment</h3>
+            <div class="meta">19 pieces &middot; lamp, vessel, throw</div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- FINALE -->
+    <section class="finale" aria-label="Subscribe">
+      <div class="reveal">
+        <div class="eyebrow">Become a Member</div>
+        <h2>Letters from <em>the atelier</em>.</h2>
+        <p>One thoughtful note each month: a new film, two new objects, a recipe, a song. No newsletter noise, ever.</p>
+        <form class="subscribe" onsubmit="event.preventDefault(); this.querySelector('button').textContent='Welcome';">
+          <input type="email" placeholder="your@address.com" required aria-label="Email" />
+          <button type="submit">Join</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="brand">AURA<sup>2026</sup></div>
+        <p>A slow shop for the long evening. Hand-cast, hand-fired, hand-shipped from Tokyo, Kyoto, Milano and Copenhagen.</p>
+      </div>
+      <div>
+        <h4>Shop</h4>
+        <ul>
+          <li><a href="#">Collection</a></li>
+          <li><a href="#">Editions</a></li>
+          <li><a href="#">Gift cards</a></li>
+          <li><a href="#">Archive</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Atelier</h4>
+        <ul>
+          <li><a href="#">Our story</a></li>
+          <li><a href="#">The journal</a></li>
+          <li><a href="#">Makers</a></li>
+          <li><a href="#">Press</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Quietly</h4>
+        <ul>
+          <li><a href="#">Contact</a></li>
+          <li><a href="#">Returns</a></li>
+          <li><a href="#">Shipping</a></li>
+          <li><a href="#">FAQ</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 AURA Atelier &middot; All films, all photographs, made in&#8209;house.</span>
+      <span>EN &middot; USD</span>
+    </div>
+  </footer>
+
+  <script>
+    // Nav scroll state
+    const nav = document.getElementById('nav');
+    let lastY = 0;
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      nav.classList.toggle('scrolled', y > 20);
+      // Parallax hero
+      const heroBg = document.getElementById('heroBg');
+      if (heroBg && y < window.innerHeight) {
+        heroBg.style.transform = `translate3d(0, ${y * 0.25}px, 0) scale(${1 + y * 0.0004})`;
+      }
+      lastY = y;
+    }, { passive: true });
+
+    // Reveal on scroll
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+    // Cursor light on hero
+    const hero = document.querySelector('.hero');
+    if (hero && matchMedia('(pointer:fine)').matches) {
+      hero.addEventListener('mousemove', (e) => {
+        const r = hero.getBoundingClientRect();
+        const x = ((e.clientX - r.left) / r.width) * 100;
+        const y = ((e.clientY - r.top) / r.height) * 100;
+        hero.style.setProperty('background-image',
+          `radial-gradient(circle at ${x}% ${y}%, rgba(200,162,107,0.06), transparent 40%)`);
+      });
+    }
+  </script>
+</body>
+</html>
