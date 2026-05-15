@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Rosa Dias — Arte-Educação · Salvador, Bahia</title>
+  <meta name="description" content="Rosangela Dias de Souza, arte-educadora em Salvador, Bahia. Curso de arte para professores: BNCC × História da Arte, atividades, slides e reconhecimento de estilos." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,50;1,9..144,300..700,50&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep:      #1A1410;
+      --bg-base:      #211A14;
+      --bg-elevated:  #2B2017;
+      --surface:      rgba(242, 230, 204, 0.04);
+      --fg:           #F2E6CC;
+      --fg-muted:     #B8A88A;
+      --fg-subtle:    #7A6B54;
+      --terra:        #B5532A;
+      --ocre:         #C9962B;
+      --anil:         #2E4057;
+      --pau-brasil:   #7A2E1F;
+      --mata:         #4A5D3A;
+      --accent:       var(--ocre);
+      --accent-glow:  rgba(201, 150, 43, 0.22);
+      --border:       rgba(242, 230, 204, 0.10);
+      --serif:        "Fraunces", "Cormorant Garamond", Georgia, serif;
+      --sans:         "Inter", -apple-system, "Segoe UI", sans-serif;
+      --mono:         "DM Mono", ui-monospace, monospace;
+      --ease:         cubic-bezier(0.16, 1, 0.3, 1);
+      --radius:       2px;
+      --max:          1440px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg-deep);
+      color: var(--fg);
+      font-family: var(--sans);
+      font-weight: 300;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+    /* Ambient cinematic backdrop — slow drifting warm light */
+    .ambient {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 30%, rgba(181, 83, 42, 0.18), transparent 60%),
+        radial-gradient(ellipse 50% 35% at 80% 70%, rgba(46, 64, 87, 0.20), transparent 60%),
+        radial-gradient(ellipse 70% 50% at 50% 100%, rgba(201, 150, 43, 0.10), transparent 60%);
+      animation: drift 90s ease-in-out infinite alternate;
+    }
+    @keyframes drift {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+    }
+
+    /* Film grain overlay */
+    .grain {
+      position: fixed; inset: 0; z-index: 999; pointer-events: none;
+      opacity: 0.05; mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+    }
+
+    /* Reveal-on-scroll */
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 900ms var(--ease), transform 900ms var(--ease); }
+    .reveal.in { opacity: 1; transform: none; }
+
+    /* ---------- HEADER ---------- */
+    header.site {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px clamp(20px, 4vw, 56px);
+      background: linear-gradient(to bottom, rgba(26,20,16,0.85), rgba(26,20,16,0));
+      backdrop-filter: blur(8px);
+      transition: background 400ms var(--ease);
+    }
+    header.site.solid { background: rgba(26,20,16,0.92); border-bottom: 1px solid var(--border); }
+    .wordmark { font-family: var(--serif); font-weight: 500; font-size: 1.2rem; letter-spacing: -0.01em; }
+    .wordmark span { color: var(--ocre); }
+    nav.primary { display: flex; gap: clamp(18px, 2.6vw, 36px); }
+    nav.primary a {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--fg-muted);
+      transition: color 300ms var(--ease);
+    }
+    nav.primary a:hover { color: var(--fg); }
+    .nav-toggle { display: none; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; }
+    @media (max-width: 768px) {
+      nav.primary { display: none; }
+      .nav-toggle { display: block; }
+    }
+
+    /* ---------- HERO ---------- */
+    .hero {
+      position: relative; min-height: 100vh;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 0 clamp(20px, 4vw, 56px) clamp(60px, 9vh, 120px);
+      overflow: hidden;
+    }
+    .hero-stage { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+    .hero-frame {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      opacity: 0; transform: scale(1);
+      animation: kenburns 48s linear infinite;
+    }
+    .hero-frame:nth-child(1) { animation-delay:  0s; background-image: linear-gradient(135deg, #4A2C18 0%, #7A2E1F 50%, #2E4057 100%); }
+    .hero-frame:nth-child(2) { animation-delay: 12s; background-image: linear-gradient(135deg, #2E4057 0%, #B5532A 50%, #C9962B 100%); }
+    .hero-frame:nth-child(3) { animation-delay: 24s; background-image: linear-gradient(135deg, #7A2E1F 0%, #1A1410 50%, #4A5D3A 100%); }
+    .hero-frame:nth-child(4) { animation-delay: 36s; background-image: linear-gradient(135deg, #1A1410 0%, #C9962B 50%, #B5532A 100%); }
+    /* TODO Rosa: substituir os gradientes por background-image: url('/images/hero-01.jpg') etc., usando fotos dos trabalhos dos estudantes. */
+    @keyframes kenburns {
+      0%   { opacity: 0; transform: scale(1.00); }
+      4%   { opacity: 1; }
+      25%  { opacity: 1; transform: scale(1.08); }
+      29%  { opacity: 0; }
+      100% { opacity: 0; transform: scale(1.08); }
+    }
+    .hero-stage::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(26,20,16,0.35) 0%, rgba(26,20,16,0.55) 50%, var(--bg-deep) 100%);
+    }
+    .hero-content { position: relative; z-index: 1; max-width: var(--max); width: 100%; margin: 0 auto; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.28em;
+      text-transform: uppercase; color: var(--ocre); margin-bottom: 28px;
+    }
+    .hero h1 {
+      font-family: var(--serif); font-weight: 300;
+      font-size: clamp(2.5rem, 8vw, 7rem);
+      line-height: 0.98; letter-spacing: -0.02em;
+      margin: 0 0 28px; max-width: 18ch;
+    }
+    .hero h1 em { font-style: italic; font-weight: 400; color: var(--ocre); }
+    .hero p.lead {
+      font-family: var(--serif); font-weight: 300; font-style: italic;
+      font-size: clamp(1.1rem, 1.6vw, 1.4rem); line-height: 1.5;
+      max-width: 56ch; color: var(--fg-muted); margin: 0 0 40px;
+    }
+    .hero-link {
+      font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--fg);
+      border-bottom: 1px solid var(--ocre); padding-bottom: 4px;
+      transition: color 300ms var(--ease), border-color 300ms var(--ease);
+    }
+    .hero-link:hover { color: var(--ocre); }
+    .scroll-cue {
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+      width: 1px; height: 56px; background: var(--fg-muted); z-index: 2;
+      overflow: hidden;
+    }
+    .scroll-cue::after {
+      content: ""; position: absolute; top: -100%; left: 0; right: 0; bottom: 0;
+      background: var(--ocre); animation: trickle 2.4s ease-in-out infinite;
+    }
+    @keyframes trickle {
+      0% { transform: translateY(0); } 100% { transform: translateY(200%); }
+    }
+
+    /* ---------- SECTIONS ---------- */
+    section { padding: clamp(80px, 14vh, 160px) clamp(20px, 4vw, 56px); position: relative; }
+    .container { max-width: var(--max); margin: 0 auto; }
+    .section-head {
+      display: flex; gap: 24px; align-items: baseline; margin-bottom: 56px;
+      border-top: 1px solid var(--border); padding-top: 40px;
+    }
+    .section-head .num {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--ocre);
+    }
+    .section-head h2 {
+      font-family: var(--serif); font-weight: 400; font-size: clamp(2rem, 4.5vw, 3.4rem);
+      line-height: 1.05; margin: 0; letter-spacing: -0.02em;
+    }
+
+    /* ---------- VISÃO ---------- */
+    .visao blockquote {
+      font-family: var(--serif); font-weight: 300; font-style: italic;
+      font-size: clamp(1.6rem, 3.4vw, 2.6rem); line-height: 1.3;
+      max-width: 28ch; margin: 0; color: var(--fg);
+    }
+    .visao blockquote::before {
+      content: ""; display: block; width: 48px; height: 1px;
+      background: var(--terra); margin-bottom: 32px;
+    }
+    .visao cite {
+      display: block; margin-top: 32px;
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.22em;
+      text-transform: uppercase; font-style: normal; color: var(--fg-subtle);
+    }
+
+    /* ---------- TRAJETÓRIA ---------- */
+    .timeline { display: grid; gap: 36px; max-width: 760px; }
+    .timeline-item {
+      display: grid; grid-template-columns: 88px 1fr; gap: 24px; align-items: baseline;
+      padding-bottom: 32px; border-bottom: 1px solid var(--border);
+    }
+    .timeline-item .year {
+      font-family: var(--mono); font-size: 0.82rem; letter-spacing: 0.14em;
+      color: var(--anil); position: relative;
+    }
+    .timeline-item .year::before {
+      content: ""; position: absolute; right: -16px; top: 8px;
+      width: 6px; height: 6px; border-radius: 50%; background: var(--ocre);
+    }
+    .timeline-item h3 {
+      font-family: var(--serif); font-weight: 400; font-size: 1.4rem;
+      margin: 0 0 6px; line-height: 1.3;
+    }
+    .timeline-item p { margin: 0; color: var(--fg-muted); font-size: 0.95rem; }
+
+    /* ---------- MÉTODO ---------- */
+    .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px; }
+    @media (max-width: 960px) { .pillars { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .pillars { grid-template-columns: 1fr; } }
+    .pillar { border-top: 1px solid var(--terra); padding-top: 24px; }
+    .pillar h3 {
+      font-family: var(--serif); font-weight: 400; font-style: italic;
+      font-size: clamp(1.8rem, 2.8vw, 2.2rem); margin: 0 0 16px; color: var(--fg);
+    }
+    .pillar p { margin: 0; color: var(--fg-muted); font-size: 0.95rem; line-height: 1.7; }
+
+    /* ---------- CURRÍCULO ---------- */
+    .cv { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+    @media (max-width: 768px) { .cv { grid-template-columns: 1fr; gap: 48px; } }
+    .cv h3 {
+      font-family: var(--mono); font-weight: 500; font-size: 0.74rem;
+      letter-spacing: 0.22em; text-transform: uppercase; color: var(--ocre);
+      margin: 0 0 24px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .cv-entry { margin-bottom: 28px; }
+    .cv-entry .role { font-family: var(--serif); font-size: 1.2rem; font-weight: 400; margin: 0 0 4px; }
+    .cv-entry .meta { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em; color: var(--fg-subtle); text-transform: uppercase; }
+    .cv-entry .desc { color: var(--fg-muted); font-size: 0.95rem; margin: 6px 0 0; }
+
+    /* ---------- PERSONALIDADE ---------- */
+    .facets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    @media (max-width: 768px) { .facets { grid-template-columns: repeat(2, 1fr); } }
+    .facet {
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 40px 28px; border-radius: var(--radius);
+      transition: transform 500ms var(--ease), border-color 500ms var(--ease), box-shadow 500ms var(--ease);
+    }
+    .facet:hover {
+      transform: translateY(-4px);
+      border-color: var(--ocre);
+      box-shadow: 0 24px 60px -20px var(--accent-glow);
+    }
+    .facet .initial {
+      font-family: var(--serif); font-weight: 300; font-style: italic;
+      font-size: 3.4rem; line-height: 1; color: var(--ocre); margin-bottom: 16px;
+    }
+    .facet h3 {
+      font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--fg); margin: 0 0 14px;
+    }
+    .facet p {
+      font-family: var(--serif); font-style: italic; font-weight: 300;
+      font-size: 1rem; line-height: 1.5; color: var(--fg-muted); margin: 0;
+    }
+
+    /* ---------- GALERIA ---------- */
+    .gallery-section { padding-left: 0; padding-right: 0; }
+    .gallery-section .section-head { padding-left: clamp(20px, 4vw, 56px); padding-right: clamp(20px, 4vw, 56px); }
+    .gallery {
+      column-count: 4; column-gap: 8px; padding: 0 8px;
+    }
+    @media (max-width: 1280px) { .gallery { column-count: 3; } }
+    @media (max-width: 960px)  { .gallery { column-count: 2; } }
+    @media (max-width: 560px)  { .gallery { column-count: 1; } }
+    .gallery figure {
+      break-inside: avoid; margin: 0 0 8px; position: relative; overflow: hidden;
+      background: var(--bg-elevated); border-radius: var(--radius);
+    }
+    .gallery .ph {
+      width: 100%; aspect-ratio: var(--ar, 4 / 5); display: block;
+      background: linear-gradient(135deg, var(--c1, var(--terra)), var(--c2, var(--pau-brasil)));
+      filter: saturate(0.9);
+    }
+    /* TODO Rosa: trocar cada .ph por <img loading="lazy" src="/images/work-XX.jpg" alt="..."> */
+    .gallery figcaption {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 16px; background: linear-gradient(to top, rgba(26,20,16,0.92), transparent);
+      font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--fg);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity 400ms var(--ease), transform 400ms var(--ease);
+    }
+    .gallery figure:hover figcaption { opacity: 1; transform: none; }
+
+    /* ---------- ARTE-EDUCAÇÃO ---------- */
+    .manifesto { max-width: 64ch; }
+    .manifesto p {
+      font-family: var(--serif); font-weight: 300; font-size: 1.2rem;
+      line-height: 1.7; color: var(--fg); margin: 0 0 24px;
+    }
+    .manifesto p:first-child::first-letter {
+      font-family: var(--serif); font-weight: 400; font-style: italic;
+      font-size: 4.4rem; line-height: 1; float: left;
+      padding: 6px 12px 0 0; color: var(--terra);
+    }
+
+    /* ---------- CURSO ---------- */
+    .course {
+      background: var(--bg-base); border: 1px solid var(--border);
+      padding: clamp(40px, 6vw, 80px); border-radius: var(--radius);
+      position: relative; overflow: hidden;
+    }
+    .course::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(to right, transparent, var(--ocre), transparent);
+    }
+    .course h2 {
+      font-family: var(--serif); font-weight: 400; font-size: clamp(2.2rem, 5vw, 3.6rem);
+      line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 24px; max-width: 18ch;
+    }
+    .course h2 em { font-style: italic; color: var(--ocre); }
+    .course .description {
+      font-family: var(--serif); font-style: italic; font-weight: 300;
+      font-size: 1.2rem; line-height: 1.6; color: var(--fg-muted);
+      max-width: 56ch; margin: 0 0 56px;
+    }
+    .modules {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; margin-bottom: 56px;
+    }
+    @media (max-width: 960px) { .modules { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .modules { grid-template-columns: 1fr; } }
+    .module { border-top: 1px solid var(--border); padding-top: 20px; }
+    .module .n {
+      font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.22em;
+      color: var(--ocre); display: block; margin-bottom: 16px;
+    }
+    .module h3 {
+      font-family: var(--serif); font-weight: 400; font-size: 1.2rem;
+      margin: 0 0 10px; line-height: 1.3;
+    }
+    .module p { margin: 0; color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6; }
+    .outcomes { list-style: none; padding: 0; margin: 0 0 48px; }
+    .outcomes li {
+      padding: 16px 0; border-bottom: 1px solid var(--border);
+      font-family: var(--serif); font-size: 1.05rem; color: var(--fg);
+      display: flex; gap: 16px; align-items: baseline;
+    }
+    .outcomes li::before {
+      content: "✦"; color: var(--ocre); font-size: 0.8rem;
+    }
+    .cta-row { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
+    .cta {
+      background: var(--terra); color: var(--fg);
+      font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.22em;
+      text-transform: uppercase; padding: 20px 32px; border-radius: var(--radius);
+      transition: background 400ms var(--ease), box-shadow 400ms var(--ease);
+      display: inline-block;
+    }
+    .cta:hover { background: var(--ocre); color: var(--bg-deep); box-shadow: 0 12px 40px -8px var(--accent-glow); }
+    .course-meta {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--fg-subtle);
+    }
+
+    /* ---------- CONTATO ---------- */
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+    @media (max-width: 768px) { .contact-grid { grid-template-columns: 1fr; } }
+    .contact-list { list-style: none; padding: 0; margin: 0; }
+    .contact-list li { padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .contact-list .label {
+      font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--fg-subtle); display: block; margin-bottom: 4px;
+    }
+    .contact-list .value { font-family: var(--serif); font-size: 1.1rem; }
+    .contact-form { display: grid; gap: 20px; }
+    .contact-form label {
+      font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--fg-subtle); display: block; margin-bottom: 6px;
+    }
+    .contact-form input, .contact-form textarea {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--fg); padding: 12px 14px; font-family: var(--sans); font-size: 1rem;
+      border-radius: var(--radius); transition: border-color 300ms var(--ease);
+    }
+    .contact-form input:focus, .contact-form textarea:focus {
+      outline: 2px solid var(--ocre); outline-offset: 2px; border-color: var(--ocre);
+    }
+    .contact-form textarea { min-height: 140px; resize: vertical; }
+
+    /* ---------- FOOTER ---------- */
+    footer.site {
+      padding: 40px clamp(20px, 4vw, 56px); border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--fg-subtle); flex-wrap: wrap; gap: 16px;
+    }
+    footer.site .dot { color: var(--ocre); }
+
+    /* ---------- A11y ---------- */
+    :focus-visible { outline: 2px solid var(--ocre); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      .ambient, .hero-frame, .scroll-cue::after { animation: none; }
+      .reveal { opacity: 1; transform: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <header class="site" id="site-header">
+    <a href="#" class="wordmark">Rosa<span>.</span>Dias</a>
+    <nav class="primary" aria-label="Navegação principal">
+      <a href="#visao">Visão</a>
+      <a href="#trajetoria">Trajetória</a>
+      <a href="#metodo">Método</a>
+      <a href="#trabalhos">Trabalhos</a>
+      <a href="#curso">Curso</a>
+      <a href="#contato">Contato</a>
+    </nav>
+    <button class="nav-toggle" aria-label="Abrir menu">Menu</button>
+  </header>
+
+  <main>
+    <section class="hero" aria-label="Apresentação">
+      <div class="hero-stage" aria-hidden="true">
+        <div class="hero-frame"></div>
+        <div class="hero-frame"></div>
+        <div class="hero-frame"></div>
+        <div class="hero-frame"></div>
+      </div>
+      <div class="hero-content">
+        <p class="eyebrow">Arte-Educação · Salvador · Bahia</p>
+        <h1>Ensinar arte é abrir <em>janelas</em>.</h1>
+        <p class="lead">
+          Sou Rosa, arte-educadora soteropolitana. Formo professores de Arte
+          a cruzar a BNCC com a História da Arte — e a transformar a sala
+          de aula em um lugar de invenção.
+        </p>
+        <a href="#curso" class="hero-link">Conheça o curso ↓</a>
+      </div>
+      <div class="scroll-cue" aria-hidden="true"></div>
+    </section>
+
+    <section id="visao" class="visao reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">01 · Visão</span>
+        </div>
+        <blockquote>
+          A arte não está só no museu. Está no chão de Salvador, na cor da terra,
+          no gesto da aluna que ainda não sabe que é artista — e na pergunta que
+          a professora faz na quarta-feira de manhã.
+          <cite>— Rosa Dias <!-- TODO Rosa: confirmar ou substituir esta visão --></cite>
+        </blockquote>
+      </div>
+    </section>
+
+    <section id="trajetoria" class="reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">02 · Trajetória</span>
+          <h2>O caminho até aqui.</h2>
+        </div>
+        <!-- TODO Rosa: substituir pelos marcos reais quando o currículo chegar -->
+        <div class="timeline">
+          <div class="timeline-item">
+            <span class="year">202X</span>
+            <div>
+              <h3>Curso para Professores de Arte</h3>
+              <p>Lançamento da formação que cruza BNCC e História da Arte.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <span class="year">20XX</span>
+            <div>
+              <h3>Coordenação pedagógica</h3>
+              <p>Trabalho com redes públicas e escolas particulares de Salvador.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <span class="year">20XX</span>
+            <div>
+              <h3>Especialização em Arte-Educação</h3>
+              <p>Aprofundamento na formação continuada de professores.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <span class="year">19XX</span>
+            <div>
+              <h3>Graduação em Artes</h3>
+              <p>Início da prática docente em sala de aula.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="metodo" class="reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">03 · Método de Ensino</span>
+          <h2>Quatro gestos.</h2>
+        </div>
+        <div class="pillars">
+          <article class="pillar">
+            <h3>Observar</h3>
+            <p>O olhar treinado é o primeiro instrumento da aula de Arte. Antes de fazer, ver — devagar, com vocabulário.</p>
+          </article>
+          <article class="pillar">
+            <h3>Reconhecer</h3>
+            <p>Identificar estilos, períodos e linguagens. Da arte rupestre ao contemporâneo, com referências afro-indígenas no centro.</p>
+          </article>
+          <article class="pillar">
+            <h3>Cruzar</h3>
+            <p>Articular as habilidades da BNCC com a História da Arte — para que cada conteúdo encontre uma obra, um gesto, uma pergunta.</p>
+          </article>
+          <article class="pillar">
+            <h3>Construir</h3>
+            <p>Da atividade ao slide, do plano de aula ao caderno do estudante. Repertório que vira prática na quarta-feira de manhã.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="curriculo" class="reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">04 · Currículo</span>
+          <h2>Formação e experiência.</h2>
+        </div>
+        <!-- TODO Rosa: substituir pelos dados reais do currículo -->
+        <div class="cv">
+          <div>
+            <h3>Formação</h3>
+            <div class="cv-entry">
+              <p class="role">Especialização em Arte-Educação</p>
+              <p class="meta">Instituição · Ano</p>
+              <p class="desc">Linha de pesquisa em formação continuada de professores de Arte.</p>
+            </div>
+            <div class="cv-entry">
+              <p class="role">Licenciatura em Artes</p>
+              <p class="meta">Instituição · Ano</p>
+              <p class="desc">Habilitação para o ensino básico em Arte.</p>
+            </div>
+            <div class="cv-entry">
+              <p class="role">Cursos e formações complementares</p>
+              <p class="meta">Diversas instituições</p>
+              <p class="desc">BNCC, História da Arte, Arte-Educação Afro-Brasileira e Indígena.</p>
+            </div>
+          </div>
+          <div>
+            <h3>Experiência</h3>
+            <div class="cv-entry">
+              <p class="role">Professora de Arte · Educação Básica</p>
+              <p class="meta">Salvador · 20XX – presente</p>
+              <p class="desc">Atuação em redes pública e particular.</p>
+            </div>
+            <div class="cv-entry">
+              <p class="role">Formadora de Professores</p>
+              <p class="meta">Cursos presenciais e online · 20XX – presente</p>
+              <p class="desc">Mentoria a professores de Arte na construção de aulas e atividades.</p>
+            </div>
+            <div class="cv-entry">
+              <p class="role">Coordenação pedagógica</p>
+              <p class="meta">Escolas · 20XX – 20XX</p>
+              <p class="desc">Acompanhamento curricular e formação de equipes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="personalidade" class="reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">05 · Personalidade</span>
+          <h2>Quem sou, fora da sala.</h2>
+        </div>
+        <div class="facets">
+          <article class="facet">
+            <div class="initial">C</div>
+            <h3>Cultura</h3>
+            <p>Pelourinho, recôncavo, festa popular. A Bahia é fonte e bússola.</p>
+          </article>
+          <article class="facet">
+            <div class="initial">M</div>
+            <h3>Música</h3>
+            <p>Ijexá, samba de roda, MPB. O som que entra na aula sem pedir licença.</p>
+          </article>
+          <article class="facet">
+            <div class="initial">D</div>
+            <h3>Dança</h3>
+            <p>O corpo como matéria-prima. Toda aula de Arte começa, no fundo, dançando.</p>
+          </article>
+          <article class="facet">
+            <div class="initial">T</div>
+            <h3>Teatro</h3>
+            <p>Brincar de fingir. O exercício mais antigo e mais novo de imaginar.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="trabalhos" class="gallery-section reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">06 · Trabalhos dos Estudantes</span>
+          <h2>O que nasce na sala de aula.</h2>
+        </div>
+      </div>
+      <!-- TODO Rosa: substituir cada figura por <img src="/images/work-XX.jpg" loading="lazy" alt="..."> -->
+      <div class="gallery">
+        <figure><div class="ph" style="--ar: 4/5; --c1:#B5532A; --c2:#7A2E1F;"></div><figcaption>Marina · 7º ano · Aquarela</figcaption></figure>
+        <figure><div class="ph" style="--ar: 3/4; --c1:#C9962B; --c2:#B5532A;"></div><figcaption>Davi · 9º ano · Colagem</figcaption></figure>
+        <figure><div class="ph" style="--ar: 1/1; --c1:#2E4057; --c2:#1A1410;"></div><figcaption>Heloísa · 6º ano · Nanquim</figcaption></figure>
+        <figure><div class="ph" style="--ar: 4/5; --c1:#7A2E1F; --c2:#2E4057;"></div><figcaption>Pedro · 8º ano · Guache</figcaption></figure>
+        <figure><div class="ph" style="--ar: 3/4; --c1:#4A5D3A; --c2:#B5532A;"></div><figcaption>Iara · 5º ano · Pastel oleoso</figcaption></figure>
+        <figure><div class="ph" style="--ar: 4/5; --c1:#B5532A; --c2:#C9962B;"></div><figcaption>Caio · 9º ano · Lápis de cor</figcaption></figure>
+        <figure><div class="ph" style="--ar: 5/4; --c1:#2E4057; --c2:#7A2E1F;"></div><figcaption>Luana · 7º ano · Técnica mista</figcaption></figure>
+        <figure><div class="ph" style="--ar: 3/4; --c1:#C9962B; --c2:#4A5D3A;"></div><figcaption>Bruno · 6º ano · Carvão</figcaption></figure>
+        <figure><div class="ph" style="--ar: 4/5; --c1:#1A1410; --c2:#B5532A;"></div><figcaption>Júlia · 8º ano · Acrílica</figcaption></figure>
+        <figure><div class="ph" style="--ar: 1/1; --c1:#7A2E1F; --c2:#C9962B;"></div><figcaption>Ravi · 9º ano · Linogravura</figcaption></figure>
+        <figure><div class="ph" style="--ar: 3/4; --c1:#B5532A; --c2:#2E4057;"></div><figcaption>Sofia · 5º ano · Aquarela</figcaption></figure>
+        <figure><div class="ph" style="--ar: 4/5; --c1:#4A5D3A; --c2:#1A1410;"></div><figcaption>Enzo · 7º ano · Tinta natural</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="arte-educacao" class="reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">07 · Arte-Educação</span>
+          <h2>Por que isso importa.</h2>
+        </div>
+        <div class="manifesto">
+          <p>A aula de Arte não forma artistas — forma pessoas com olhar. Pessoas que aprendem a ver o que está diante delas e a fazer perguntas que outras disciplinas não fazem. Esse é o ofício.</p>
+          <p>A BNCC nos dá um mapa, a História da Arte nos dá um repertório. Quando os dois se encontram, a aula deixa de ser um exercício de cópia e vira um exercício de pensamento. É aí que a Arte ganha tempo dentro da escola.</p>
+          <p>Trabalho com professores que querem essa virada. Compartilho métodos, repertório de obras, sequências didáticas e a estética afro-indígena que é a nossa herança em Salvador — e que precisa estar viva no chão da escola.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="curso" class="reveal">
+      <div class="container">
+        <div class="course">
+          <span class="num" style="font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ocre); display: block; margin-bottom: 24px;">08 · Curso para Professores de Arte</span>
+          <h2>Da BNCC à <em>obra</em>, em quatro módulos.</h2>
+          <p class="description">
+            Uma formação prática para professoras e professores de Arte que
+            querem entrar na quarta-feira com aula construída — repertório,
+            atividade, slide e a articulação certa com o currículo.
+          </p>
+
+          <div class="modules">
+            <article class="module">
+              <span class="n">01</span>
+              <h3>Reconhecer estilos</h3>
+              <p>Da arte rupestre ao contemporâneo. Como olhar e nomear o que se vê.</p>
+            </article>
+            <article class="module">
+              <span class="n">02</span>
+              <h3>Cruzar BNCC × História da Arte</h3>
+              <p>Mapeamento de habilidades por ano, com referência a obras e contextos.</p>
+            </article>
+            <article class="module">
+              <span class="n">03</span>
+              <h3>Construir atividades</h3>
+              <p>Sequências didáticas que partem da obra e voltam ao estudante.</p>
+            </article>
+            <article class="module">
+              <span class="n">04</span>
+              <h3>Criar slides e conteúdos</h3>
+              <p>O essencial do design de aula: clareza visual, ritmo, voz.</p>
+            </article>
+          </div>
+
+          <h3 style="font-family: var(--mono); font-weight: 500; font-size: 0.74rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ocre); margin: 0 0 16px;">O que você leva</h3>
+          <ul class="outcomes">
+            <li>Um banco pessoal de sequências didáticas alinhadas à BNCC.</li>
+            <li>Repertório de obras com leitura de imagem pronta para a aula.</li>
+            <li>Modelos de slides e cadernos do estudante para adaptar.</li>
+          </ul>
+
+          <div class="cta-row">
+            <a href="#contato" class="cta">Quero me inscrever</a>
+            <span class="course-meta">
+              <!-- TODO Rosa: confirmar formato, duração e próxima turma -->
+              Online · 8 encontros · próxima turma a confirmar
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contato" class="reveal">
+      <div class="container">
+        <div class="section-head">
+          <span class="num">09 · Contato</span>
+          <h2>Vamos conversar.</h2>
+        </div>
+        <div class="contact-grid">
+          <ul class="contact-list">
+            <li>
+              <span class="label">E-mail</span>
+              <a class="value" href="mailto:rosa@example.com">rosa@example.com</a>
+              <!-- TODO Rosa: substituir pelo seu e-mail real -->
+            </li>
+            <li>
+              <span class="label">WhatsApp</span>
+              <a class="value" href="https://wa.me/55XXXXXXXXXXX">+55 (71) X-XXXX-XXXX</a>
+            </li>
+            <li>
+              <span class="label">Instagram</span>
+              <a class="value" href="https://instagram.com/">@rosadias</a>
+            </li>
+            <li>
+              <span class="label">Cidade</span>
+              <span class="value">Salvador, Bahia · Brasil</span>
+            </li>
+          </ul>
+          <form class="contact-form" action="mailto:rosa@example.com" method="post" enctype="text/plain">
+            <div>
+              <label for="nome">Nome</label>
+              <input id="nome" name="nome" type="text" required />
+            </div>
+            <div>
+              <label for="email">E-mail</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+            <div>
+              <label for="mensagem">Mensagem</label>
+              <textarea id="mensagem" name="mensagem" required></textarea>
+            </div>
+            <button class="cta" type="submit">Enviar mensagem</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <span>© <span id="year">2026</span> Rosangela Dias de Souza</span>
+    <span><span class="dot">·</span> Salvador, Bahia · pt-BR</span>
+  </footer>
+
+  <script>
+    // Year stamp
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Sticky header solidify on scroll
+    const header = document.getElementById('site-header');
+    const onScroll = () => header.classList.toggle('solid', window.scrollY > 40);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // Reveal-on-scroll
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+      }, { threshold: 0.15 });
+      document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+    } else {
+      document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    }
+  </script>
+</body>
+</html>
