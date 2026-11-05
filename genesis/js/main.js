@@ -26,7 +26,7 @@
     // let rivers find their beds and start the clock mid-morning
     for (let k = 0; k < 180; k++) { AG.tick++; AG.Sky.tick(); AG.Physics.tick(); }
     AG.Civ.seedWorld();
-    AG.Render.reset(); AG.UI.reset();
+    AG.Render.reset(); AG.View3D.reset(); AG.UI.reset();
     AG.Chronicle.add(`A new world stirs (seed ${seed})`, 'info');
     AG.creating = false;
   };

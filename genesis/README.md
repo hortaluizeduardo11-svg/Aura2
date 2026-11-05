@@ -4,7 +4,8 @@ A 2D pixel-art god sandbox that runs in the browser. Shape a layered world of la
 lava and weather, and watch kingdoms of individually simulated people grow, trade, found
 religions, breed new generations and go to war.
 
-There's no build step and no dependencies. Open `index.html` in a browser, or serve the
+There's no build step. The only third-party code is three.js r128 (MIT), vendored in
+`vendor/` for the 3D close-up. Open `index.html` in a browser, or serve the
 folder. The world takes the shape of your screen when the page loads, so the map always fills
 it edge to edge. A 1920×1080 screen gets a 640×368 world (about 235,000 cells, 2.4× the
 original 384×256).
@@ -18,6 +19,12 @@ The full system design and performance plan is in [DESIGN.md](DESIGN.md).
 
 ## What's in it
 
+- **3D close-up:** zoom up to 48×. Past 8× the camera glides and tilts, map-app style, into a
+  real 3D view (three.js / WebGL) of the area around you. You get voxel terrain, water, glowing
+  lava and 3D trees, and every building is its own model: keeps with corner towers and banners,
+  houses with chimneys and lit windows, temples, windmills with turning sails, and farms with
+  crop rows. People, animals, carts, ships and wyrms move about as 3D figures under a sun that
+  casts shadows. Right-drag (or twist two fingers) to turn and tilt; tap the compass to face north.
 - **16-bit HD look:** terraced hills, depth-banded water with shoreline foam and sun glints,
   hand-drawn trees, rocks, flowers and cacti that change with the seasons, outlined sprites with
   sun-cast shadows, golden-hour colour grading and glowing nights.
@@ -44,7 +51,9 @@ The full system design and performance plan is in [DESIGN.md](DESIGN.md).
 |---|---|
 | Drag / tap | Use the selected tool (Inspect drags to pan) |
 | Right-drag, two fingers | Pan; pinch to zoom |
-| Scroll, `+` / `-` | Zoom |
+| Scroll, `+` / `-` | Zoom (smooth, up to 48×; past 8× the view tilts into 3D) |
+| Right-drag, two-finger twist | In 3D: turn and tilt the camera |
+| `[` `]`, `N` | In 3D: turn left or right, face north |
 | `WASD` / arrows | Pan, or walk while possessing |
 | `Space` | Pause, or strike while possessing |
 | `E` | Divine power while possessing |

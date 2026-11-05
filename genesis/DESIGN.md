@@ -326,6 +326,24 @@ blizzards"*), and how the renderer meets it:
   Buildings cast skewed, sun-following ground shadows from a cached silhouette. City names sit
   on name plates in their realm's colour.
 - **Grading:** dawn and dusk get a soft-light golden wash, and a vignette frames the view.
+- **3D close-up (view3d.js, three.js):** zoom glides between steps up to 48×, and jumps fly the
+  camera there. Past 8× the camera tilts from straight down to about 41–55°.
+  - **Seamless hand-off:** looking straight down at 8×, the voxel ground matches the 2D map cell
+    for cell, so the switch is invisible until the camera tilts.
+  - **The scene** is a square window of up to 240×240 cells around the camera:
+    - one instanced column per cell, terraced in half-cell steps and coloured from the 2D
+      palette (without baked shading, since it is lit for real), with a 16×16 detail texture
+      that gives each face crisp pixels up close
+    - translucent water and unlit glowing lava, packed into compact instance lists
+    - instanced pines, broadleaf, jungle and dead trees, rocks and cacti
+    - a hand-built model for each of the 11 building types: windmill sails turn, windows glow at
+      night, and construction sites show scaffolding with walls rising
+    - instanced figures for every creature and vehicle
+  - **Light and air:** a sun with soft shadows follows the day, and sky and fog colours shift
+    from dawn to night.
+  - **Overlays:** city plates, selection rings and the brush cursor are projected from 3D onto
+    the 2D overlay canvas. Picking ray-marches the height field, so every god tool works while
+    tilted.
 - **Living fluids:** water shades by depth with animated shimmer and see-through fords; lava
   flickers and crusts as it thins; acid bubbles; ice is pale and opaque.
 - **Moving sun:** hillshading follows the sun from east to west through the day, so mountain
@@ -387,7 +405,11 @@ What makes that possible:
 8. **Incremental terrain painting.** Only dirty chunks, awake chunks (alternating frames),
    visible chunks (every fourth frame) and a rolling 12 chunks per frame are repainted. Light,
    gas and clouds are low-resolution buffers scaled with smoothing.
-9. **Fixed timestep with a budget.** The sim runs at 20 ticks/s × speed, but never more than
+9. **3D window, not the whole world.** The WebGL scene only holds the cells around the camera.
+   It is rebuilt when the camera drifts a fifth of the way out, and otherwise refreshed a band of
+   rows per frame with partial buffer uploads. Flora rebuilds every few seconds and buildings
+   sync every 0.4 s.
+10. **Fixed timestep with a budget.** The sim runs at 20 ticks/s × speed, but never more than
    14 ms per frame. If the requested speed can't be met, the HUD says "sim at capacity"
    rather than stuttering. Rendering interpolates unit positions between ticks.
 
@@ -433,5 +455,7 @@ What makes that possible:
 | `js/god.js` | Tool catalogue, brushes, disasters, possession |
 | `js/fx.js` | Particle pool |
 | `js/render.js` | Terrain painting, lighting, sprites, overlays, weather, god rays, minimap |
+| `js/view3d.js` | The 3D close-up: voxel terrain window, water, flora, building models, creatures, sun and sky, tilt animation, picking |
+| `vendor/three.min.js` | three.js r128 (MIT), used only by the 3D close-up |
 | `js/ui.js` | HUD, tool palette, inspector, realms, chronicle, world stats, disease designer, input |
 | `js/main.js` | Boot, world creation, stress test, fixed-timestep loop |

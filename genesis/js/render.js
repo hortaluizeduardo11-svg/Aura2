@@ -10,7 +10,7 @@
   const AG = window.AG, Wd = AG.World, U = AG.U, Civ = AG.Civ, Sky = AG.Sky, FX = AG.FX, Proj = AG.Proj, God = AG.God;
   const { W, H, CW, NC, SEA, FT, GT, SO, UG, UF, SP, SPECIES, BT, BUILD, FL, J, NG, G } = AG;
   const pack = AG.pack;
-  const STEPS = [2, 3, 4, 6, 8, 12, 16];
+  const STEPS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48];
   const SPRITE_LIMIT = 2500; // above this many visible creatures, draw them as pixels
   const R = (AG.Render = {
     view: 1, overlay: 'realms', showTrade: true, cam: { x: W / 2, y: H / 2, z: AG.BASE_ZOOM }, follow: -1, bordersDirty: true,
@@ -42,6 +42,7 @@
     const r = cv.getBoundingClientRect();
     cw = Math.max(1, Math.round(r.width)); ch = Math.max(1, Math.round(r.height));
     cv.width = cw; cv.height = ch;
+    if (AG.View3D && AG.View3D.ok) AG.View3D.resize(cw, ch);
     R.minZoom = Math.max(cw / W, ch / H);
     if (R.cam.z < R.minZoom) R.cam.z = R.minZoom;
     // vignette rendered once at quarter resolution, then stretched each frame
@@ -57,35 +58,80 @@
 
   // ------------------------------------------------------------ camera
   // The world is sized to the screen, so the smallest zoom always fills it edge to edge.
+  // Zoom and position glide toward targets (zt, tx, ty) for smooth, map-app style motion;
+  // past 8x the 3D view (view3d.js) takes over and tilts the camera.
+  const MAXZ = 48;
+  let anchor = null; // world point held under the cursor while a 2D zoom animates
+  R.MAXZ = MAXZ;
   R.zoomList = () => [R.minZoom, ...STEPS.filter((s) => s > R.minZoom + 0.05)];
+  R.is3D = () => !!(AG.View3D && AG.View3D.active);
   R.fit = function () {
+    const c = R.cam;
     R.minZoom = Math.max(cw / W, ch / H);
-    R.cam.z = Math.max(R.minZoom, AG.BASE_ZOOM); R.cam.x = W / 2; R.cam.y = H / 2;
+    c.z = c.zt = Math.max(R.minZoom, AG.BASE_ZOOM); c.x = c.tx = W / 2; c.y = c.ty = H / 2; anchor = null;
     clampCam();
   };
-  R.screenToWorld = (sx, sy) => ({ x: (sx - cw / 2) / R.cam.z + R.cam.x, y: (sy - ch / 2) / R.cam.z + R.cam.y });
+  const flatToWorld = (sx, sy) => ({ x: (sx - cw / 2) / R.cam.z + R.cam.x, y: (sy - ch / 2) / R.cam.z + R.cam.y });
+  R.screenToWorld = (sx, sy) => (R.is3D() ? AG.View3D.screenToWorld(sx, sy) : flatToWorld(sx, sy));
   R.zoomAt = function (sx, sy, dir) {
     const c = R.cam, list = R.zoomList();
     let idx = 0;
-    for (let k = 0; k < list.length; k++) if (list[k] <= c.z + 0.01) idx = k;
+    for (let k = 0; k < list.length; k++) if (list[k] <= c.zt + 0.01) idx = k;
     const ni = AG.clamp(idx + dir, 0, list.length - 1);
-    if (Math.abs(list[ni] - c.z) < 0.001) return;
-    const before = R.screenToWorld(sx, sy);
-    c.z = list[ni];
-    const after = R.screenToWorld(sx, sy);
-    c.x += before.x - after.x; c.y += before.y - after.y;
+    if (Math.abs(list[ni] - c.zt) < 0.001) return;
+    anchor = R.is3D() || list[ni] > 8 ? null : { sx, sy, ...flatToWorld(sx, sy) };
+    if (!anchor) { c.tx = c.x; c.ty = c.y; }
+    c.zt = list[ni];
+  };
+  R.zoomTarget = function (z) { R.cam.zt = AG.clamp(z, R.minZoom, MAXZ); anchor = null; };
+  R.setZoom = function (z) { R.cam.z = R.cam.zt = AG.clamp(z, R.minZoom, MAXZ); anchor = null; clampCam(); };
+  R.pan = function (dx, dy) {
+    const c = R.cam;
+    let wx = dx / c.z, wy = dy / c.z;
+    if (R.is3D()) {
+      // drag along the ground plane, respecting the camera's heading and tilt
+      const V = AG.View3D, sy = Math.sin(V.yaw), cy = Math.cos(V.yaw);
+      wy /= Math.max(0.35, Math.cos(V.tilt));
+      const ex = wx * cy + wy * sy, ez = -wx * sy + wy * cy;
+      wx = ex; wy = ez;
+    }
+    c.x -= wx; c.y -= wy; c.tx = c.x; c.ty = c.y; anchor = null;
+    if (God.possessed < 0) R.follow = -1;
     clampCam();
   };
-  R.setZoom = function (z) { R.cam.z = Math.max(R.minZoom, z); clampCam(); };
-  R.pan = function (dx, dy) { R.cam.x -= dx / R.cam.z; R.cam.y -= dy / R.cam.z; R.follow = God.possessed >= 0 ? R.follow : -1; clampCam(); };
-  R.centerOn = function (x, y, z) { R.cam.x = x; R.cam.y = y; if (z) R.cam.z = Math.max(R.minZoom, z); clampCam(); };
+  // fly to a place (and optionally a zoom); the camera glides there over a few frames
+  R.centerOn = function (x, y, z) {
+    const c = R.cam;
+    c.tx = x; c.ty = y; anchor = null;
+    if (z) c.zt = AG.clamp(z, R.minZoom, MAXZ);
+  };
+  R.jumpTo = function (x, y, z) { const c = R.cam; c.x = c.tx = x; c.y = c.ty = y; if (z) c.z = c.zt = AG.clamp(z, R.minZoom, MAXZ); anchor = null; clampCam(); };
+  function bounds(z) {
+    if (R.is3D() || z > 8) return [1, W - 1, 1, H - 1];
+    const hw = cw / 2 / z, hh = ch / 2 / z;
+    return [hw * 2 >= W ? W / 2 : hw, hw * 2 >= W ? W / 2 : W - hw, hh * 2 >= H ? H / 2 : hh, hh * 2 >= H ? H / 2 : H - hh];
+  }
   function clampCam() {
     const c = R.cam;
     if (c.z < R.minZoom) c.z = R.minZoom;
-    const hw = cw / 2 / c.z, hh = ch / 2 / c.z;
-    c.x = hw * 2 >= W ? W / 2 : AG.clamp(c.x, hw, W - hw);
-    c.y = hh * 2 >= H ? H / 2 : AG.clamp(c.y, hh, H - hh);
+    if (c.zt < R.minZoom) c.zt = R.minZoom;
+    const b = bounds(c.z), bt = bounds(c.zt);
+    c.x = AG.clamp(c.x, b[0], b[1]); c.y = AG.clamp(c.y, b[2], b[3]);
+    c.tx = AG.clamp(c.tx, bt[0], bt[1]); c.ty = AG.clamp(c.ty, bt[2], bt[3]);
   }
+  R.updateCamera = function (dt) {
+    const c = R.cam, k = 1 - Math.exp(-dt * 9);
+    if (R.follow >= 0) {
+      if (U.alive[R.follow]) { c.tx = U.x[R.follow]; c.ty = U.y[R.follow]; } else R.follow = -1;
+    }
+    if (Math.abs(c.zt - c.z) > 1e-4) {
+      c.z += (c.zt - c.z) * k;
+      if (Math.abs(c.zt - c.z) < 0.003) c.z = c.zt;
+      if (anchor) { c.x = c.tx = anchor.x - (anchor.sx - cw / 2) / c.z; c.y = c.ty = anchor.y - (anchor.sy - ch / 2) / c.z; }
+    } else anchor = null;
+    c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k;
+    clampCam();
+  };
 
   // ------------------------------------------------------------ terrain colours (16-bit palette)
   const C = {
@@ -129,6 +175,9 @@
     return kc;
   }
   const BANDS = 26;  // elevation terraces, drawn as lit lips and shaded cliff faces
+  let noShade = false;
+  // A cell's colour without sun shading or water sparkle: the 3D view lights it for real.
+  R.flatColor = function (i) { noShade = true; const v = surfPix(i, i % W, (i / W) | 0); noShade = false; return v; };
   let LX = 0.6, LY = -0.55, season = 0;
   const dry = (j) => Wd.fl[j] < 0.002 || Wd.frozen[j] === 1;
   const clamp255 = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
@@ -139,9 +188,9 @@
     waterColour(q, wc);
     let r = wc[0], g = wc[1], b = wc[2];
     if (!ocean) { r = r * 0.6 + C.river[0] * 0.4; g = g * 0.6 + C.river[1] * 0.4; b = b * 0.6 + C.river[2] * 0.4; }
-    const shim = Math.sin(x * 0.8 + tm * 2.1 + d * 0.3) * Math.sin(y * 0.6 - tm * 1.7);
+    const shim = noShade ? 0 : Math.sin(x * 0.8 + tm * 2.1 + d * 0.3) * Math.sin(y * 0.6 - tm * 1.7);
     if (shim > 0.6) { r += 14; g += 18; b += 16; }
-    if (depth > 0.025 && (x * 7 + y * 13 + ((tm * 3) | 0) * 11) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints
+    if (!noShade && depth > 0.025 && (x * 7 + y * 13 + ((tm * 3) | 0) * 11) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints
     if (inner && (dry(i - 1) || dry(i + 1) || dry(i - W) || dry(i + W))) {
       const fo = 0.42 + 0.3 * Math.sin(tm * 2.4 + (x + y) * 0.7); // lapping shoreline foam
       r += (C.foam[0] - r) * fo; g += (C.foam[1] - g) * fo; b += (C.foam[2] - b) * fo;
@@ -202,7 +251,7 @@
     }
     // hillshade with the moving sun, plus stepped terraces for the 16-bit relief look
     let sh = 1;
-    if (inner) {
+    if (inner && !noShade) {
       const en = Wd.elev[i - W], es = Wd.elev[i + W];
       sh = 1 - ((Wd.elev[i + 1] - Wd.elev[i - 1]) * LX + (es - en) * LY) * 18 + (e - SEA) * 0.16;
       if (e >= SEA) {
@@ -801,10 +850,9 @@
     const t0 = performance.now();
     tm += dt; frameN++;
     const c = R.cam;
-    if (R.follow >= 0) {
-      const f = R.follow;
-      if (U.alive[f]) { c.x += (U.x[f] - c.x) * 0.15; c.y += (U.y[f] - c.y) * 0.15; clampCam(); } else R.follow = -1;
-    }
+    R.updateCamera(dt);
+    const V3 = AG.View3D;
+    if (V3 && V3.ok) { V3.update(dt); if (V3.active) { frame3D(dt, alpha, t0); return; } }
     const z = c.z, under = R.view === 0;
     const tp = performance.now();
     updateTerrain();
@@ -1116,6 +1164,22 @@
     }
     ctx.globalCompositeOperation = 'source-over';
   }
+  function plate(sx, sy, name, pop, k, cap, big, captureT) {
+    const nw = ctx.measureText(name).width, pw = ctx.measureText(pop).width;
+    const ph = big ? 22 : 20, crest = 7, pad = 7, w = crest + pad + nw + 8 + pw + pad;
+    const x0 = sx - w / 2, y0 = sy - ph / 2;
+    ctx.fillStyle = 'rgba(12,16,27,0.82)';
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, ph, 5); else ctx.rect(x0, y0, w, ph); ctx.fill();
+    ctx.strokeStyle = cap ? 'rgba(232,182,76,0.85)' : 'rgba(222,202,150,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = k.css; ctx.fillRect(x0 + 5, y0 + 4, crest - 2, ph - 8);
+    ctx.fillStyle = cap ? '#fff1cf' : '#efe8d6';
+    ctx.fillText(name, x0 + crest + pad, sy + 1);
+    ctx.fillStyle = 'rgba(232,182,76,0.95)';
+    ctx.fillText(pop, x0 + crest + pad + nw + 8, sy + 1);
+    ctx.beginPath(); ctx.moveTo(sx - 4, y0 + ph); ctx.lineTo(sx + 4, y0 + ph); ctx.lineTo(sx, y0 + ph + 5); ctx.closePath();
+    ctx.fillStyle = 'rgba(12,16,27,0.82)'; ctx.fill();
+    if (captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(x0 + 4, y0 + ph + 2, ((w - 8) * captureT) / 100, 3); }
+  }
   function drawLabels(ox, oy, z, under) {
     if (under) return;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -1127,22 +1191,59 @@
       if (z < 2 && !cap) continue;
       const sx = Math.round(ox + c.x * z), sy = Math.round(oy + (c.y - 2.2) * z - Math.max(14, 16 * Math.max(1, z / 4)));
       if (sx < -120 || sx > cw + 120 || sy < -20 || sy > ch + 20) continue;
-      const name = z < 2 ? k.name : c.name, pop = String(c.members.length);
-      const nw = ctx.measureText(name).width, pw = ctx.measureText(pop).width;
-      const ph = big ? 22 : 20, crest = 7, pad = 7, w = crest + pad + nw + 8 + pw + pad;
-      const x0 = sx - w / 2, y0 = sy - ph / 2;
-      ctx.fillStyle = 'rgba(12,16,27,0.82)';
-      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, ph, 5); else ctx.rect(x0, y0, w, ph); ctx.fill();
-      ctx.strokeStyle = cap ? 'rgba(232,182,76,0.85)' : 'rgba(222,202,150,0.22)'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = k.css; ctx.fillRect(x0 + 5, y0 + 4, crest - 2, ph - 8);
-      ctx.fillStyle = cap ? '#fff1cf' : '#efe8d6';
-      ctx.fillText(name, x0 + crest + pad, sy + 1);
-      ctx.fillStyle = 'rgba(232,182,76,0.95)';
-      ctx.fillText(pop, x0 + crest + pad + nw + 8, sy + 1);
-      ctx.beginPath(); ctx.moveTo(sx - 4, y0 + ph); ctx.lineTo(sx + 4, y0 + ph); ctx.lineTo(sx, y0 + ph + 5); ctx.closePath();
-      ctx.fillStyle = 'rgba(12,16,27,0.82)'; ctx.fill();
-      if (c.captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(x0 + 4, y0 + ph + 2, ((w - 8) * c.captureT) / 100, 3); }
+      plate(sx, sy, z < 2 ? k.name : c.name, String(c.members.length), k, cap, big, c.captureT);
     }
+  }
+  // ------------------------------------------------------------ 3D frame: the WebGL view plus projected 2D overlays
+  function ring3D(x, y, r, h) {
+    const V3 = AG.View3D;
+    ctx.beginPath();
+    let started = false;
+    for (let k = 0; k <= 40; k++) {
+      const a = (k / 40) * Math.PI * 2, p = V3.project(x + Math.cos(a) * r, y + Math.sin(a) * r, h || 0.05);
+      if (!p.vis) { started = false; continue; }
+      if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+  function frame3D(dt, alpha, t0) {
+    const V3 = AG.View3D, z = R.cam.z;
+    if (frameN % 6 === 0) updateTerrain(); // keeps the minimap and the 2D map ready for zooming back out
+    if (R.bordersDirty) { updateBorders(); R.bordersDirty = false; }
+    V3.render(dt, alpha);
+    ctx.clearRect(0, 0, cw, ch);
+    if (Sky.flash > 0) { ctx.fillStyle = `rgba(230,236,255,${Sky.flash * 0.3})`; ctx.fillRect(0, 0, cw, ch); }
+    // city name plates float above each keep
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '600 13px "Alegreya Sans", system-ui, sans-serif';
+    const plates = [];
+    for (const c of Civ.cities) {
+      if (!c.alive) continue;
+      const p = V3.project(c.x, c.y, 6.5);
+      if (p.vis && p.depth < 0.995) plates.push([p.depth, p, c]);
+    }
+    plates.sort((a, b) => b[0] - a[0]);
+    for (const [, p, c] of plates) { const k = Civ.kingdoms[c.kd]; plate(Math.round(p.x), Math.round(p.y), c.name, String(c.members.length), k, k.capital === c.id, true, c.captureT); }
+    // selection
+    const sel = AG.UI && AG.UI.sel;
+    ctx.strokeStyle = 'rgba(255,240,180,0.95)'; ctx.lineWidth = 2;
+    if (sel && (sel.type === 'unit' || sel.type === 'person')) {
+      let i = sel.id;
+      if (sel.type === 'person') { const r = AG.People.get(sel.id); i = r && !r.died && r.idx >= 0 && U.alive[r.idx] ? r.idx : -1; }
+      if (i >= 0 && U.alive[i] && U.layer[i] !== 0) ring3D(U.px[i] + (U.x[i] - U.px[i]) * alpha, U.py[i] + (U.y[i] - U.py[i]) * alpha, 0.55);
+    } else if (sel && sel.type === 'city') {
+      const c = Civ.cities[sel.id];
+      if (c && c.alive) { ctx.setLineDash([8, 6]); ring3D(c.x, c.y, c.radius); ctx.setLineDash([]); }
+    }
+    // tool cursor on the ground
+    const h = R.hover;
+    if (h.on && God.cur) {
+      ctx.strokeStyle = God.cur.color || '#fff'; ctx.lineWidth = 2;
+      if (God.cur.mode === 'brush') ring3D(h.x, h.y, God.brush.r);
+      else { const p = V3.project(h.x, h.y, 0.05); if (p.vis) { ctx.beginPath(); ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y); ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8); ctx.stroke(); } }
+    }
+    if (frameN % 12 === 0) drawMinimap();
+    R.stats.ms = performance.now() - t0;
   }
   function drawSelection(ox, oy, z, alpha) {
     const sel = AG.UI && AG.UI.sel;

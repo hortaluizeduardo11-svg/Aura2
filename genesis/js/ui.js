@@ -18,6 +18,8 @@
   // ============================================================ setup
   UI.init = function () {
     R.init($('#world'), $('#minimap'));
+    if (AG.View3D.init($('#app'), $('#world'))) R.resize(); // WebGL close-up view; without it, deep zoom stays 2D
+    $('#compass').addEventListener('click', () => AG.View3D.north());
     buildCats(); showCat('look'); selectTool('inspect');
     $('#toolgrid').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) selectTool(b.dataset.tool); });
     $('#bsize').addEventListener('input', (e) => { God.brush.r = +e.target.value; $('#bsizev').textContent = e.target.value; });
@@ -187,22 +189,24 @@
   // ============================================================ input
   function bindCanvas(cv) {
     const ptrs = new Map();
-    let pan = null, pinch = null, moved = false, start = null;
+    let pan = null, pinch = null, orbit = null, moved = false, start = null;
     const local = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const angle = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     cv.addEventListener('pointerdown', (e) => {
       cv.setPointerCapture(e.pointerId);
       const p = local(e);
       ptrs.set(e.pointerId, p);
       if (ptrs.size === 2) {
-        God.down = false; pan = null;
+        God.down = false; pan = null; orbit = null;
         const [a, b] = [...ptrs.values()];
-        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: R.cam.z, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: R.cam.z, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, a: angle(a, b) };
         return;
       }
       const w = R.screenToWorld(p.x, p.y);
       God.wx = w.x; God.wy = w.y;
       moved = false; start = p;
+      if (e.button === 2 && R.is3D()) { orbit = p; return; } // right-drag turns and tilts the 3D camera
       if (e.button === 1 || e.button === 2 || e.altKey) { pan = p; return; }
       if (God.possessed >= 0) { God.input.moveTo = { x: w.x, y: w.y }; God.input.aimX = w.x; God.input.aimY = w.y; return; }
       if (God.tool === 'inspect') { pan = p; return; }
@@ -220,14 +224,12 @@
         const [a, b] = [...ptrs.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
         R.pan(cx - pinch.cx, cy - pinch.cy); pinch.cx = cx; pinch.cy = cy;
-        const target = pinch.z * (d / pinch.d);
-        const list = R.zoomList();
-        let best = list[0];
-        for (const z of list) if (Math.abs(Math.log(z / target)) < Math.abs(Math.log(best / target))) best = z;
-        if (best !== R.cam.z) zoomTo(cx, cy, best);
+        R.setZoom(pinch.z * (d / pinch.d)); // continuous while pinching; settles on a step on release
+        if (R.is3D()) { const an = angle(a, b); AG.View3D.rotate(an - pinch.a, 0); pinch.a = an; }
         return;
       }
       if (start && Math.hypot(p.x - start.x, p.y - start.y) > 6) moved = true;
+      if (orbit) { AG.View3D.rotate((p.x - prev.x) * 0.006, (p.y - prev.y) * 0.004); return; }
       if (pan) { R.pan(p.x - prev.x, p.y - prev.y); return; }
     });
     const end = (e) => {
@@ -236,8 +238,14 @@
         const w = R.screenToWorld(p.x, p.y); God.press(w.x, w.y);
       }
       ptrs.delete(e.pointerId);
-      if (ptrs.size < 2) pinch = null;
-      if (!ptrs.size) { God.down = false; pan = null; start = null; }
+      if (pinch && ptrs.size < 2) {
+        const list = R.zoomList();
+        let best = list[0];
+        for (const z of list) if (Math.abs(Math.log(z / R.cam.z)) < Math.abs(Math.log(best / R.cam.z))) best = z;
+        R.zoomTarget(best);
+        pinch = null;
+      }
+      if (!ptrs.size) { God.down = false; pan = null; orbit = null; start = null; }
     };
     cv.addEventListener('pointerup', end);
     cv.addEventListener('pointercancel', end);
@@ -271,6 +279,9 @@
       case 'b': { const o = ['realms', 'faith', 'heat', 'none']; R.overlay = o[(o.indexOf(R.overlay) + 1) % o.length]; $('#overlay').value = R.overlay; R.bordersDirty = true; break; }
       case 'i': showCat('look'); selectTool('inspect'); break;
       case 'escape': God.pendingKd = -1; R.follow = -1; break;
+      case '[': if (R.is3D()) AG.View3D.turn(-Math.PI / 8); break;
+      case ']': if (R.is3D()) AG.View3D.turn(Math.PI / 8); break;
+      case 'n': if (R.is3D()) AG.View3D.north(); break;
     }
   }
 
@@ -286,6 +297,9 @@
     else if (dx || dy) R.pan(-dx * dt * 700, -dy * dt * 700);
     if (frameN % 10 === 0) hud();
     if (frameN % 8 === 0 && R.hover.on) $('#hoverinfo').innerHTML = cellInfo(R.hover.x | 0, R.hover.y | 0);
+    const comp = $('#compass'), in3d = R.is3D();
+    if (comp.hidden === in3d) comp.hidden = !in3d;
+    if (in3d) comp.firstElementChild.style.transform = `rotate(${(AG.View3D.yaw * 180) / Math.PI}deg)`;
     const pad = $('#avatarpad'), poss = God.possessed >= 0;
     if (pad.hidden === poss) pad.hidden = !poss;
     if (poss && frameN % 30 === 0) $('#avatarwho').textContent = `${Ent.title(God.possessed)} ${Ent.name(God.possessed)}`.trim();
@@ -573,7 +587,7 @@
     for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.dis[i]) cases[U.dis[i] - 1]++;
     h += `<h3>Diseases</h3><dl class="kv">${AG.DISEASES.map((d, k) => `<dt><button type="button" class="link" data-dis="${k}" style="color:${d.color}">${esc(d.name)}</button></dt><dd>${cases[k] ? cases[k] + ' sick' : 'dormant'}</dd>`).join('')}</dl>`;
     h += `<div class="btnrow" style="margin-top:6px"><button type="button" class="btn" data-act="newdisease">Design a disease…</button></div>`;
-    h += `<h3>Engine</h3><dl class="kv"><dt>Frame rate</dt><dd>${S.fps.toFixed(0)} fps</dd><dt>Simulation</dt><dd>${S.simMs.toFixed(2)} ms per tick · ${S.tps.toFixed(0)} ticks/s</dd><dt>Rendering</dt><dd>${S.renderMs.toFixed(1)} ms per frame</dd><dt>Awake chunks</dt><dd>${AG.Physics.stats.active} surface · ${AG.Physics.stats.uactive} deep (of ${AG.NC})</dd><dt>Flow fields</dt><dd>${AG.Flow.cache.size} cached · ${AG.Flow.computed} built</dd><dt>Particles</dt><dd>${fmt(AG.FX.n)}</dd></dl>`;
+    h += `<h3>Engine</h3><dl class="kv"><dt>Frame rate</dt><dd>${S.fps.toFixed(0)} fps</dd><dt>Simulation</dt><dd>${S.simMs.toFixed(2)} ms per tick · ${S.tps.toFixed(0)} ticks/s</dd><dt>Rendering</dt><dd>${S.renderMs.toFixed(1)} ms per frame</dd><dt>Awake chunks</dt><dd>${AG.Physics.stats.active} surface · ${AG.Physics.stats.uactive} deep (of ${AG.NC})</dd><dt>Flow fields</dt><dd>${AG.Flow.cache.size} cached · ${AG.Flow.computed} built</dd><dt>Particles</dt><dd>${fmt(AG.FX.n)}</dd><dt>3D view</dt><dd>${!AG.View3D.ok ? 'unavailable (no WebGL)' : AG.View3D.active ? `on · ${AG.View3D.stats.window}² cells · ${fmt(AG.View3D.stats.triangles || 0)} triangles` : 'zoom past 8× to enter'}</dd></dl>`;
     return h;
   }
 
@@ -586,7 +600,9 @@
       <div class="keys">
         <kbd>Drag</kbd><span>Use the selected tool (Inspect pans the map)</span>
         <kbd>Right-drag · two fingers</kbd><span>Pan · pinch to zoom</span>
-        <kbd>Scroll · + / −</kbd><span>Zoom in and out</span>
+        <kbd>Scroll · + / −</kbd><span>Zoom in and out (up to 48×). Past 8× the camera tilts into the 3D close-up</span>
+        <kbd>Right-drag · two-finger twist</kbd><span>In 3D: turn and tilt the camera</span>
+        <kbd>[ ] · N</kbd><span>In 3D: turn left or right, back to north (or tap the compass)</span>
         <kbd>WASD · arrows</kbd><span>Pan the camera, or walk while possessing</span>
         <kbd>Space</kbd><span>Pause, or strike while possessing</span>
         <kbd>E</kbd><span>Divine power while possessing (fireball or holy nova)</span>
