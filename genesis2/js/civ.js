@@ -515,13 +515,17 @@
     }
     return true;
   }
+  // living communities, listed once per tick (findSite runs many times a step)
+  let liveList = [], liveTick = -1, liveLen = -1;
+  const liveCities = () => { if (liveTick !== AG.tick || liveLen !== Civ.cities.length) { liveList = Civ.cities.filter((o) => o.alive); liveTick = AG.tick; liveLen = Civ.cities.length; } return liveList; };
   function findSite(x, y, r, nomadic, avoid) {
     let best = null, bs = -1e9;
     for (let t = 0; t < 28; t++) {
       const a = rnd() * Math.PI * 2, rr = rnd() * r;
       const nx = Math.round(x + Math.cos(a) * rr), ny = Math.round(y + Math.sin(a) * rr);
       if (!campFits(nx, ny, 2)) continue;
-      if (Civ.cities.some((o) => o.alive && o !== avoid && dist2(o.x, o.y, nx, ny) < (nomadic ? 14 * 14 : 18 * 18))) continue;
+      const sep = nomadic ? 14 * 14 : 18 * 18;
+      if (liveCities().some((o) => o.alive && o !== avoid && dist2(o.x, o.y, nx, ny) < sep)) continue;
       const s = siteScore(nx, ny, nomadic);
       if (s > bs) { bs = s; best = { x: nx + 0.5, y: ny + 0.5, s }; }
     }
@@ -1021,8 +1025,9 @@
     const cs = Civ.cities.filter((c) => c.alive);
     for (const c of cs) { for (const [id, v] of c.contacts) { const v2 = v * Math.pow(0.7, dy); if (v2 < 0.05 || !Civ.cities[id].alive) c.contacts.delete(id); else c.contacts.set(id, v2); } c.tradeRes.fill(0); }
     for (let a = 0; a < cs.length; a++) for (let b = a + 1; b < cs.length; b++) {
-      const A = cs[a], B = cs[b];
-      const d = Math.sqrt(dist2(A.x, A.y, B.x, B.y));
+      const A = cs[a], B = cs[b], ddx = A.x - B.x, ddy = A.y - B.y;
+      if (ddx > 290 || ddx < -290 || ddy > 290 || ddy < -290) continue; // beyond any reach (even by sail)
+      const d = Math.sqrt(ddx * ddx + ddy * ddy);
       const range = 60 + (Tech.knows(A, 'wheel') || Tech.knows(B, 'wheel') ? 50 : 0) + (Tech.knows(A, 'sailing') && Tech.knows(B, 'sailing') && A.coastal && B.coastal ? 120 : 0) + (A.kd === B.kd ? 50 : 0);
       if (d > range) continue;
       const ra = Life.regionOf(A.x, A.y), rb = Life.regionOf(B.x, B.y), m = Life.env.mass;

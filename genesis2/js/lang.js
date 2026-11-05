@@ -167,11 +167,21 @@
   }
 
   // Shared meanings with similar words (first two letters) out of the core list.
+  // (cached until any language changes or a new one appears)
+  const simCache = new Map(); let simVer = -1;
   Lang.similarity = function (a, b) {
+    const ver = Lang.changes * 4096 + Lang.list.length;
+    if (ver !== simVer) { simCache.clear(); simVer = ver; }
+    const key = a < b ? a * 65536 + b : b * 65536 + a;
+    let v = simCache.get(key);
+    if (v === undefined) { v = similarity(a, b); simCache.set(key, v); }
+    return v;
+  };
+  function similarity(a, b) {
     const A = Lang.get(a), B = Lang.get(b); if (!A || !B) return 0;
     let s = 0; for (const m of MEANINGS) if (A.lex[m].slice(0, 2) === B.lex[m].slice(0, 2)) s++;
     return s / MEANINGS.length;
-  };
+  }
   Lang.tree = function () { const rows = []; const visit = (L, d) => { rows.push({ L, d }); for (const k of L.kids) visit(Lang.list[k], d + 1); }; for (const L of Lang.list) if (L.parent < 0) visit(L, 0); return rows; };
 
   // ------------------------------------------------------------ naming

@@ -272,6 +272,7 @@
   };
   // Every act is logged (tick, tool, place, brush) so a replay can repeat it exactly.
   God.apply = function (id, x, y, k, r, str, extra) {
+    if (AG.History.flushSnap) AG.History.flushSnap(); // a snapshot being copied belongs to the moment before
     const t = God.byId[id]; if (!t) return;
     const br = God.brush.r, bs = God.brush.str, loc = God.locus;
     if (r !== undefined) { God.brush.r = r; God.brush.str = str; if (extra !== undefined) God.locus = extra; }

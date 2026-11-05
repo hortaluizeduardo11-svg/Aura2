@@ -211,6 +211,7 @@
   #tlegend .hot { width: 10px; height: 10px; margin: 0 4px; border-radius: 50%; background: #ffcf7a; box-shadow: 0 0 8px #ff8a2c; }
   #tlegend .arrow { height: auto; font: 700 14px/1 var(--display); color: var(--gold); letter-spacing: -2px; }
   @media (max-width: 1100px) { #tlegend { display: none; } }
+  #vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse at center, rgba(6,8,16,0) 55%, rgba(6,8,16,0.4) 100%); }
   /* ---------- overlays ---------- */
   #toast { position: absolute; z-index: 9; top: 70px; left: 50%; transform: translateX(-50%); max-width: min(520px, calc(100% - 32px)); padding: 9px 14px; font-size: 14px; text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
   #toast.show { opacity: 1; }
@@ -262,6 +263,7 @@
 <body>
 <div id="app">
   <canvas id="world" aria-label="The world. Drag to use the selected tool, scroll or pinch to zoom."></canvas>
+  <div id="vignette" aria-hidden="true"></div>
 
   <header id="hud">
     <div class="brand"><b>AURA</b><span>GENESIS II</span></div>

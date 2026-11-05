@@ -106,31 +106,41 @@
   function rulerHas(k, t) { const R = k.ruler ? People.get(k.ruler) : null; return R && R.died === null && R.traits & TR[t] ? 1 : 0; }
   function diplomacy(dy) {
     const ks = Civ.kingdoms;
-    for (let a = 0; a < ks.length; a++) {
-      const A = ks[a]; if (!A.alive) continue;
-      for (let b = a + 1; b < ks.length; b++) {
-        const B = ks[b]; if (!B.alive) continue;
-        const ca = Civ.capitalOf(A), cb = Civ.capitalOf(B);
-        if (!ca || !cb) continue;
-        const dist = Math.sqrt(dist2(ca.x, ca.y, cb.x, cb.y));
+    // only living polities with a capital take part (the same pairs, in the same order, as a
+    // scan of every slot); polities whose communities hold no grievances skip that tally
+    const live = [], griev = new Uint8Array(ks.length), cruel = new Uint8Array(ks.length), amb = new Uint8Array(ks.length), kind = new Uint8Array(ks.length);
+    const d8 = Math.pow(0.8, dy), d9 = Math.pow(0.9, dy);
+    for (const k of ks) {
+      if (!k.alive || !Civ.capitalOf(k)) continue;
+      live.push(k);
+      cruel[k.id] = rulerHas(k, 'cruel'); amb[k.id] = rulerHas(k, 'ambitious'); kind[k.id] = rulerHas(k, 'kind');
+      for (const cid of k.cities) if (Civ.cities[cid].grievance.size) { griev[k.id] = 1; break; }
+    }
+    for (let ia = 0; ia < live.length; ia++) {
+      const A = live[ia], a = A.id, ca = Civ.capitalOf(A);
+      for (let ib = ia + 1; ib < live.length; ib++) {
+        const B = live[ib], b = B.id, cb = Civ.capitalOf(B);
+        const ddx = ca.x - cb.x, ddy = ca.y - cb.y;
+        if (ddx > 260 || ddx < -260 || ddy > 260 || ddy < -260) continue;
+        const dist = Math.sqrt(ddx * ddx + ddy * ddy);
         if (dist > 260) continue;
         let base = A.lang === B.lang ? 18 : AG.Lang.similarity(A.lang, B.lang) > 0.4 ? 8 : -4;
         const ra = A.religion >= 0 ? Civ.religions[A.religion] : null, rb = B.religion >= 0 ? Civ.religions[B.religion] : null;
         if (ra && rb) { if (ra === rb) base += 22; else base -= (ra.tenet === 'zealous' || rb.tenet === 'zealous') ? 28 : 10; if (ra.tenet === 'pacifist' || rb.tenet === 'pacifist') base += 8; }
         base += Math.min(30, (A.trade[b] + B.trade[a]) * 0.5);
-        A.trade[b] *= Math.pow(0.8, dy); B.trade[a] *= Math.pow(0.8, dy);
+        A.trade[b] *= d8; B.trade[a] *= d8;
         const cont = Civ.contact[a * MAXK + b];
         base -= Math.min(30, cont / 5);
         if (dist < 70) base -= 6;
         // remembered wrongs: communities' grievances against each other
         let grudge = 0;
-        for (const cid of A.cities) { const c = Civ.cities[cid]; for (const did of B.cities) grudge += (c.grievance.get(did) || 0); }
-        for (const cid of B.cities) { const c = Civ.cities[cid]; for (const did of A.cities) grudge += (c.grievance.get(did) || 0); }
+        if (griev[a]) for (const cid of A.cities) { const c = Civ.cities[cid]; if (c.grievance.size) for (const did of B.cities) grudge += (c.grievance.get(did) || 0); }
+        if (griev[b]) for (const cid of B.cities) { const c = Civ.cities[cid]; if (c.grievance.size) for (const did of A.cities) grudge += (c.grievance.get(did) || 0); }
         base -= Math.min(40, grudge * 3);
-        base -= (rulerHas(A, 'cruel') + rulerHas(B, 'cruel')) * 12 + (rulerHas(A, 'ambitious') + rulerHas(B, 'ambitious')) * 6;
-        base += (rulerHas(A, 'kind') + rulerHas(B, 'kind')) * 8;
+        base -= (cruel[a] + cruel[b]) * 12 + (amb[a] + amb[b]) * 6;
+        base += (kind[a] + kind[b]) * 8;
         base += A.mods[b] + B.mods[a];
-        A.mods[b] *= Math.pow(0.9, dy); B.mods[a] *= Math.pow(0.9, dy);
+        A.mods[b] *= d9; B.mods[a] *= d9;
         if (A.war[b]) base -= 25;
         let op = A.opinion[b];
         op += (base - op) * Math.min(1, 0.25 * dy) + (rnd() - 0.5) * 5;

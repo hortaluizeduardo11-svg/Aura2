@@ -62,7 +62,7 @@
   // ------------------------------------------------------------ modes
   Sim.setMode = function (m) {
     if (m === AG.mode || AG.mode === 'deep') return;
-    Sim.finish();
+    Sim.finish(); AG.History.flushSnap();
     AG.History.record('mode', { m });
     if (m === 'history') {
       Civ.foldAll(); Life.fold();

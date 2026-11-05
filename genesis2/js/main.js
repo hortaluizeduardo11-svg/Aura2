@@ -11,6 +11,7 @@
   // speed buttons: watch speeds are tick multipliers; history speeds are years per second
   const HIST = { c: { rate: 20, dy: 1 }, m: { rate: 400, dy: 8 } };
   const DEEP_MYPS = 6; // million years per second in deep time
+  AG.asyncSnaps = true; // snapshots are copied over several frames instead of freezing one
   AG.speed = 1; AG.paused = false; AG.throttled = false; AG.histRate = 20; AG.histDy = 1; AG.fastDawn = false;
   AG.stats = { fps: 60, simMs: 0, renderMs: 0, tps: 0, yps: 0, myps: 0 };
   let lastSpeed = '1';
@@ -156,11 +157,14 @@
         if (steps) AG.stats.simMs = AG.stats.simMs * 0.9 + ((performance.now() - t0) / steps) * 0.1;
         ticks += steps;
         if (now - lodT > 400) { setFocus(); Civ.lod(); lodT = now; }
+        // the fluid simulation keeps full detail around what is on screen (two chunks of margin)
+        { const sz = R.size(), a = R.screenToWorld(0, 0), b = R.screenToWorld(sz.w, sz.h), m = R.is3D() ? 6 : 2; AG.Physics.focus = { cx0: Math.floor(Math.min(a.x, b.x) / 16) - m, cx1: Math.floor(Math.max(a.x, b.x) / 16) + m, cy0: Math.floor(Math.min(a.y, b.y) / 16) - m, cy1: Math.floor(Math.max(a.y, b.y) / 16) + m }; }
       } else {
         // history: whole steps of Δ years, each spread over as many frames as it needs
         if (!AG.paused) acc += (dt / 1000) * AG.histRate;
         const dy = AG.histDy, until = t0 + BUDGET_MS;
         for (;;) {
+          if (AG.History.pending && !AG.History.snapWork(until)) break; // a snapshot is being copied: the world waits
           if (Sim.h && !Sim.stepRun(until)) { AG.throttled = true; break; }
           if (AG.paused || acc < dy || performance.now() > until) break;
           Sim.stepBegin(dy); acc -= dy; years += dy;

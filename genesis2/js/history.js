@@ -16,7 +16,7 @@
   const year = () => (AG.Geo.phase === 'deep' ? AG.Geo.myr * 1e6 - 1e10 : AG.Geo.year); // deep-time events sort before the Dawn
   const CHRON = { invention: 'culture', era: 'culture', loss: 'fall', famine: 'plague', plague: 'plague', war: 'war', raid: 'war', battle: 'war', conquest: 'war', march: 'war', peace: 'peace', alliance: 'peace', faith: 'faith', trade: 'trade', government: 'crown', ruler: 'crown', death: 'death', hero: 'hero', fall: 'fall', collapse: 'fall', rebellion: 'war', settle: 'found', dawn: 'found', migration: 'found', flood: 'disaster', quake: 'disaster', eruption: 'disaster', tsunami: 'disaster', language: 'culture', speciation: 'info', extinction: 'fall', domestication: 'culture', institution: 'crown', reform: 'crown', law: 'crown', abandoned: 'fall', god: 'info', omen: 'faith' };
 
-  History.reset = function () { History.events.length = 0; History.log.length = 0; History.snaps.length = 0; History.eraMaps.length = 0; History.nextId = 1; History.lastSnapYear = -1e9; };
+  History.reset = function () { deadCopies.clear(); History.pending = null; History.events.length = 0; History.log.length = 0; History.snaps.length = 0; History.eraMaps.length = 0; History.nextId = 1; History.lastSnapYear = -1e9; };
 
   // ------------------------------------------------------------ events
   const MAJOR = new Set(['genesis', 'dawn', 'era', 'government', 'war', 'conquest', 'fall', 'collapse', 'faith', 'language', 'flood', 'eruption', 'tsunami', 'law', 'domestication', 'settle']);
@@ -66,9 +66,60 @@
     AG.Flow.cache.clear();
     if (AG.Physics.normalize) AG.Physics.normalize();
   }
-  History.capture = function () {
+  // People for a snapshot. The living are copied; the dead almost never change, so each dead
+  // record is copied once and that copy is shared by every later snapshot (it is copied again
+  // only if a posthumous child, rank or fame changes it). Restoring always copies afresh.
+  const deadCopies = new Map();
+  // The copying is planned, done (in slices if need be), then assembled: the browser spreads a
+  // snapshot over several frames while the simulation waits; tests and saves do it at once.
+  const sigOf = (P) => P.kids.length * 10000 + P.rank * 1000 + Math.round(P.fame);
+  function peoplePlan() {
+    const out = [], todo = [];
+    for (const [id, P] of AG.People.map) {
+      if (P.died !== null) { const c = deadCopies.get(id); if (c && c.sig === sigOf(P)) { out.push([id, c.rec]); continue; } }
+      out.push([id, todo.length]); todo.push(P);
+    }
+    return { out, todo, copies: [], i: 0 };
+  }
+  function peopleWork(plan, until) {
+    while (plan.i < plan.todo.length) {
+      const n = Math.min(400, plan.todo.length - plan.i), part = clone(plan.todo.slice(plan.i, plan.i + n));
+      for (let k = 0; k < part.length; k++) plan.copies.push(part[k]);
+      plan.i += n;
+      if (AG.now() > until) break;
+    }
+    return plan.i >= plan.todo.length;
+  }
+  function peopleFinish(plan) {
+    for (const e of plan.out) {
+      if (typeof e[1] !== 'number') continue;
+      const P = plan.todo[e[1]], copy = plan.copies[e[1]];
+      e[1] = copy;
+      if (P.died !== null) deadCopies.set(P.id, { sig: sigOf(P), rec: copy });
+    }
+    if (deadCopies.size > AG.People.map.size * 1.3 + 1000) for (const id of deadCopies.keys()) if (!AG.People.map.has(id)) deadCopies.delete(id);
+    return plan.out;
+  }
+  function peopleEntries() { const plan = peoplePlan(); peopleWork(plan, Infinity); return peopleFinish(plan); }
+  // A snapshot in progress (browser): History.snapWork(until) advances it; the sim waits meanwhile.
+  History.pending = null;
+  History.snapWork = function (until) {
+    const p = History.pending; if (!p) return true;
+    if (!peopleWork(p.plan, until)) return false;
+    History.pending = null;
+    pushSnap(p.year, p.tick, History.capture(peopleFinish(p.plan)));
+    return true;
+  };
+  History.flushSnap = function () { if (History.pending) History.snapWork(Infinity); };
+  function pushSnap(year, tick, data) {
+    History.snaps.push({ year, tick, data });
+    if (History.snaps.length > SNAP_KEEP) History.snaps.splice(1, 1); // always keep the Dawn
+  }
+  History.capture = function (entries) {
+    if (!entries && History.pending) History.flushSnap(); // never mix a half-copied snapshot with a new one
     if (AG.Sim && AG.Sim.h) AG.Sim.finish(); // never capture half a step
     normalize();
+    for (const c of AG.Civ.cities) if (c._ps) { c._ps = null; c._psT = -1; } // a per-tick cache of members: never worth copying
     const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U;
     const world = {}; for (const k of WORLD_FIELDS()) world[k] = Wd[k].slice();
     const geo = {}; for (const k of ['plate', 'crust', 'age', 'rock', 'strain', 'magma', 'orog', 'bound', 'precip', 'temp', 'ice', 'acc', 'organic', 'evap', 'wetFloor', 'lith']) geo[k] = Geo[k].slice();
@@ -81,7 +132,7 @@
       world, worldMisc: clone({ springs: Wd.springs, vents: Wd.vents, epoch: Wd.epoch }),
       geo, geoScalars: gs, geoObj: clone({ plates: Geo.plates, hotspots: Geo.hotspots, volcanoes: Geo.volcanoes.map((v) => Object.assign({}, v)), climate: Geo.climate, events: Geo.events.slice(-60) }),
       life: clone({ species: Life.species, extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, env: Life.env }),
-      people: clone({ entries: [...AG.People.map.entries()], alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }),
+      people: Object.assign(clone({ alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }), { entries: entries || peopleEntries() }),
       sim: { stripe: AG.Sim ? AG.Sim.stripe : 0, geoSeen: AG.Sim ? Math.max(0, AG.Sim.geoSeen - Math.max(0, Geo.events.length - 60)) : 0 }, // geo events keep their last 60
       lang: clone({ list: AG.Lang.list, splits: AG.Lang.splits, changes: AG.Lang.changes }),
       tech: clone({ banned: [...AG.Tech.banned], firsts: AG.Tech.firsts, discoveries: AG.Tech.discoveries, losses: AG.Tech.losses }),
@@ -97,6 +148,7 @@
   };
   History.restore = function (s) {
     if (AG.Sim) AG.Sim.h = null; // a step in progress belongs to the timeline being left
+    deadCopies.clear(); History.pending = null; // another timeline's dead may share ids with this one's
     const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U;
     if (AG.God.possessed >= 0) AG.God.release();
     AG.seed = s.seed; AG.tick = s.tick; AG.mode = s.mode;
@@ -140,8 +192,8 @@
     if (AG.Geo.phase !== 'history' || History.replaying) return;
     if (AG.Geo.year - History.lastSnapYear >= SNAP_EVERY) {
       History.lastSnapYear = AG.Geo.year;
-      History.snaps.push({ year: AG.Geo.year, tick: AG.tick, data: History.capture() });
-      if (History.snaps.length > SNAP_KEEP) History.snaps.splice(1, 1); // always keep the Dawn
+      if (AG.asyncSnaps && AG.mode === 'history') History.pending = { year: AG.Geo.year, tick: AG.tick, plan: peoplePlan() }; // copied over the next frames
+      else pushSnap(AG.Geo.year, AG.tick, History.capture());
     }
   };
 

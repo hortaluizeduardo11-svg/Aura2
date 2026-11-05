@@ -53,6 +53,12 @@
   P.react = react;
 
   P.markWet = (i) => { wet[(((i / W) | 0) >> 4) * CW + ((i % W) >> 4)] = 1; };
+  // is cell i in a chunk that the camera-based level of detail is resting this tick?
+  P.resting = function (i) {
+    const f = P.focus; if (!f || AG.tick % 4 === 0) return false;
+    const c = Wd.chunkOfIdx(i), cx = c % CW, cy = (c / CW) | 0;
+    return cx < f.cx0 || cx > f.cx1 || cy < f.cy0 || cy > f.cy1;
+  };
   P.addFluid = function (i, type, amt) {
     P.markWet(i);
     if (fl[i] > 0.002 && ft[i] !== type) react(i, ft[i], type, amt);
@@ -251,6 +257,7 @@
 
   // ------------------------------------------------------------ slow pass
   function slowChunk(c) {
+    const f0 = P.focus, ccx = c % CW, ccy = (c / CW) | 0, meltK = f0 && (ccx < f0.cx0 || ccx > f0.cx1 || ccy < f0.cy0 || ccy > f0.cy1) ? 0.25 : 1; // off-screen meltwater at the slow pace
     const cx = c % CW, cy = (c / CW) | 0, x0 = cx << 4, y0 = cy << 4;
     const sT = AG.Sky.seasonT + AG.Sky.chunkT[c], rain = AG.Sky.chunkRain[c];
     let wet = false;
@@ -273,7 +280,7 @@
         }
         if (f > 0.004) continue;
         if (snow[i]) {
-          if (T > 0.3) { const m = Math.min(snow[i], ((T - 0.3) * 70 + 2) | 0); snow[i] -= m; if (m > 3 && T < 0.6) { fl[i] += m * 0.00003; ft[i] = FT.WATER; wet = true; } }
+          if (T > 0.3) { const m = Math.min(snow[i], ((T - 0.3) * 70 + 2) | 0); snow[i] -= m; if (m > 3 && T < 0.6) { fl[i] += m * 0.00003 * meltK; ft[i] = FT.WATER; wet = true; } }
         } else if (T < 0.05 && rnd() < 0.08) snow[i] = 40;
         const s = soil[i];
         if (traffic[i]) {
@@ -354,6 +361,14 @@
       if (cx > 0) act[c - 1] = 1; if (cx < CW - 1) act[c + 1] = 1;
       if (cy > 0) act[c - CW] = 1; if (cy < CH - 1) act[c + CW] = 1;
     }
+    // level of detail: chunks well away from the camera run together every 4th tick (edges are
+    // computed only between chunks active on the same tick, so no water is made or lost)
+    const f = P.focus, farTick = t % 4 === 0;
+    if (f && !farTick) for (let c = 0; c < NC; c++) {
+      if (!act[c]) continue;
+      const cx = c % CW, cy = (c / CW) | 0;
+      if (cx < f.cx0 || cx > f.cx1 || cy < f.cy0 || cy > f.cy1) act[c] = 0;
+    }
     let na = 0;
     for (let c = 0; c < NC; c++) if (act[c]) list[na++] = c;
     P.stats.active = na;
@@ -374,6 +389,7 @@
     for (const s of Wd.springs) {
       const i = s.i;
       if (ft[i] === FT.LAVA || ft[i] === FT.ACID || frozen[i]) continue;
+      if (f && !farTick) { const c = Wd.chunkOfIdx(i), cx = c % CW, cy = (c / CW) | 0; if (cx < f.cx0 || cx > f.cx1 || cy < f.cy0 || cy > f.cy1) continue; } // far springs feed at the far chunks' pace
       fl[i] += s.rate; ft[i] = FT.WATER;
       const c = Wd.chunkOfIdx(i); if (!Wd.awake[c]) Wd.wake(s.x, s.y);
     }

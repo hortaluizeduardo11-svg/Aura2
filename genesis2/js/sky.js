@@ -114,13 +114,13 @@
       if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
       const i = y * W + x;
       if (Wd.fire[i]) Wd.fire[i] = Wd.fire[i] > 60 ? Wd.fire[i] - 60 : 0;
-      if (s.type === 'acid') { AG.Physics.addFluid(i, FT.ACID, 0.0035); continue; }
+      if (s.type === 'acid') { if (!AG.Physics.resting(i)) AG.Physics.addFluid(i, FT.ACID, 0.0035); continue; }
       if (Wd.T(i) < 0.22) {
         if (Wd.ft[i] === FT.WATER && Wd.fl[i] > 0.004) { if (rnd() < 0.15) Wd.frozen[i] = 1; }
         else Wd.snow[i] = Math.min(255, Wd.snow[i] + 12);
         Wd.dirty[Wd.chunkOfIdx(i)] = 1;
       } else if (Wd.fl[i] > 0.002 || rnd() < 0.2) {
-        AG.Physics.addFluid(i, FT.WATER, 0.0045);
+        if (!AG.Physics.resting(i)) AG.Physics.addFluid(i, FT.WATER, 0.0045); // off-screen land runs at the slow pace
       } else {
         Wd.moist[i] = Math.min(1, Wd.moist[i] + 0.0005); // most rain on dry ground soaks in
         if (Wd.veg[i] < 250) Wd.veg[i] += 1;

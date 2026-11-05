@@ -354,7 +354,9 @@
     let painted = 0;
     if (full) { for (let k = 0; k < NC; k++) paintChunk(k, under); dirty.fill(0); painted = NC; }
     else {
-      for (let k = 0; k < NC; k++) if (dirty[k] || (awake[k] && (frameN + k) % 3 === 0)) { paintChunk(k, under); dirty[k] = 0; painted++; }
+      const live = AG.mode === 'watch' || under; // in deep time and history nothing ripples or burns
+      for (let k = 0; k < NC; k++) if (dirty[k] || (live && awake[k] && (frameN + k) % 3 === 0)) { paintChunk(k, under); dirty[k] = 0; painted++; }
+      if (!live) { if (painted) (under ? uctx : wctx).putImageData(under ? uimg : wimg, 0, 0); R.stats.painted = painted; return; }
       // animate visible water and fire: a quarter of those chunks per frame
       const c = R.cam, hw = cw / 2 / c.z, hh = ch / 2 / c.z;
       const vx0 = Math.max(0, (c.x - hw) >> 4), vx1 = Math.min(CW - 1, (c.x + hw) >> 4);
@@ -546,7 +548,8 @@
       }
       bctx.putImageData(bimg, 0, 0); return;
     }
-    if (mode === 'plates' || mode === 'strain') {
+    if (mode === 'plates') { bctx.putImageData(bimg, 0, 0); return; } // drawn by drawTectonics
+    if (mode === 'strain') {
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const i = y * W + x, c = Geo.cellOf(x, y), p = Geo.plates[Geo.plate[c]];
         const bd = Geo.bound[c];
@@ -609,8 +612,10 @@
       }
     }
   }
+  let lightOn = true, glowOn = true, gasOn = true, cloudOn = true;
   function updateLight() {
     const under = R.view === 0, day = Sky.daylight();
+    if (!under && AG.mode !== 'watch') { lightOn = glowOn = false; return; } // deep time and history are drawn in plain daylight
     lum.fill(0);
     for (let ly = 0; ly < LH; ly++) for (let lx = 0; lx < LW; lx++) {
       const i = (ly * 2) * W + lx * 2, j = ly * LW + lx;
@@ -642,35 +647,46 @@
     const dark = under ? 0.86 : (1 - day) * (AG.speed >= 4 && !AG.paused ? 0.45 : 0.8); // gentler nights when time races
     const tr = under ? 4 : 8, tg = under ? 3 : 12, tb = under ? 10 : 38;
     const glowK = under ? 0.6 : 0.15 + (1 - day) * 0.5;
+    let la = 0, ga2 = 0;
     for (let j = 0; j < lum.length; j++) {
       const L = lum[j] * 1.6;
-      const a = dark * (1 - (L > 1 ? 1 : L));
-      lpix[j] = pack(tr, tg, tb, (a * 255) | 0);
-      const ga = Math.min(1, lum[j]) * glowK;
-      gpix[j] = pack(255, 150, 70, (ga * 200) | 0);
+      const a = (dark * (1 - (L > 1 ? 1 : L)) * 255) | 0;
+      lpix[j] = pack(tr, tg, tb, a); if (a > la) la = a;
+      const ga = (Math.min(1, lum[j]) * glowK * 200) | 0;
+      gpix[j] = pack(255, 150, 70, ga); if (ga > ga2) ga2 = ga;
     }
-    lctx.putImageData(limg, 0, 0); gctx.putImageData(gimg, 0, 0);
+    // layers with nothing in them are not uploaded or drawn
+    lightOn = la > 2; glowOn = ga2 > 2;
+    if (lightOn) lctx.putImageData(limg, 0, 0);
+    if (glowOn) gctx.putImageData(gimg, 0, 0);
   }
   const GASCOL = [[0, 0, 0], [236, 240, 244], [74, 70, 68], [140, 205, 70]];
   function updateGas() {
+    let any = false;
     for (let ly = 0; ly < LH; ly++) for (let lx = 0; lx < LW; lx++) {
       const i = ly * 2 * W + lx * 2, g = Math.max(Wd.gas[i], Wd.gas[i + 1], Wd.gas[i + W], Wd.gas[i + W + 1]);
       if (g < 0.01) { gspix[ly * LW + lx] = 0; continue; }
+      any = true;
       const c = GASCOL[Wd.gt[i] || Wd.gt[i + 1] || Wd.gt[i + W] || 2];
       gspix[ly * LW + lx] = pack(c[0], c[1], c[2], Math.min(210, (g * 420) | 0));
     }
-    gsctx.putImageData(gsimg, 0, 0);
+    if (any || gasOn) gsctx.putImageData(gsimg, 0, 0);
+    gasOn = any;
   }
   function updateClouds() {
+    if (AG.mode === 'deep') { cloudOn = false; return; } // no weather over millions of years
     const night = 1 - Sky.daylight();
+    let any = false;
     for (let j = 0; j < cpix.length; j++) {
       const c = Sky.cloud[j], dk = Sky.dark[j];
       if (c < 0.02) { cpix[j] = 0; shpix[j] = 0; continue; }
+      any = true;
       const v = 250 - dk * 160 - night * 150;
       cpix[j] = pack(Math.max(20, v) | 0, Math.max(22, v + 2) | 0, Math.max(30, v + 8) | 0, (c * 225) | 0);
       shpix[j] = pack(0, 0, 10, (c * 110) | 0);
     }
-    cctx.putImageData(cimg, 0, 0); shctx.putImageData(shimg, 0, 0);
+    if (any || cloudOn) { cctx.putImageData(cimg, 0, 0); shctx.putImageData(shimg, 0, 0); }
+    cloudOn = any;
   }
   const WILD = SPECIES.map((d) => (d.kind === 'animal' || d.kind === 'ambient' ? 1 : 0));
   let wildDots = false;
@@ -1026,15 +1042,14 @@
           }
           if (!any) continue;
           const a = 0.35 + bkt * 0.2;
-          ctx.globalAlpha = a * 0.32; ctx.strokeStyle = outer; ctx.lineWidth = wide; ctx.stroke();
-          ctx.globalAlpha = a * 0.55; ctx.lineWidth = wide * 0.45; ctx.stroke();
+          ctx.globalAlpha = a * 0.42; ctx.strokeStyle = outer; ctx.lineWidth = wide * 0.7; ctx.stroke();
           ctx.globalAlpha = Math.min(1, a + 0.15); ctx.strokeStyle = inner; ctx.lineWidth = core; ctx.stroke();
         }
         ctx.setLineDash([]);
       }
       // a soft bloom here and there along the hottest boundaries
       const r = Math.max(8, cz * 1.3);
-      for (let k = 0; k < bead.n; k += 3) {
+      for (let k = 0; k < bead.n; k += 5) {
         const t = bead.t[k]; if (t === 3) continue;
         const sx = ox + bead.x[k] * z, sy = oy + bead.y[k] * z;
         if (sx < -r || sy < -r || sx > cw + r || sy > ch + r) continue;
@@ -1178,26 +1193,30 @@
       }
     }
     R.stats.sprites = sprites;
-    if (!sprites || wildDots) { updateDots(alpha, sprites); ctx.drawImage(dotsC, ox, oy, W * z, H * z); }
+    if ((!sprites || wildDots) && U.count > 0) { updateDots(alpha, sprites); ctx.drawImage(dotsC, ox, oy, W * z, H * z); }
     if (sprites) drawUnits(ox, oy, z, s, alpha, vx0, vy0, vx1, vy1, under);
     else R._sky = [];
     drawProjectiles(ox, oy, z, under);
     drawParticles(ox, oy, z, under, false);
     if (!under) {
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(gasC, ox, oy, W * z, H * z);
-      const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
-      const sun = Sky.sunDir();
-      ctx.globalAlpha = cvis * Sky.daylight();
-      ctx.drawImage(shadC, ox - sun.x * 7 * z, oy + 5 * z, W * z, H * z);
-      ctx.globalAlpha = 1;
+      if (gasOn) ctx.drawImage(gasC, ox, oy, W * z, H * z);
+      if (cloudOn) {
+        const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
+        const sun = Sky.sunDir();
+        ctx.globalAlpha = cvis * Sky.daylight();
+        ctx.drawImage(shadC, ox - sun.x * 7 * z, oy + 5 * z, W * z, H * z);
+        ctx.globalAlpha = 1;
+      }
     } else ctx.imageSmoothingEnabled = true;
-    // light: darkness then warm glow
-    ctx.drawImage(lightC, ox, oy, W * z, H * z);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.drawImage(glowC, ox, oy, W * z, H * z);
-    ctx.globalCompositeOperation = 'source-over';
-    if (!under) {
+    // light: darkness then warm glow (skipped in full daylight)
+    if (lightOn) ctx.drawImage(lightC, ox, oy, W * z, H * z);
+    if (glowOn) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(glowC, ox, oy, W * z, H * z);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    if (!under && cloudOn) {
       const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
       ctx.globalAlpha = cvis;
       ctx.drawImage(cloudC, ox, oy, W * z, H * z);
@@ -1206,7 +1225,7 @@
     ctx.imageSmoothingEnabled = false;
     if (!under && AG.mode === 'watch') { weather(dt, ox, oy, z); drawSkyUnitsOver(ox, oy, z, alpha); } // no rain streaks while centuries or ages fly by
     drawParticles(ox, oy, z, under, true);
-    if (!under) { drawDisasters(ox, oy, z); drawLightning(ox, oy, z); godRays(); }
+    if (!under) { drawDisasters(ox, oy, z); drawLightning(ox, oy, z); if (AG.mode === 'watch') godRays(); }
     if (!under && Sky.flash > 0) { ctx.fillStyle = `rgba(230,236,255,${Sky.flash * 0.35})`; ctx.fillRect(0, 0, cw, ch); }
     const tg = performance.now();
     grade(under);
@@ -1220,7 +1239,7 @@
   };
 
   function grade(under) {
-    if (!under) {
+    if (!under && AG.mode === 'watch') {
       const f = Sky.dayFrac();
       const warm = Math.max(0, 1 - Math.abs(f - 0.28) / 0.09) + Math.max(0, 1 - Math.abs(f - 0.72) / 0.09);
       if (warm > 0.02) {
@@ -1230,7 +1249,7 @@
         ctx.globalCompositeOperation = 'source-over';
       }
     }
-    if (vignette) { ctx.imageSmoothingEnabled = true; ctx.drawImage(vignette, 0, 0, cw, ch); ctx.imageSmoothingEnabled = false; }
+    // (the vignette is a CSS layer over the canvas: the compositor draws it for free)
   }
   function drawBuildings(ox, oy, z, s, vx0, vy0, vx1, vy1) {
     const bs = Math.max(1, z / 4), list = [];
@@ -1452,21 +1471,59 @@
     }
     ctx.globalCompositeOperation = 'source-over';
   }
+  const textW = new Map();
+  const measure = (t) => { const key = ctx.font + '|' + t; let w = textW.get(key); if (w === undefined) { w = ctx.measureText(t).width; if (textW.size > 4000) textW.clear(); textW.set(key, w); } return w; };
+  // Name plates are drawn once into small images and reused (text is the costliest thing a canvas
+  // draws); a plate is redrawn only when its name, head count, colour or rank changes.
+  const plates = new Map();
+  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) document.fonts.ready.then(() => { plates.clear(); for (const k in digits) delete digits[k]; });
+  // the head count is stamped from pre-drawn digits, so a plate is redrawn only when its name,
+  // colour, rank or the number of digits changes
+  const digits = {};
+  function digitSet(big) {
+    const key = big ? 'b' : 's';
+    if (digits[key]) return digits[key];
+    const font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`, prev = ctx.font;
+    ctx.font = font;
+    let adv = 0; for (let d = 0; d < 10; d++) adv = Math.max(adv, ctx.measureText(String(d)).width);
+    ctx.font = prev;
+    adv = Math.ceil(adv);
+    const h = big ? 22 : 20, c = mk(adv * 10, h), g = c.getContext('2d');
+    g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(232,182,76,0.95)';
+    for (let d = 0; d < 10; d++) g.fillText(String(d), d * adv + adv / 2, h / 2 + 1);
+    return (digits[key] = { c, adv, h });
+  }
+  function plateSprite(name, nd, k, cap, big) {
+    const key = `${name}|${nd}|${k.css}|${cap ? 1 : 0}${big ? 1 : 0}`;
+    let e = plates.get(key);
+    if (e) { e.t = frameN; return e; }
+    const font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`, prevFont = ctx.font;
+    ctx.font = font;
+    const nw = measure(name);
+    ctx.font = prevFont;
+    const D = digitSet(big), pw = D.adv * nd;
+    const ph = big ? 22 : 20, crest = 7, pad = 7, w = Math.ceil(crest + pad + nw + 8 + pw + pad);
+    const c = mk(w + 2, ph + 7), g = c.getContext('2d'), x0 = 1, y0 = 1, mid = y0 + ph / 2;
+    g.font = font; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillStyle = 'rgba(12,16,27,0.82)';
+    g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, w, ph, 5); else g.rect(x0, y0, w, ph); g.fill();
+    g.strokeStyle = cap ? 'rgba(232,182,76,0.85)' : 'rgba(222,202,150,0.22)'; g.lineWidth = 1; g.stroke();
+    g.fillStyle = k.css; g.fillRect(x0 + 5, y0 + 4, crest - 2, ph - 8);
+    g.fillStyle = cap ? '#fff1cf' : '#efe8d6';
+    g.fillText(name, x0 + crest + pad, mid + 1);
+    g.beginPath(); g.moveTo(x0 + w / 2 - 4, y0 + ph); g.lineTo(x0 + w / 2 + 4, y0 + ph); g.lineTo(x0 + w / 2, y0 + ph + 5); g.closePath();
+    g.fillStyle = 'rgba(12,16,27,0.82)'; g.fill();
+    e = { c, w, ph, numX: crest + pad + nw + 8, t: frameN };
+    plates.set(key, e);
+    if (plates.size > 900) for (const [kk, v] of plates) if (frameN - v.t > 90) plates.delete(kk);
+    return e;
+  }
   function plate(sx, sy, name, pop, k, cap, big, captureT) {
-    const nw = ctx.measureText(name).width, pw = ctx.measureText(pop).width;
-    const ph = big ? 22 : 20, crest = 7, pad = 7, w = crest + pad + nw + 8 + pw + pad;
-    const x0 = sx - w / 2, y0 = sy - ph / 2;
-    ctx.fillStyle = 'rgba(12,16,27,0.82)';
-    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, ph, 5); else ctx.rect(x0, y0, w, ph); ctx.fill();
-    ctx.strokeStyle = cap ? 'rgba(232,182,76,0.85)' : 'rgba(222,202,150,0.22)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = k.css; ctx.fillRect(x0 + 5, y0 + 4, crest - 2, ph - 8);
-    ctx.fillStyle = cap ? '#fff1cf' : '#efe8d6';
-    ctx.fillText(name, x0 + crest + pad, sy + 1);
-    ctx.fillStyle = 'rgba(232,182,76,0.95)';
-    ctx.fillText(pop, x0 + crest + pad + nw + 8, sy + 1);
-    ctx.beginPath(); ctx.moveTo(sx - 4, y0 + ph); ctx.lineTo(sx + 4, y0 + ph); ctx.lineTo(sx, y0 + ph + 5); ctx.closePath();
-    ctx.fillStyle = 'rgba(12,16,27,0.82)'; ctx.fill();
-    if (captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(x0 + 4, y0 + ph + 2, ((w - 8) * captureT) / 100, 3); }
+    const e = plateSprite(name, pop.length, k, cap, big), x0 = Math.round(sx - e.w / 2), y0 = Math.round(sy - e.ph / 2);
+    ctx.drawImage(e.c, x0 - 1, y0 - 1);
+    const D = digitSet(big);
+    for (let q = 0; q < pop.length; q++) { const d = pop.charCodeAt(q) - 48; if (d >= 0 && d <= 9) ctx.drawImage(D.c, d * D.adv, 0, D.adv, D.h, x0 + e.numX + q * D.adv, y0, D.adv, D.h); }
+    if (captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(x0 + 4, y0 + e.ph + 2, ((e.w - 8) * captureT) / 100, 3); }
   }
   function drawLabels(ox, oy, z, under) {
     if (under) return;
