@@ -281,18 +281,20 @@
     P.story.push({ t: year(), k: -1, d: `Died at ${age}${cause ? ', ' + cause : ''}` });
     // the dead keep their family and their defining memories; the rest is forgotten with them
     for (const [id, t] of P.ties) if (!(t.k & (TIE.FAMILY | TIE.SPOUSE))) P.ties.delete(id);
-    if (P.mem.length > 6) P.mem = P.mem.filter((m) => m.core).slice(-6);
-    if (P.story.length > 16) P.story = P.story.slice(0, 2).concat(P.story.slice(-14));
+    if (P.mem.length > 4) P.mem = P.mem.filter((m) => m.core).slice(-4);
+    if (P.story.length > 12) P.story = P.story.slice(0, 2).concat(P.story.slice(-10));
     P.needs = null; P.emo = null; P.preg = null;
   };
   // keep the family tree but forget distant, unremarkable dead
   function prune2() {
     const keep = new Set();
     for (const P of People.map.values()) if (P.died === null) { keep.add(P.mom); keep.add(P.dad); const m = People.get(P.mom), d = People.get(P.dad); for (const g of [m, d]) if (g) { keep.add(g.mom); keep.add(g.dad); } }
-    const out = [];
-    for (const id of People.dead) { const P = People.get(id); if (!P) continue; if (keep.has(id) || P.fame > 4 || P.rank >= 2) out.push(id); else People.map.delete(id); }
+    const out = [], y = year();
+    // the famous are remembered for some thousands of years (the very famous for longer)
+    for (const id of People.dead) { const P = People.get(id); if (!P) continue; if (keep.has(id) || ((P.fame > 4 || P.rank >= 2) && y - P.died < 1500 + P.fame * 150)) out.push(id); else People.map.delete(id); }
+    People.famous = People.famous.filter((id) => People.map.has(id));
     People.dead = out;
-    People.pruneAt = Math.max(14000, out.length * 1.5 + 4000); // hysteresis: the kept ancestors alone can exceed the limit
+    People.pruneAt = Math.max(12000, out.length * 1.3 + 3000); // hysteresis: the kept ancestors alone can exceed the limit
   }
   People.pruneAt = 14000;
 

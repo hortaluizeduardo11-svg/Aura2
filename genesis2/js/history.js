@@ -12,19 +12,24 @@
 (function () {
   const AG = window.AG;
   const History = (AG.History = { events: [], log: [], snaps: [], branches: [], eraMaps: [], nextId: 1, replaying: false, lastSnapYear: -1e9 });
-  const SNAP_EVERY = 500, SNAP_KEEP = 6;
+  const SNAP_EVERY = 500, SNAP_KEEP = 5;
   const year = () => (AG.Geo.phase === 'deep' ? -AG.Geo.mya * 1e6 : AG.Geo.year);
   const CHRON = { invention: 'culture', era: 'culture', loss: 'fall', famine: 'plague', plague: 'plague', war: 'war', raid: 'war', battle: 'war', conquest: 'war', march: 'war', peace: 'peace', alliance: 'peace', faith: 'faith', trade: 'trade', government: 'crown', ruler: 'crown', death: 'death', hero: 'hero', fall: 'fall', collapse: 'fall', rebellion: 'war', settle: 'found', dawn: 'found', migration: 'found', flood: 'disaster', quake: 'disaster', eruption: 'disaster', tsunami: 'disaster', language: 'culture', speciation: 'info', extinction: 'fall', domestication: 'culture', institution: 'crown', reform: 'crown', law: 'crown', abandoned: 'fall', god: 'info', omen: 'faith' };
 
   History.reset = function () { History.events.length = 0; History.log.length = 0; History.snaps.length = 0; History.eraMaps.length = 0; History.nextId = 1; History.lastSnapYear = -1e9; };
 
   // ------------------------------------------------------------ events
+  const MAJOR = new Set(['genesis', 'dawn', 'era', 'government', 'war', 'conquest', 'fall', 'collapse', 'faith', 'language', 'flood', 'eruption', 'tsunami', 'law', 'domestication', 'settle']);
   History.event = function (kind, text, o) {
     o = o || {};
     text = text.replace(/\b([Tt]he) the\b/g, '$1'); // polity names that already begin with 'the'
     const e = { id: History.nextId++, year: year(), tick: AG.tick, kind, text, x: o.x === undefined ? -1 : o.x, y: o.y === undefined ? -1 : o.y, cause: o.cause || '', polity: o.polity === undefined ? -1 : o.polity, comm: o.comm === undefined ? -1 : o.comm, person: o.person || 0, tech: o.tech || '', first: !!o.first, era: o.era, lang: o.lang };
     History.events.push(e);
-    if (History.events.length > 4000) History.events.splice(0, 500);
+    if (History.events.length > 4000) { // forget the oldest minor events first; the turning points stay
+      let drop = 500;
+      History.events = History.events.filter((ev) => { if (drop > 0 && !(MAJOR.has(ev.kind) && (ev.kind !== 'era' || ev.first))) { drop--; return false; } return true; });
+      if (History.events.length > 4000) History.events.splice(0, 500);
+    }
     AG.Chronicle.add(text + (e.cause && kind !== 'invention' ? ` — ${e.cause}` : ''), CHRON[kind] || 'info', e.x, e.y);
     if (kind === 'era' && e.first && AG.onEraMap) AG.onEraMap(e);
     return e;

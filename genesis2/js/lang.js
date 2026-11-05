@@ -61,6 +61,8 @@
       for (let k = 0; k < 40; k++) { L.names.f.push(word(ph, 2).replace(/[^aeiouy]$/, '') + (rnd() < 0.6 ? fe : '')); L.names.m.push(word(ph, 1) + (rnd() < 0.5 ? me : '')); }
     }
     L.name = cap(L.lex.people);
+    // a daughter whose word for "people" did not change is told apart by a new syllable
+    for (let t = 0; t < 6 && Lang.list.some((o) => o.name === L.name); t++) { L.lex.people = L.lex.people + word(L.ph, 1).slice(0, 2); L.name = cap(L.lex.people); }
     Lang.list.push(L);
     return L;
   };

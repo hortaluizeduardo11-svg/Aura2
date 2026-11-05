@@ -142,7 +142,7 @@
       }
       const why = t.cond && ctx ? conditionText(t, ctx) : '';
       if (first || ctx && ctx.visible) AG.History.event('invention', `${P ? P.name + ' of ' : 'The people of '}${c.name} ${first ? 'are the first to discover' : 'discover'} ${t.name.toLowerCase()}${why ? ' (' + why + ')' : ''}`, { x: c.x, y: c.y, tech: t.key, comm: c.id, person: P ? P.id : 0, first, cause: why || 'invention' });
-    } else if (how === 'learned' && from && Tech.firsts[t.key] && Math.random() < 0.0) { /* diffusion is quiet */ }
+    } // learning from neighbours is quiet in the chronicle
     if (c.era > prevEra) {
       const k = AG.Civ.kingdoms[c.kd];
       const worldFirst = !Tech.firsts['era' + c.era];

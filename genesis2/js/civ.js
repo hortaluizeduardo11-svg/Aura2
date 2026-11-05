@@ -687,7 +687,8 @@
       P.visited++;
       if (P.body >= 0 && U.alive[P.body]) { U.task[P.body] = TK.MIGRATE; U.st[P.body] = ST.IDLE; U.tx[P.body] = c.x; U.ty[P.body] = c.y; }
       else { P.x = c.x + (rnd() - 0.5) * 5; P.y = c.y + (rnd() - 0.5) * 5; }
-      if (rnd() < 0.15) People.remember(P, MK.MIGRATED, { v: why === 'ice' || why === 'sea' ? -0.3 : 0.1, s: 0.3, d: c.name });
+      if (why === 'sea') People.remember(P, MK.FLOOD, { v: -0.6, s: 0.8, d: c.name });
+      else if (rnd() < 0.15) People.remember(P, MK.MIGRATED, { v: why === 'ice' ? -0.3 : 0.1, s: 0.3, d: c.name });
     }
     if (why === 'sea' || why === 'ice') AG.History.event('migration', `The band of ${c.name} is driven from its land by the ${why === 'sea' ? 'rising sea' : 'advancing ice'}`, { x: old.x, y: old.y, comm: c.id, cause: why === 'sea' ? 'sea-level rise' : 'glaciation' });
     Civ.recomputeBordersSoon = true;
@@ -764,7 +765,7 @@
         if ((Tech.knows(c, 'cultivation') && c.survey.cereal > 15) || (Tech.knows(c, 'pottery') && c.survey.water > 60 && Tech.knows(c, 'fishing') && pop > 30)) settle(c);
         else {
           const here = (c.x | 0) + (c.y | 0) * W;
-          const why = Wd.ice[here] ? 'ice' : Wd.fl[here] > 0.02 ? 'sea' : '';
+          const why = Wd.ice[here] ? 'ice' : Wd.elev[here] < SEA && Wd.fl[here] > 0.001 ? 'sea' : '';
           if (why || (year() - c.lastMove > 1 && (c.overForage > 0.3 || c.nutr < 0.85 || c.crowded)) || (year() - c.lastMove > 6 && rnd() < 0.25)) moveCamp(c, why);
           if ((pop > 44 + ri(10) || (c.crowded && pop >= 26)) && year() - c.lastSettle > 4) split(c, 'size');
         }
@@ -775,7 +776,7 @@
         if ((pop > 220 && landFull || pop > 420) && year() - c.lastSettle > 15 && Civ.cities.filter((o) => o.alive && o.kd === c.kd).length < 30) split(c, 'land');
         c.kind = pop >= 900 ? 'city' : pop >= 250 ? 'town' : 'village';
         const here = (c.x | 0) + (c.y | 0) * W;
-        if (Wd.fl[here] > 0.02 && Wd.elev[here] < SEA) drowned(c);
+        if (Wd.fl[here] > 0.001 && Wd.elev[here] < SEA) drowned(c);
       }
     }
     if (!c.materialized) for (let k = 0; k < Math.max(1, Math.round(dy * 2)); k++) planBuild(c, true);
@@ -841,11 +842,18 @@
     return best;
   };
   function drowned(c) {
+    if (year() - (c.flooded || -1e9) < 40) return; // already moving
+    c.flooded = year();
     AG.History.event('flood', `The rising sea swallows ${c.name}; its people must move`, { x: c.x, y: c.y, comm: c.id, cause: 'sea-level rise' });
     for (const P of persons(c)) People.remember(P, MK.FLOOD, { v: -0.8, s: 0.9, d: c.name });
     const k = Civ.kingdoms[c.kd]; if (k) k.exp.water += 3;
-    const site = findSite(c.x, c.y, 50, false, c);
-    if (!site) return;
+    const site = findSite(c.x, c.y, 50, false, c) || findSite(c.x, c.y, 90, false, c) || findSite(c.x, c.y, 90, true, c);
+    if (!site) { // nowhere dry to rebuild: they take to the road as a band
+      for (const bid of c.buildings.slice()) Civ.destroyBuilding(bid, -1, true);
+      c.nomadic = true; c.sedentary = false; c.kind = 'band'; c.hearth = -1; c.keep = -1;
+      moveCamp(c, 'sea');
+      return;
+    }
     for (const bid of c.buildings.slice()) Civ.destroyBuilding(bid, -1, true);
     c.x = site.x; c.y = site.y; c.hearth = -1; c.keep = -1; survey(c);
     settle2(c);
@@ -919,10 +927,10 @@
     k.unrest = (k.unrest || 0) * Math.pow(0.6, dy);
     k.stability = AG.clamp(k.legit - corr * 0.5 - k.inequality * 0.3 - k.exhaustion * 0.004 - (k.unrest || 0), -1, 1);
     // government transitions
-    const sedCap = cap && cap.sedentary;
-    if (k.gov === 0 && k.cities.length >= 3) setGov(k, 1, 'kinship among growing bands');
-    else if (k.gov === 1 && sedCap && pop >= 260 && (k.inequality >= 0.2 || k.atWar)) setGov(k, 2, k.atWar ? 'war called for a war leader' : 'surplus and rank made a chief');
-    else if (k.gov === 2 && pop >= 700 && cap && cap.members.length >= 170 && (Tech.knows(cap, 'writing') || Tech.knows(cap, 'monuments') || k.cities.length >= 5)) setGov(k, 3, Tech.knows(cap, 'writing') ? 'scribes and law bind the towns into a state' : 'the chief became a king');
+    const sedCap = cap && cap.sedentary, age = year() - (k.founded || 0), S = AG.clamp(People.budget / 6000, 0.5, 1.5); // thresholds scale with the world's people
+    if (k.gov === 0 && k.cities.length >= 3 && age > 30) setGov(k, 1, 'kinship among growing bands');
+    else if (k.gov === 1 && sedCap && age > 80 && pop >= 240 * S && (k.inequality >= 0.2 || k.atWar)) setGov(k, 2, k.atWar ? 'war called for a war leader' : 'surplus and rank made a chief');
+    else if (k.gov === 2 && age > 150 && pop >= 600 * S && cap && cap.members.length >= 150 * S && (Tech.knows(cap, 'writing') || Tech.knows(cap, 'monuments') || k.cities.length >= 4)) setGov(k, 3, Tech.knows(cap, 'writing') ? 'scribes and law bind the towns into a state' : 'the chief became a king');
     if (k.stability < -0.15 && k.cities.length >= 2 && (famine || k.atWar || (k.unrest || 0) > 0.2) && rnd() < dy * 0.2) collapse(k);
     else if (k.gov <= 1 && k.cities.length > 8 && rnd() < dy * 0.05) { // a sprawling tribe drifts apart
       let far = null, fd = 0; for (const cid of k.cities) { const c = Civ.cities[cid]; const d = cap ? dist2(c.x, c.y, cap.x, cap.y) : 0; if (cid !== k.capital && d > fd) { fd = d; far = c; } }

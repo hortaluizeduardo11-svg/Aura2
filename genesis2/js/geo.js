@@ -531,10 +531,14 @@
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, c = Geo.cellOf(x, y), p = P[Geo.plate[c]] || P[0];
       const ux = (x - p.ox * CS) & (T - 1), uy = (y - p.oy * CS) & (T - 1), tI = uy * T + ux;
-      const base = sampleCrust(x + 0.5, y + 0.5) - sl;
+      // continental shelves: flooded continental crust lies shallow (within the reach of an ice-age
+      // sea), then the slope drops to the abyss — so glacial seas expose broad plains and land bridges
+      let r = sampleCrust(x + 0.5, y + 0.5) - SEA;
+      if (r < 0.02 && r > -0.2) { const d = 0.02 - r; r = -(d < 0.1 ? d * 0.42 : 0.042 + (d - 0.1) * 1.58); } // (low coasts sink a little too)
+      const base = SEA + r - sl;
       const up = base - SEA;
       const rug = 0.012 + 0.06 * AG.smooth(0.0, 0.3, up) + Math.min(0.08, Geo.orog[c] * 0.02);
-      let e = base + tileA[tI] * (up > 0 ? 0.05 + rug * 0.4 : 0.035) + (up > 0.02 ? tileB[tI] * rug * 1.6 : 0);
+      let e = base + tileA[tI] * (up > 0 ? 0.05 + rug * 0.4 : r > -0.06 ? 0.012 : 0.035) + (up > 0.02 ? tileB[tI] * rug * 1.6 : 0);
       elev[i] = AG.clamp(e, 0.02, 0.985);
       plate[i] = Geo.plate[c]; rock[i] = Geo.rock[c];
       const t = sampleField(Geo.temp, x + 0.5, y + 0.5) - Math.max(0, elev[i] - base) * 0.7, m = sampleField(Geo.precip, x + 0.5, y + 0.5);
