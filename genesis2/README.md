@@ -1,0 +1,78 @@
+# AURA: Genesis
+
+A 2D pixel-art god sandbox that runs in the browser. Shape a layered world of land, water,
+lava and weather, and watch kingdoms of individually simulated people grow, trade, found
+religions, breed new generations and go to war.
+
+There's no build step. The only third-party code is three.js r128 (MIT), vendored in
+`vendor/` for the 3D close-up. Open `index.html` in a browser, or serve the
+folder. The world takes the shape of your screen when the page loads, so the map always fills
+it edge to edge. A 1920×1080 screen gets a 640×368 world (about 235,000 cells, 2.4× the
+original 384×256).
+
+```bash
+cd genesis
+python3 -m http.server 8000   # then visit http://localhost:8000
+```
+
+The full system design and performance plan is in [DESIGN.md](DESIGN.md).
+
+## What's in it
+
+- **3D close-up:** zoom up to 48×. Past 8× the camera glides and tilts, map-app style, into a
+  real 3D view (three.js / WebGL) of the area around you. You get voxel terrain, water, glowing
+  lava and cel-shaded, low-poly trees, bushes and flowers. Every building is a detailed,
+  stylized model:
+  - keeps with curtain walls, towers, a gatehouse and banners
+  - timber-framed houses with smoking chimneys and lit windows
+  - colonnaded temples
+  - windmills with turning sails
+  - farms with scarecrows and growing crops
+  - markets with striped awnings
+  - mines with ore carts
+
+  People wear crowns, helmets and hoods. Animals, ox carts, ships and wyrms move about under a
+  sun that casts shadows.
+- **3D weather:** clouds drift overhead and cast shadows, and they part around the spot you're
+  looking at. Rain, snow and acid rain fall around you, thicker the closer you zoom. Lightning
+  forks down from the storm, the sky goes grey and haze rolls in. Right-drag (or twist two
+  fingers) to turn and tilt; tap the compass to face north.
+- **16-bit HD look:** terraced hills, depth-banded water with shoreline foam and sun glints,
+  hand-drawn trees, rocks, flowers and cacti that change with the seasons, outlined sprites with
+  sun-cast shadows, golden-hour colour grading and glowing nights.
+- **Three layers:** Surface, Deep (caverns, ore, magma, aquifers, mines) and Sky (storms,
+  clouds, birds, wyrms, skyships). Press `Tab` to switch between them.
+- **Living physics:** water, lava and acid flow downhill and react with each other (lava plus
+  water makes basalt and steam). Fire spreads with the wind, cold fronts freeze lakes, and
+  smoke, steam and miasma drift. Roads form where people walk.
+- **Four civilised races:** Kin, Sylvans, Stoneborn and Ashen. They have jobs, farms, mines,
+  temples, markets, docks, walls and towers, settlers, and trade carts, ships and skyships.
+- **Culture trees and religions:** each realm climbs Agrarian, Martial, Mercantile and Mystic
+  branches. Pantheons form from what a people lived through, including what you did to them.
+- **Warfare:** armies muster, split into pincer wings, besiege with catapults, breach walls and
+  capture cities. Distant unhappy cities rebel.
+- **People:** nine-gene genomes with inheritance and mutation, traits, skills, life goals,
+  memories and family trees, all browsable in the inspector.
+- **God tools:** terraforming, elements, weather, blessings and curses, a disease designer,
+  gene mutation, harmony and discord between realms, meteors, earthquakes, volcanoes, steerable
+  tornadoes and wyrms, and possession of any creature.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| Drag / tap | Use the selected tool (Inspect drags to pan) |
+| Right-drag, two fingers | Pan; pinch to zoom |
+| Scroll, `+` / `-` | Zoom (smooth, up to 48×; past 8× the view tilts into 3D) |
+| Right-drag, two-finger twist | In 3D: turn and tilt the camera |
+| `[` `]`, `N` | In 3D: turn left or right, face north |
+| `WASD` / arrows | Pan, or walk while possessing |
+| `Space` | Pause, or strike while possessing |
+| `E` | Divine power while possessing |
+| `Esc` | Release a possessed creature |
+| `1`–`4` | Speed 1×, 2×, 4×, 8× |
+| `Tab` | Cycle Surface, Sky, Deep |
+| `B` | Cycle overlays (realms, faiths, climate) |
+
+The **World** tab shows live engine stats and has a stress-test button that adds 10,000
+creatures at a time.
