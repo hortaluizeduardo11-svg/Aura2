@@ -155,9 +155,9 @@ This is a prototype, and these are the honest gaps:
   - The person budget scales with the map, at about 5,000 people for a 1080p screen. Above 80%
     of it, fertility eases off as a performance cap, not a natural limit, so there are no
     million-person empires.
-  - At that size a simulated year costs about 20–25 ms, so Millennia reaches about 40–60 years
-    a second, not the nominal 400. One step is spread over several frames to keep the picture
-    smooth.
+  - At that size a simulated year costs about 16–20 ms, so Millennia reaches about 40 years a
+    second in a software-rendered browser (more with a GPU), not the nominal 400. One step, and
+    each history snapshot, is spread over several frames to keep the picture smooth.
   - Memory runs at 1–1.6 GB over very long games.
 - **States are rare.**
   - Chiefdoms appear after farming. States need a large, long-lived chiefdom with writing,

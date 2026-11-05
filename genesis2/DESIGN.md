@@ -670,15 +670,28 @@ These follow from the same rules rather than special cases:
   updated in bulk year steps, not per tick.
 - The coarse geology grid is 1/16 of the fine cells. A deep step is O(coarse cells), and the
   D8 sort runs every 4 steps.
-- Year steps cost O(persons + communities + species-regions), with Δ = 5 at top speed.
+- Year steps cost O(persons + communities + species-regions), with Δ = 8 at top speed.
 - Embodied people are capped by LOD; v1's spatial hash, staggered AI and flow fields are kept.
 - History snapshots for counterfactuals are taken every 500 years, in a ring of 5 plus the Dawn.
+  The living are copied, in slices over several frames while the simulation waits (the picture
+  keeps moving); each dead person is copied once and shared by later snapshots; per-tick caches
+  are dropped first.
+- Rendering skips what holds nothing: the darkness and glow layers in daylight, empty gas and
+  cloud layers, the creature-dot layer with no creatures, weather and god rays outside watch
+  time, water animation and lighting refreshes while time races. The vignette is CSS. Name
+  plates are cached as small images with their numbers stamped from pre-drawn digits.
+- Fluids keep full detail within two chunks of the screen (six in 3D); chunks farther away rest
+  and run together every 4th tick, with their springs, rain and snowmelt at the same pace. Flow
+  is computed per shared edge between chunks active on the same tick, so no water is created or
+  lost. Diplomacy pairs only living polities with cached language similarity and ruler traits.
 - Person records are capped by a budget that scales with the map (about 5,000 for a 1080p
   screen); above 80% of it fertility eases off. Dead records keep only family links and core
   memories, and are forgotten once no living person needs them for a family tree (the famous
   are remembered for longer).
-- Measured (Node, 544×304 map, ~5,800 people in ~70 communities): about 20–25 ms per
-  simulated year, so Millennia reaches roughly 40–50 years per second; memory stays at 1–1.6 GB
+- Measured (headless Chromium, software rendering, 1600×900, 544×304 map, ~5,500 people in
+  ~200 communities): deep time 36 fps; Millennia 24 fps at ~39 years a second (22 fps zoomed
+  out); watch at 16× ~3.2 ms per tick. A simulated year costs ~16–18 ms in Node. Memory stays at
+  1–1.6 GB
   over 14,000 years.
 
 ---
