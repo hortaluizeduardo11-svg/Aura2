@@ -50,15 +50,18 @@
   AG.TK = {
     NONE: 0, WANDER: 1, GATHER: 2, WOOD: 3, FARM: 4, QUARRY: 5, MINE: 6, DIG: 7, ASCEND: 8,
     DEPOSIT: 9, BUILD: 10, PATROL: 11, WORSHIP: 12, SETTLE: 13, TRADE: 14, FLEE: 15, MARCH: 16,
-    HUNT: 17, GRAZE: 18, SIEGE: 19, RAID: 20, ATTACKB: 21,
+    HUNT: 17, GRAZE: 18, SIEGE: 19, RAID: 20, ATTACKB: 21, FISH: 22, HERD: 23, CRAFT: 24, EAT: 25,
+    REST: 26, SOCIAL: 27, MIGRATE: 28, TEND: 29, MOURN: 30, EXPLORE: 31, COURT: 32, PLAY: 33,
   };
   AG.TASKS = ['Idle', 'Wandering', 'Gathering', 'Felling trees', 'Farming', 'Quarrying', 'Heading to the mine',
-    'Digging', 'Climbing out', 'Hauling goods', 'Building', 'Patrolling', 'Worshipping', 'Settling new land',
-    'Trading', 'Fleeing', 'Marching to war', 'Hunting', 'Grazing', 'Bombarding', 'Raiding', 'Breaching walls'];
-  AG.FL = { BLESSED: 1, CURSED: 2, POSSESSED: 4, KING: 8, HERO: 16, SETTLER: 32, FLANKL: 64, FLANKR: 128, FLEE: 256, MAD: 512 };
-  AG.J = { CHILD: 0, GATHER: 1, FARM: 2, WOOD: 3, MINE: 4, BUILD: 5, SOLDIER: 6, PRIEST: 7, ELDER: 8 };
-  AG.JOBS = ['Child', 'Gatherer', 'Farmer', 'Woodcutter', 'Miner', 'Builder', 'Soldier', 'Priest', 'Elder'];
-  AG.CARRY = ['', 'food', 'wood', 'stone', 'ore', 'gold', 'crystal'];
+    'Digging', 'Climbing out', 'Bringing food home', 'Building', 'Keeping watch', 'Worshipping', 'Settling new land',
+    'Trading', 'Fleeing', 'Marching to war', 'Hunting', 'Grazing', 'Bombarding', 'Raiding', 'Breaching walls',
+    'Fishing', 'Tending the herd', 'Crafting', 'Eating', 'Resting', 'Talking with friends', 'Moving camp', 'Caring for a child',
+    'Mourning', 'Exploring', 'Courting', 'Playing'];
+  AG.FL = { BLESSED: 1, CURSED: 2, POSSESSED: 4, KING: 8, HERO: 16, SETTLER: 32, FLANKL: 64, FLANKR: 128, FLEE: 256, MAD: 512, FOLLOW: 1024, DOMESTIC: 2048 };
+  AG.J = { CHILD: 0, GATHER: 1, FARM: 2, WOOD: 3, MINE: 4, BUILD: 5, SOLDIER: 6, PRIEST: 7, ELDER: 8, HUNT: 9, FISH: 10, HERD: 11, CRAFT: 12, TRADE: 13 };
+  AG.JOBS = ['Child', 'Forager', 'Farmer', 'Woodcutter', 'Miner', 'Builder', 'Warrior', 'Shaman', 'Elder', 'Hunter', 'Fisher', 'Herder', 'Crafter', 'Trader'];
+  AG.CARRY = ['', 'food', 'wood', 'stone', 'ore', 'gold', 'goods'];
 
   // ------------------------------------------------------------ RNG
   // Fast xorshift for the simulation; mulberry32 for reproducible world gen.
@@ -115,121 +118,90 @@
     return [Math.round(f(h + 1 / 3) * 255), Math.round(f(h) * 255), Math.round(f(h - 1 / 3) * 255)];
   };
 
-  // ------------------------------------------------------------ species
-  AG.SP = { KIN: 0, SYLVAN: 1, STONE: 2, ASHEN: 3, DEER: 4, WOLF: 5, CRAWLER: 6, HOLLOW: 7, WYRM: 8, HERALD: 9, CART: 10, SHIP: 11, CATAPULT: 12, BIRD: 13, AIRSHIP: 14 };
-  AG.CIV_MASK = 0b1111; // species 0-3 build civilisations
+  // ------------------------------------------------------------ bodies
+  // Kinds of body the world can hold. Animals are evolved species (life.js): the body kind only
+  // picks behaviour and drawing; size, colour and abilities come from each creature's genome.
+  // Indices match v1 so the renderers' sprite slots stay valid.
+  AG.SP = { PERSON: 0, KIN: 0, GRAZER: 4, DEER: 4, PREDATOR: 5, WOLF: 5, CART: 10, SHIP: 11, CATAPULT: 12, BIRD: 13, APE: 15 };
+  AG.CIV_MASK = 0b1;
+  const none = { key: 'none', name: '-', kind: 'none', hp: 1, dmg: 0, spd: 0, life: [1, 1], adult: 0 };
   AG.SPECIES = [
-    { key: 'kin', name: 'Kin', kind: 'civ', hp: 30, dmg: 5, spd: 0.075, life: [52, 74], adult: 14,
-      skin: [226, 178, 136], hair: [96, 62, 40], genes: [130, 130, 135, 140, 125, 128, 128, 125, 120],
-      bias: { agrarian: 1.25, martial: 1, mercantile: 1.35, mystic: 0.9 }, home: 'temperate', fireRes: 0, coldRes: 0.1,
-      syl: ['al', 'bran', 'cor', 'dun', 'el', 'fen', 'gar', 'hal', 'is', 'jor', 'ka', 'lin', 'mar', 'nor', 'os', 'per', 'ric', 'sel', 'tor', 'ul', 'ven', 'wyn', 'ad', 'bel'],
-      end: ['an', 'en', 'ric', 'a', 'is', 'or', 'wyn', 'ard', 'ia', 'el', 'o'],
-      place: ['ford', 'ton', 'bury', 'wick', 'hold', 'mere', 'vale', 'gate', 'stead'] },
-    { key: 'sylvan', name: 'Sylvan', kind: 'civ', hp: 24, dmg: 4, spd: 0.085, life: [70, 110], adult: 18,
-      skin: [204, 222, 178], hair: [70, 140, 80], genes: [110, 160, 165, 110, 170, 115, 128, 140, 155],
-      bias: { agrarian: 1.3, martial: 0.7, mercantile: 0.9, mystic: 1.6 }, home: 'forest', fireRes: -0.2, coldRes: 0.2,
-      syl: ['ae', 'lith', 'syl', 'wen', 'thal', 'ili', 'ora', 'fae', 'lun', 'myr', 'eth', 'iel', 'vae', 'rin', 'sha', 'qui', 'nae', 'lor'],
-      end: ['iel', 'wen', 'ith', 'ara', 'ae', 'is', 'on', 'eth'],
-      place: ['glade', 'wood', 'bough', 'leaf', 'shade', 'grove', 'thorn'] },
-    { key: 'stone', name: 'Stoneborn', kind: 'civ', hp: 40, dmg: 6, spd: 0.062, life: [90, 140], adult: 20,
-      skin: [186, 146, 122], hair: [160, 84, 40], genes: [175, 95, 125, 105, 160, 90, 128, 170, 110],
-      bias: { agrarian: 0.8, martial: 1.4, mercantile: 1.1, mystic: 0.8 }, home: 'mountain', fireRes: 0.2, coldRes: 0.5, mineBonus: 1.8,
-      syl: ['dur', 'gor', 'krag', 'mok', 'thrum', 'bal', 'dor', 'grim', 'hak', 'kor', 'rok', 'zun', 'bor', 'dag', 'brun'],
-      end: ['in', 'ak', 'um', 'or', 'rik', 'da', 'ur'],
-      place: ['delve', 'forge', 'deep', 'hall', 'peak', 'anvil', 'hearth'] },
-    { key: 'ashen', name: 'Ashen', kind: 'civ', hp: 30, dmg: 6, spd: 0.078, life: [45, 66], adult: 12,
-      skin: [104, 80, 92], hair: [240, 120, 40], genes: [150, 140, 120, 160, 100, 128, 128, 130, 140],
-      bias: { agrarian: 0.8, martial: 1.4, mercantile: 1, mystic: 1.25 }, home: 'hot', fireRes: 0.85, coldRes: -0.3,
-      syl: ['ash', 'ka', 'zar', 'vex', 'ith', 'sul', 'rax', 'khe', 'mor', 'nyx', 'tez', 'ur', 'vak', 'zol'],
-      end: ['ar', 'ex', 'is', 'ul', 'a', 'oth', 'ix'],
-      place: ['spire', 'cinder', 'scorch', 'pyre', 'dune', 'ember'] },
-    { key: 'deer', name: 'Deer', kind: 'animal', diet: 'graze', hp: 14, dmg: 1, spd: 0.09, life: [8, 14], adult: 1, fur: [176, 122, 72], cap: 4000 },
-    { key: 'wolf', name: 'Wolf', kind: 'animal', diet: 'hunt', hp: 24, dmg: 5, spd: 0.104, life: [8, 13], adult: 1, fur: [128, 128, 138], cap: 900 },
-    { key: 'crawler', name: 'Crawler', kind: 'monster', layer: 0, hp: 28, dmg: 6, spd: 0.07, life: [20, 35], adult: 2, fur: [92, 60, 120], cap: 600 },
-    { key: 'hollow', name: 'Hollow', kind: 'monster', hp: 26, dmg: 5, spd: 0.065, life: [10, 16], adult: 0, fur: [150, 186, 150] },
-    { key: 'wyrm', name: 'Wyrm', kind: 'monster', flying: 1, hp: 800, dmg: 24, spd: 0.2, life: [400, 600], adult: 0, fur: [190, 44, 44], fireRes: 1 },
-    { key: 'herald', name: 'Herald', kind: 'avatar', hp: 500, dmg: 35, spd: 0.14, life: [1e9, 1e9], adult: 0, fur: [255, 230, 140], fireRes: 0.9 },
-    { key: 'cart', name: 'Trade cart', kind: 'vehicle', hp: 30, dmg: 0, spd: 0.07, life: [1e9, 1e9], adult: 0 },
-    { key: 'ship', name: 'Trade ship', kind: 'vehicle', naval: 1, hp: 60, dmg: 0, spd: 0.11, life: [1e9, 1e9], adult: 0 },
-    { key: 'catapult', name: 'Catapult', kind: 'vehicle', hp: 90, dmg: 40, spd: 0.04, life: [1e9, 1e9], adult: 0 },
-    { key: 'bird', name: 'Bird', kind: 'ambient', flying: 1, hp: 2, dmg: 0, spd: 0.22, life: [5, 9], adult: 0, fur: [40, 40, 48], cap: 700 },
-    { key: 'airship', name: 'Skyship', kind: 'vehicle', flying: 1, hp: 60, dmg: 0, spd: 0.13, life: [1e9, 1e9], adult: 0 },
+    { key: 'person', name: 'Person', kind: 'civ', hp: 30, dmg: 4, spd: 0.075, life: [55, 80], adult: 15, skin: [196, 150, 110], hair: [60, 40, 28] },
+    none, none, none,
+    { key: 'grazer', name: 'Grazer', kind: 'animal', diet: 'graze', hp: 16, dmg: 2, spd: 0.09, life: [8, 16], adult: 1.5, fur: [176, 122, 72] },
+    { key: 'predator', name: 'Predator', kind: 'animal', diet: 'hunt', hp: 24, dmg: 5, spd: 0.1, life: [8, 14], adult: 1.5, fur: [128, 128, 138] },
+    none, none, none, none,
+    { key: 'cart', name: 'Ox cart', kind: 'vehicle', hp: 30, dmg: 0, spd: 0.07, life: [1e9, 1e9], adult: 0 },
+    { key: 'ship', name: 'Boat', kind: 'vehicle', naval: 1, hp: 60, dmg: 0, spd: 0.11, life: [1e9, 1e9], adult: 0 },
+    { key: 'catapult', name: 'Siege engine', kind: 'vehicle', hp: 90, dmg: 40, spd: 0.04, life: [1e9, 1e9], adult: 0 },
+    { key: 'bird', name: 'Bird', kind: 'ambient', flying: 1, hp: 2, dmg: 0, spd: 0.22, life: [4, 9], adult: 0.5, fur: [40, 40, 48] },
+    none,
+    { key: 'ape', name: 'Ape', kind: 'animal', diet: 'forage', hp: 26, dmg: 4, spd: 0.07, life: [25, 40], adult: 8, fur: [116, 82, 58] },
   ];
 
-  // ------------------------------------------------------------ genetics
-  AG.GENES = ['Strength', 'Agility', 'Intellect', 'Fertility', 'Longevity', 'Stature', 'Hue', 'Resilience', 'Devotion'];
-  AG.NG = AG.GENES.length;
-  AG.G = { STR: 0, AGI: 1, INT: 2, FERT: 3, LONG: 4, STAT: 5, HUE: 6, RES: 7, DEV: 8 };
-  // heritable: chance a child copies the trait from a parent that has it.
-  // gene: [geneIndex, threshold] -> expressed automatically above threshold (below if `low`).
+  // ------------------------------------------------------------ minds
   AG.TRAITS = [
-    { key: 'brave', name: 'Brave', heritable: 0.3, opp: 'coward', desc: 'Stands and fights; +10% damage' },
-    { key: 'coward', name: 'Coward', heritable: 0.3, opp: 'brave', desc: 'Flees from danger' },
-    { key: 'kind', name: 'Kind', heritable: 0.3, opp: 'cruel', desc: 'Rulers seek peace' },
-    { key: 'cruel', name: 'Cruel', heritable: 0.3, opp: 'kind', desc: 'Rulers seek war' },
-    { key: 'greedy', name: 'Greedy', heritable: 0.25, desc: 'Hoards wealth' },
-    { key: 'pious', name: 'Pious', heritable: 0.35, desc: 'Drawn to the temples' },
-    { key: 'curious', name: 'Curious', heritable: 0.25, desc: 'Wanders far' },
-    { key: 'ambitious', name: 'Ambitious', heritable: 0.25, desc: 'May seize a throne' },
-    { key: 'genius', name: 'Genius', gene: [2, 205], desc: 'Learns skills twice as fast' },
-    { key: 'giant', name: 'Giant', gene: [5, 215], desc: 'Huge and strong, a little slow' },
-    { key: 'swift', name: 'Swift', gene: [1, 212], desc: '+20% speed' },
-    { key: 'sickly', name: 'Sickly', gene: [7, 45], low: true, desc: 'Falls ill easily' },
-    { key: 'fertile', name: 'Fertile', gene: [3, 215], desc: 'Many children' },
-    { key: 'longlived', name: 'Long-lived', gene: [4, 222], desc: 'Lives a quarter longer' },
-    { key: 'blessed', name: 'Blessed', heritable: 0.2, desc: 'Touched by the divine' },
-    { key: 'cursed', name: 'Cursed', heritable: 0.15, desc: 'Marked by divine wrath' },
-    { key: 'veteran', name: 'Veteran', desc: 'Survived many battles' },
-    { key: 'hero', name: 'Hero', desc: 'A legend of the realm' },
-    { key: 'fireborn', name: 'Fire-touched', heritable: 0.1, desc: 'Survived the flames' },
+    { key: 'brave', name: 'Brave', opp: 'coward', desc: 'Stands and fights' },
+    { key: 'coward', name: 'Timid', opp: 'brave', desc: 'Avoids danger' },
+    { key: 'kind', name: 'Kind', opp: 'cruel', desc: 'Helps others; rulers seek peace' },
+    { key: 'cruel', name: 'Cruel', opp: 'kind', desc: 'Harms others; rulers seek war' },
+    { key: 'greedy', name: 'Greedy', desc: 'Hoards and envies' },
+    { key: 'pious', name: 'Pious', desc: 'Drawn to the sacred' },
+    { key: 'curious', name: 'Curious', desc: 'Explores and invents' },
+    { key: 'ambitious', name: 'Ambitious', desc: 'Seeks rank and power' },
+    { key: 'genius', name: 'Brilliant', desc: 'Learns and invents twice as fast' },
+    { key: 'giant', name: 'Towering', desc: 'Huge and strong' },
+    { key: 'swift', name: 'Swift', desc: 'Fast on foot' },
+    { key: 'sickly', name: 'Sickly', desc: 'Falls ill easily' },
+    { key: 'fertile', name: 'Fertile', desc: 'Many children' },
+    { key: 'longlived', name: 'Long-lived', desc: 'Ages slowly' },
+    { key: 'blessed', name: 'Blessed', desc: 'Touched by the divine' },
+    { key: 'cursed', name: 'Cursed', desc: 'Marked by divine wrath' },
+    { key: 'veteran', name: 'Veteran', desc: 'Survived many fights' },
+    { key: 'hero', name: 'Hero', desc: 'A legend of the people' },
+    { key: 'fireborn', name: 'Fire-touched', desc: 'Survived the flames' },
+    { key: 'albino', name: 'Albino', desc: 'Pale from a recessive allele' },
+    { key: 'storyteller', name: 'Storyteller', desc: 'Keeps the old stories' },
+    { key: 'loner', name: 'Loner', desc: 'Prefers solitude' },
   ];
   AG.TR = {}; AG.TRAITS.forEach((t, i) => { AG.TR[t.key] = 1 << i; t.bit = 1 << i; });
-  AG.SKILLS = ['Combat', 'Farming', 'Crafting', 'Mining', 'Faith', 'Trade'];
-  AG.SK = { COMBAT: 0, FARMING: 1, CRAFTING: 2, MINING: 3, FAITH: 4, TRADE: 5 };
+  AG.SKILLS = ['Hunting', 'Gathering', 'Crafting', 'Farming', 'Herding', 'Building', 'Lore', 'Fighting'];
+  AG.SK = { HUNT: 0, GATHER: 1, CRAFT: 2, FARM: 3, HERD: 4, BUILD: 5, LORE: 6, FIGHT: 7, COMBAT: 7, FARMING: 3, CRAFTING: 2, MINING: 2, FAITH: 6, TRADE: 2 };
   AG.NS = AG.SKILLS.length;
-  AG.GOALS = ['Raise a family', 'Amass wealth', 'Win glory in battle', 'See the world', 'Serve the gods', 'Rule a realm', 'Master a craft'];
+  AG.GOALS = ['Raise a family', 'Become wealthy', 'Win glory', 'See the world', 'Serve the spirits', 'Lead the people', 'Master a craft', 'Discover something new'];
+  // likes and dislikes are tastes over these, from -100 (hates) to 100 (loves)
+  AG.TASTES = ['meat', 'fish', 'fruit', 'bread and porridge', 'honey', 'hunting', 'gathering', 'crafting', 'farming', 'herding',
+    'building', 'fighting', 'worship', 'stories', 'music', 'exploring', 'trading', 'the forest', 'the water', 'the hills',
+    'crowds', 'rain', 'snow', 'new things'];
+  AG.NT = AG.TASTES.length;
+  AG.JOB_TASTE = [-1, 6, 8, -1, 7, 10, 11, 12, -1, 5, 18, 9, 7, 16];
 
   // ------------------------------------------------------------ buildings
-  AG.BT = { KEEP: 0, HOUSE: 1, FARM: 2, WINDMILL: 3, TEMPLE: 4, MARKET: 5, MINE: 6, TOWER: 7, WALL: 8, DOCK: 9, WORKSHOP: 10 };
+  // Types 0-10 keep v1's art slots (the keep is a citadel, slot 3 is now a granary); 11+ are the
+  // homes and monuments of bands and early villages.
+  AG.BT = { KEEP: 0, HOUSE: 1, FARM: 2, GRANARY: 3, WINDMILL: 3, TEMPLE: 4, MARKET: 5, MINE: 6, TOWER: 7, WALL: 8, DOCK: 9, WORKSHOP: 10,
+    TENT: 11, HEARTH: 12, HUT: 13, PEN: 14, MEGALITH: 15, SHRINE: 16, HALL: 17 };
   AG.BUILD = [
-    { key: 'keep', name: 'Keep', w: 4, h: 4, hp: 500, wood: 20, stone: 20 },
-    { key: 'house', name: 'House', w: 2, h: 2, hp: 90, wood: 8, stone: 0 },
-    { key: 'farm', name: 'Farm', w: 3, h: 3, hp: 40, wood: 4, stone: 0 },
-    { key: 'windmill', name: 'Windmill', w: 2, h: 2, hp: 100, wood: 14, stone: 4, req: ['agrarian', 2] },
-    { key: 'temple', name: 'Temple', w: 3, h: 3, hp: 220, wood: 8, stone: 16, req: ['mystic', 1] },
-    { key: 'market', name: 'Market', w: 3, h: 3, hp: 120, wood: 16, stone: 0, req: ['mercantile', 1] },
-    { key: 'mine', name: 'Mine', w: 2, h: 2, hp: 120, wood: 10, stone: 0 },
-    { key: 'tower', name: 'Tower', w: 2, h: 2, hp: 300, wood: 4, stone: 20, req: ['martial', 2] },
-    { key: 'wall', name: 'Wall', w: 1, h: 1, hp: 240, wood: 0, stone: 2, req: ['martial', 2] },
-    { key: 'dock', name: 'Dock', w: 2, h: 2, hp: 100, wood: 16, stone: 0, req: ['mercantile', 2] },
-    { key: 'workshop', name: 'Siege Workshop', w: 3, h: 3, hp: 160, wood: 20, stone: 8, req: ['martial', 3] },
+    { key: 'keep', name: 'Citadel', w: 4, h: 4, hp: 500, wood: 20, stone: 30, tech: 'masonry' },
+    { key: 'house', name: 'House', w: 2, h: 2, hp: 90, wood: 6, stone: 2, tech: 'mudbrick' },
+    { key: 'farm', name: 'Field', w: 3, h: 3, hp: 40, wood: 0, stone: 0, tech: 'cultivation' },
+    { key: 'granary', name: 'Granary', w: 2, h: 2, hp: 100, wood: 8, stone: 2, tech: 'granaries' },
+    { key: 'temple', name: 'Temple', w: 3, h: 3, hp: 220, wood: 8, stone: 18, tech: 'monuments' },
+    { key: 'market', name: 'Market', w: 3, h: 3, hp: 120, wood: 14, stone: 0, tech: 'currency' },
+    { key: 'mine', name: 'Mine', w: 2, h: 2, hp: 120, wood: 10, stone: 0, tech: 'copper' },
+    { key: 'tower', name: 'Tower', w: 2, h: 2, hp: 300, wood: 4, stone: 20, tech: 'fortification' },
+    { key: 'wall', name: 'Wall', w: 1, h: 1, hp: 240, wood: 1, stone: 2, tech: 'fortification' },
+    { key: 'dock', name: 'Harbour', w: 2, h: 2, hp: 100, wood: 14, stone: 0, tech: 'sailing' },
+    { key: 'workshop', name: 'Workshop', w: 3, h: 3, hp: 160, wood: 14, stone: 6, tech: 'kilns' },
+    { key: 'tent', name: 'Hide tent', w: 1, h: 1, hp: 20, wood: 1, stone: 0, tech: 'shelters' },
+    { key: 'hearth', name: 'Hearth', w: 1, h: 1, hp: 40, wood: 0, stone: 0, tech: 'fire' },
+    { key: 'hut', name: 'Round hut', w: 2, h: 2, hp: 60, wood: 5, stone: 0, tech: 'shelters' },
+    { key: 'pen', name: 'Animal pen', w: 3, h: 3, hp: 50, wood: 6, stone: 0, tech: 'herding' },
+    { key: 'megalith', name: 'Stone circle', w: 3, h: 3, hp: 400, wood: 0, stone: 24, tech: 'megaliths' },
+    { key: 'shrine', name: 'Shrine', w: 1, h: 1, hp: 60, wood: 2, stone: 2, tech: 'burial' },
+    { key: 'hall', name: 'Great hall', w: 3, h: 2, hp: 260, wood: 22, stone: 4, tech: 'shelters' },
   ];
-
-  // ------------------------------------------------------------ culture tree
-  AG.BRANCHES = ['agrarian', 'martial', 'mercantile', 'mystic'];
-  AG.CULTURE = {
-    agrarian: { name: 'Agrarian', color: '#9ccc65', nodes: [
-      { name: 'Crop Rotation', desc: 'Farms yield +40%' },
-      { name: 'Windmills', desc: 'Windmills boost nearby farms' },
-      { name: 'Irrigation', desc: 'Farms near water yield +60%' },
-      { name: 'Granaries', desc: 'More births, famine resistance' } ] },
-    martial: { name: 'Martial', color: '#ef5350', nodes: [
-      { name: 'Drilled Ranks', desc: 'Armies split and flank' },
-      { name: 'Fortification', desc: 'Stone walls and arrow towers' },
-      { name: 'Siegecraft', desc: 'Workshops roll out catapults' },
-      { name: 'Tempered Steel', desc: '+30% damage, +20% armour' } ] },
-    mercantile: { name: 'Mercantile', color: '#ffca28', nodes: [
-      { name: 'Markets', desc: 'Trade carts link cities' },
-      { name: 'Seafaring', desc: 'Docks and trade ships' },
-      { name: 'Coinage', desc: 'Trade yields double gold' },
-      { name: 'Skyships', desc: 'Trade flies over everything' } ] },
-    mystic: { name: 'Mystic', color: '#ba68c8', nodes: [
-      { name: 'Shrines', desc: 'Temples; a faith is born' },
-      { name: 'Pantheon', desc: 'The faith spreads to neighbours' },
-      { name: 'Miracles', desc: 'Priests cure the sick' },
-      { name: 'Ascension', desc: 'Saints arise; blessings doubled' } ] },
-  };
-  AG.CULTURE_COST = [60, 160, 320, 560];
+  AG.HOMES = [AG.BT.TENT, AG.BT.HUT, AG.BT.HOUSE];
 
   // ------------------------------------------------------------ religion vocabulary
   AG.DOMAINS = ['fire', 'water', 'storm', 'earth', 'plague', 'harvest', 'war', 'watcher', 'death', 'sun'];
