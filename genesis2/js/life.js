@@ -138,8 +138,8 @@
   Life.refreshColor = refreshColor;
   Life.alive = () => Life.species.filter((s) => s.died === null);
   Life.byArch = (a) => Life.species.filter((s) => s.died === null && s.arch === a);
-  Life.when = () => (AG.Geo.phase === 'deep' ? { mya: AG.Geo.mya } : { year: Math.floor(AG.Geo.year) });
-  Life.whenLabel = (w) => (!w ? '' : w.mya !== undefined ? (w.mya > 0 ? `${w.mya.toFixed(0)} Mya` : 'the Dawn') : `Year ${(w.year + 1).toLocaleString('en-US')}`);
+  Life.when = () => (AG.Geo.phase === 'deep' ? { myr: AG.Geo.myr } : { year: Math.floor(AG.Geo.year) });
+  Life.whenLabel = (w) => (!w ? '' : w.myr !== undefined ? `Year ${Math.round(w.myr * 1e6).toLocaleString('en-US')}` : w.year !== undefined ? AG.calText(w.year) : '');
 
   // ------------------------------------------------------------ regional environment
   // Land share, climate and forest per 16x16 region, and which landmass each region belongs to.
@@ -225,10 +225,24 @@
         out[L.SIZE] = 110 + open * 40 + (0.5 - t) * 40; out[L.SPEED] = 110; out[L.SOCIAL] = 130 + open * 90; out[L.BOLD] = 130;
         out[L.SENSE] = 140; out[L.STR] = 120 - open * 20; out[L.METAB] = 130; out[L.COGN] = 120 + open * 90 + Math.abs(t - 0.45) * 60;
         out[L.FERT] = 90; out[L.LIFE] = 160;
+        out[L.COGN] += Life.brainDrive(); // the long pressure toward bigger brains in social, tool-using primates
     }
     out[L.MATE] = -1; out[L.NEUTRAL] = -1; // neutral: drift only
     return out;
   }
+  // Over deep time, social primates face a slowly rising payoff for intelligence (bigger groups,
+  // tools, a changeable climate); it stops rising once people exist.
+  Life.brainDrive = () => Math.min(70, AG.Geo.myr * 0.18);
+  // Have the primates become minds enough? When the cleverest lineage crosses the threshold, the
+  // Dawn comes within some millions of years (by chance); a world that never gets there is given
+  // its people late in the day.
+  Life.sapienceReady = function (dt) {
+    const G = AG.Geo;
+    if (G.myr >= 340) return true;
+    if (G.myr < 120) return false;
+    let m = 0; for (const s of Life.byArch(ARCH.PRIMATE)) m = Math.max(m, s.mean[L.COGN]);
+    return m >= 205 && rr() < dt / 12;
+  };
   Life.optimum = (arch, r) => Array.from(optimum(arch, r, new Float32Array(NL)));
   // how well a mean phenotype fits a region (0..1): temperature dominates, then body plan
   function fit(arch, mu, r) {
@@ -272,7 +286,7 @@
     for (let k = 0; k < Life.env.massSize.length; k++) if (Life.env.massSize[k] > best) { best = Life.env.massSize[k]; mass = k; }
     for (const [arch, over] of founders) {
       const m = base(arch); for (const k in over) m[L[k]] = over[k];
-      const sp = Life.newSpecies(arch, m, null, { mya: AG.Geo.mya });
+      const sp = Life.newSpecies(arch, m, null, Life.when());
       for (let r = 0; r < RN; r++) {
         if (Life.env.mass[r] !== mass || Life.env.land[r] < 0.3) continue;
         if (rr() < 0.5) {
@@ -324,7 +338,7 @@
     }
     speciationCheck(dt, true);
     extinctionCheck();
-    if (G.phase === 'deep' && G.mya < 245 && rr() < dt / 95) massExtinction();
+    if (G.phase === 'deep' && G.myr > 5 && rr() < dt / 95) massExtinction();
     Life.stats.ms = Life.stats.ms * 0.9 + (AG.now() - t0) * 0.1;
   };
 
@@ -411,7 +425,7 @@
   function massExtinction() {
     Life.massExtinctions++;
     AG.Geo.climate.aerosol += 0.12;
-    AG.Geo.events.push({ kind: 'lip', mya: AG.Geo.mya });
+    AG.Geo.events.push({ kind: 'lip', myr: AG.Geo.myr });
     for (const s of Life.alive()) {
       s.lastLoss = 'the Great Dying (volcanic winter)';
       for (const [r] of s.regions) if (rr() < (s.regions.size < 8 ? 0.85 : 0.55)) s.regions.delete(r);
@@ -426,11 +440,11 @@
     for (const s of Life.byArch(ARCH.PRIMATE)) { const c = s.mean[L.COGN] + s.regions.size * 0.2; if (!best || c > best.c) best = { s, c }; }
     if (!best) { // every primate died out in deep time: a survivor lineage emerges from the forest
       const m = new Float32Array(NL).fill(128); m[L.COGN] = 170; m[L.SOCIAL] = 170;
-      const s = Life.newSpecies(ARCH.PRIMATE, m, null, { mya: 0 });
+      const s = Life.newSpecies(ARCH.PRIMATE, m, null, Life.when());
       for (let r = 0; r < RN; r++) if (Life.env.land[r] > 0.5 && Life.env.temp[r] > 0.45) { const R = newRegion(m, 2); seedReservoir(R, 12); s.regions.set(r, R); if (s.regions.size > 6) break; }
       best = { s };
     }
-    const p = Life.newSpecies(ARCH.PRIMATE, best.s.mean, best.s, { mya: 0 });
+    const p = Life.newSpecies(ARCH.PRIMATE, best.s.mean, best.s, Life.when());
     p.sapient = true; p.genus = best.s.genus.replace(/(opithecus|osimia|ocebus)$/, 'anthropus'); p.epithet = 'sapiens'; p.name = `${p.genus} sapiens`;
     p.mean[L.COGN] = Math.max(p.mean[L.COGN], 175); p.mean[L.SOCIAL] = Math.max(p.mean[L.SOCIAL], 160);
     // the cradle: the warmest well-fitted region of the ancestor's range

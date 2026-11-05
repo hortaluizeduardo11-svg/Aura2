@@ -399,7 +399,7 @@
   function mythFor(k, dom) {
     const kinds = { fire: ['eruption'], earth: ['quake'], water: ['flood', 'tsunami'], harvest: ['famine'], storm: ['lightning'], war: ['war', 'conquest'], plague: ['plague'] }[dom] || [];
     const ev = AG.History.events.slice().reverse().find((e) => kinds.includes(e.kind) && (e.polity === k.id || k.cities.some((cid) => Civ.cities[cid] && dist2(Civ.cities[cid].x, Civ.cities[cid].y, e.x, e.y) < 80 * 80)));
-    return ev ? `whose wrath was seen in ${ev.text.charAt(0).toLowerCase() + ev.text.slice(1)} (year ${Math.floor(ev.year + 1)})` : '';
+    return ev ? `whose wrath was seen in ${ev.text.charAt(0).toLowerCase() + ev.text.slice(1)} (${AG.calText(ev.year).replace('Year', 'year')})` : '';
   }
   function setReligion(k, rid) { k.religion = rid; for (const cid of k.cities) { Civ.cities[cid].religion = rid; for (const P of Civ.persons(Civ.cities[cid])) P.belief.faith = rid; } }
   function convert(c, rid, how) {

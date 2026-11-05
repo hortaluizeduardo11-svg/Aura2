@@ -13,7 +13,7 @@
   const AG = window.AG;
   const History = (AG.History = { events: [], log: [], snaps: [], branches: [], eraMaps: [], nextId: 1, replaying: false, lastSnapYear: -1e9 });
   const SNAP_EVERY = 500, SNAP_KEEP = 5;
-  const year = () => (AG.Geo.phase === 'deep' ? -AG.Geo.mya * 1e6 : AG.Geo.year);
+  const year = () => (AG.Geo.phase === 'deep' ? AG.Geo.myr * 1e6 - 1e10 : AG.Geo.year); // deep-time events sort before the Dawn
   const CHRON = { invention: 'culture', era: 'culture', loss: 'fall', famine: 'plague', plague: 'plague', war: 'war', raid: 'war', battle: 'war', conquest: 'war', march: 'war', peace: 'peace', alliance: 'peace', faith: 'faith', trade: 'trade', government: 'crown', ruler: 'crown', death: 'death', hero: 'hero', fall: 'fall', collapse: 'fall', rebellion: 'war', settle: 'found', dawn: 'found', migration: 'found', flood: 'disaster', quake: 'disaster', eruption: 'disaster', tsunami: 'disaster', language: 'culture', speciation: 'info', extinction: 'fall', domestication: 'culture', institution: 'crown', reform: 'crown', law: 'crown', abandoned: 'fall', god: 'info', omen: 'faith' };
 
   History.reset = function () { History.events.length = 0; History.log.length = 0; History.snaps.length = 0; History.eraMaps.length = 0; History.nextId = 1; History.lastSnapYear = -1e9; };
@@ -23,7 +23,7 @@
   History.event = function (kind, text, o) {
     o = o || {};
     text = text.replace(/\b([Tt]he) the\b/g, '$1'); // polity names that already begin with 'the'
-    const e = { id: History.nextId++, year: year(), tick: AG.tick, kind, text, x: o.x === undefined ? -1 : o.x, y: o.y === undefined ? -1 : o.y, cause: o.cause || '', polity: o.polity === undefined ? -1 : o.polity, comm: o.comm === undefined ? -1 : o.comm, person: o.person || 0, tech: o.tech || '', first: !!o.first, era: o.era, lang: o.lang };
+    const e = { id: History.nextId++, year: year(), cal: AG.calYear ? AG.calYear(null) : 0, tick: AG.tick, kind, text, x: o.x === undefined ? -1 : o.x, y: o.y === undefined ? -1 : o.y, cause: o.cause || '', polity: o.polity === undefined ? -1 : o.polity, comm: o.comm === undefined ? -1 : o.comm, person: o.person || 0, tech: o.tech || '', first: !!o.first, era: o.era, lang: o.lang };
     History.events.push(e);
     if (History.events.length > 4000) { // forget the oldest minor events first; the turning points stay
       let drop = 500;
@@ -72,7 +72,7 @@
     const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U;
     const world = {}; for (const k of WORLD_FIELDS()) world[k] = Wd[k].slice();
     const geo = {}; for (const k of ['plate', 'crust', 'age', 'rock', 'strain', 'magma', 'orog', 'bound', 'precip', 'temp', 'ice', 'acc', 'organic', 'evap', 'wetFloor', 'lith']) geo[k] = Geo[k].slice();
-    const gs = {}; for (const k of ['phase', 'mya', 'year', 'quakes', 'eruptions', 'splits', 'sutures', 'iceVol', 'seaLevel', 'applied', 'dawnSea', 'dawnAnomaly', 'shift', 'seed', 'stepN', 'scripted', 'lostCont', 'seaShifts']) gs[k] = Geo[k];
+    const gs = {}; for (const k of ['phase', 'myr', 'dawnMyr', 'year', 'quakes', 'eruptions', 'splits', 'sutures', 'iceVol', 'seaLevel', 'applied', 'dawnSea', 'dawnAnomaly', 'shift', 'seed', 'stepN', 'scripted', 'lostCont', 'seaShifts']) gs[k] = Geo[k];
     const ent = {}; for (const k of Object.keys(U)) if (ArrayBuffer.isView(U[k])) ent[k] = U[k].slice(0, k === 'gen' || k === 'fgen' ? U.hi * Life.GL : k === 'genes' ? U.hi * AG.NG : U.hi);
     const S = AG.Sky;
     return {
@@ -153,20 +153,20 @@
     if (!e || !e.tech) return { ok: false, why: 'Only inventions can be undone.' };
     const snap = History.snaps.slice().reverse().find((s) => s.year < e.year - 0.5);
     if (!snap) return { ok: false, why: 'No saved moment from before that event.' };
-    History.branches.push({ label: `Timeline at year ${Math.floor(AG.Geo.year + 1)}`, year: AG.Geo.year, data: History.capture() });
+    History.branches.push({ label: `Timeline at ${AG.calText(AG.Geo.year)}`, year: AG.Geo.year, data: History.capture() });
     if (History.branches.length > 4) History.branches.shift();
     History.restore(snap.data);
     AG.Tech.banned.add(e.tech);
     History.snaps = History.snaps.filter((s) => s.year <= snap.year);
     History.lastSnapYear = snap.year;
     const t = AG.Tech.LIST[AG.Tech.IDX[e.tech]];
-    History.event('god', `History rewinds to year ${Math.floor(snap.year + 1)}. In this world, ${t.name.toLowerCase()} will never be discovered.`, { cause: 'counterfactual' });
+    History.event('god', `History rewinds to ${AG.calText(snap.year)}. In this world, ${t.name.toLowerCase()} will never be discovered.`, { cause: 'counterfactual' });
     History.record('branch', { ban: e.tech, from: snap.year });
     return { ok: true, year: snap.year, tech: t.name };
   };
   History.switchBranch = function (k) {
     const b = History.branches[k]; if (!b) return false;
-    const here = { label: `Timeline at year ${Math.floor(AG.Geo.year + 1)}${AG.Tech.banned.size ? ' (without ' + [...AG.Tech.banned].map((x) => AG.Tech.LIST[AG.Tech.IDX[x]].name.toLowerCase()).join(', ') + ')' : ''}`, year: AG.Geo.year, data: History.capture() };
+    const here = { label: `Timeline at ${AG.calText(AG.Geo.year)}${AG.Tech.banned.size ? ' (without ' + [...AG.Tech.banned].map((x) => AG.Tech.LIST[AG.Tech.IDX[x]].name.toLowerCase()).join(', ') + ')' : ''}`, year: AG.Geo.year, data: History.capture() };
     History.branches.splice(k, 1, here);
     History.restore(b.data);
     History.lastSnapYear = AG.Geo.year;

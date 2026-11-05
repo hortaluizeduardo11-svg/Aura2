@@ -11,7 +11,7 @@
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmt = (n) => Math.round(n).toLocaleString('en-US');
-  const yr = (y) => `Y${fmt(Math.floor(y) + 1)}`;
+  const yr = (y) => fmt(AG.calYear(y)); // the world's one calendar, from Year 0
   const UI = (AG.UI = { sel: null, tab: 'chronicle', cat: 'look', sub: 'story', hfilter: 'key' });
   let frameN = 0, panelHover = false, lastToast = 0, worldBuilt = false;
   const keys = new Set();
@@ -315,7 +315,7 @@
     const day = Sky.daylight();
     const sun = AG.mode === 'deep' ? '#ff9d4d' : day > 0.6 ? '#ffd166' : day > 0.15 ? '#f08a4b' : '#8aa2d8';
     let label;
-    if (AG.mode === 'deep') label = `${Geo.mya.toFixed(1)} million years ago · ${Geo.plates.filter((p) => p.alive).length} plates`;
+    if (AG.mode === 'deep') label = `${Geo.label()} · ${Geo.plates.filter((p) => p.alive).length} plates`;
     else {
       const season = AG.mode === 'watch' ? ' · ' + Sky.SEASONS[Sky.season()] : '';
       const storm = AG.mode === 'watch' && Sky.storms.find((s) => Math.abs(s.x - R.cam.x) < 80 && Math.abs(s.y - R.cam.y) < 60);
@@ -372,7 +372,7 @@
     if (t.dataset.lang) { UI.sel = { type: 'lang', id: +t.dataset.lang }; setTab('inspect'); return; }
     if (t.dataset.sub) { UI.sub = t.dataset.sub; renderPanel(true); return; }
     if (t.dataset.hf) { UI.hfilter = t.dataset.hf; renderPanel(true); return; }
-    if (t.dataset.whatif) { const r = History.whatIf(+t.dataset.whatif); UI.toast(r.ok ? `Rewound to year ${Math.floor(r.year + 1)}: this world will never know ${r.tech.toLowerCase()}.` : r.why); renderPanel(true); return; }
+    if (t.dataset.whatif) { const r = History.whatIf(+t.dataset.whatif); UI.toast(r.ok ? `Rewound to ${AG.calText(r.year)}: this world will never know ${r.tech.toLowerCase()}.` : r.why); renderPanel(true); return; }
     if (t.dataset.branch) { History.switchBranch(+t.dataset.branch); UI.toast('Switched timelines.'); renderPanel(true); return; }
     if (t.dataset.x !== undefined) { const x = +t.dataset.x, y = +t.dataset.y; if (x >= 0) { R.follow = -1; R.centerOn(x, y, Math.max(R.cam.z, 4)); } return; }
     if (t.dataset.dis !== undefined) { diseaseEditor(+t.dataset.dis); return; }
@@ -618,7 +618,7 @@
     h += '<ul class="chron">';
     for (let k = list.length - 1, n = 0; k >= 0 && n < 200; k--, n++) {
       const e = list[k];
-      const when = e.year < 0 ? `${(-e.year / 1e6).toFixed(0)} Mya` : yr(e.year);
+      const when = e.cal !== undefined ? fmt(e.cal) : yr(e.year);
       h += `<li class="k-${AG.Chronicle && e.kind}"${e.x >= 0 ? ` data-x="${e.x | 0}" data-y="${e.y | 0}"` : ''}><span class="yr">${when}</span><span>${esc(e.text)}${e.cause ? ` <em class="muted">— ${esc(e.cause)}</em>` : ''}${e.kind === 'invention' && e.first && e.tech ? ` <button type="button" class="link whatif" data-whatif="${e.id}" title="Rewind and run history without this invention">What if this never happened?</button>` : ''}</span></li>`;
     }
     return h + '</ul>';
@@ -649,7 +649,7 @@
   UI.save = function () {
     try {
       const blob = new Blob([History.serialize()], { type: 'application/json' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `aura-genesis2-${AG.seed}-y${Math.floor(Geo.year + 1)}.aura2.json`;
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `aura-genesis2-${AG.seed}-year-${AG.calYear(null)}.aura2.json`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       UI.toast('World saved to a file.');
     } catch (e) { UI.toast('Could not save: ' + e.message); }
@@ -672,7 +672,7 @@
         else { const t = Math.min(1, (e - sea) / 0.5); px[c] = AG.pack(80 + t * 120, 140 - t * 20, 60 + t * 80); }
       }
       x.putImageData(img, 0, 0);
-      $('#tl-label').textContent = f.year ? `Year ${Math.floor(f.year + 1)}` : `${f.mya.toFixed(0)} million years ago`;
+      $('#tl-label').textContent = `Year ${Math.round((f.myr || 0) * 1e6 + (f.year || 0)).toLocaleString('en-US')}`;
       $('#tl-pos').value = k;
     };
     $('#tl-pos').addEventListener('input', (e) => { k = +e.target.value; playing = false; draw(); });

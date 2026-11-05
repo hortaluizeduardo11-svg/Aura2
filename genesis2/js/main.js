@@ -133,7 +133,7 @@
       AG.throttled = false;
       if (AG.mode === 'deep') {
         if (!AG.paused || AG.fastDawn) {
-          if (AG.fastDawn) { const y0 = Geo.mya; Sim.skipDeep(60); myr += y0 - Math.max(0, Geo.mya); }
+          if (AG.fastDawn) { const y0 = Geo.myr; Sim.skipDeep(60); myr += Geo.myr - y0; }
           else {
             acc += (dt / 1000) * DEEP_MYPS;
             let n = 0;

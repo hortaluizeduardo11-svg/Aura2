@@ -27,14 +27,14 @@
     Geo.init(seed); Life.init(seed); AG.Sky.reset(seed);
     Geo.paintFine();
     Sim.geoSeen = 0;
-    AG.History.event('genesis', `A new world (seed ${seed}): one supercontinent, 250 million years ago`, { cause: 'creation' });
+    AG.History.event('genesis', `Year 0: a new world is born (seed ${seed}), one great continent in a world ocean`, { cause: 'creation' });
     AG.creating = false;
   };
   Sim.deepStep = function (dt) {
     dt = dt || Sim.DEEP_DT;
     time('geo', () => Geo.deepStep(dt));
     time('life', () => Life.deepStep(dt));
-    if (Geo.mya <= 0) Sim.dawn();
+    if (Life.sapienceReady(dt)) Sim.dawn(); // people arrive when evolution makes them, not on a set date
   };
   // Run the rest of deep time at once (the "skip to the Dawn" button and the tests).
   Sim.skipDeep = function (budgetMs) {
@@ -49,7 +49,7 @@
     Geo.dawn();
     const p = Life.dawn();
     for (const s of Life.alive()) if (s.mean[Life.L.SIZE] > 205 && s.arch === Life.ARCH.GRAZER) s.mega = true;
-    AG.History.event('dawn', `The Dawn: ${p.name}, descended from ${Life.species[p.parent] ? Life.species[p.parent].name : 'the apes'}, become people`, { cause: 'the cleverest primates of the warm forests' });
+    AG.History.event('dawn', `The Dawn, ${AG.calText(0)}: ${p.name}, descended from ${Life.species[p.parent] ? Life.species[p.parent].name : 'the apes'}, become people`, { cause: `${(Geo.myr).toFixed(1)} million years of primate evolution toward bigger brains` });
     AG.mode = 'history';
     Civ.dawn();
     AG.Sky.reset(AG.seed);

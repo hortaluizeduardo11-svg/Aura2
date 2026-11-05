@@ -29,7 +29,7 @@
     organic: F32(GN), evap: F32(GN), wetFloor: F32(GN),
     lith: U8(GN),               // 1 = continental lithosphere (thick, buoyant: rebounds as it erodes), 2 = thinned rift crust
     plates: [], hotspots: [], volcanoes: [], events: [], frames: [],
-    phase: 'deep', mya: 250, year: 0, quakes: 0, eruptions: 0, splits: 0, sutures: 0,
+    phase: 'deep', myr: 0, dawnMyr: 0, year: 0, quakes: 0, eruptions: 0, splits: 0, sutures: 0,
     climate: { orbital: 0, aerosol: 0, carbon: 0, anomaly: 0, phase: [0, 0, 0] },
     iceVol: 0, seaLevel: 0, applied: 0, seed: 1, stepN: 0, regen: 0,
     stats: { ms: 0, land: 0, boundaries: [0, 0, 0, 0] },
@@ -83,7 +83,7 @@
     rng = AG.makeRng((Math.imul(seed, 2654435761) ^ 0x51ed270b) >>> 0); Geo.rng = rng;
     buildTiles(seed); Geo.tilesFor = seed;
     const n1 = AG.makeNoise(seed + 101), n2 = AG.makeNoise(seed + 102), n3 = AG.makeNoise(seed + 103);
-    Geo.phase = 'deep'; Geo.mya = 250; Geo.year = 0; Geo.stepN = 0;
+    Geo.phase = 'deep'; Geo.myr = 0; Geo.dawnMyr = 0; Geo.year = 0; Geo.stepN = 0; // the world is born in Year 0
     Geo.quakes = Geo.eruptions = Geo.splits = Geo.sutures = 0;
     Geo.events.length = 0; Geo.frames.length = 0; Geo.volcanoes.length = 0;
     Geo.iceVol = 0.1; Geo.seaLevel = 0; Geo.applied = 0;
@@ -92,35 +92,128 @@
     const cl = Geo.climate; cl.aerosol = 0; cl.carbon = 0.3; cl.orbital = 0;
     cl.phase = [88500 + (rr() - 0.5) * 3000, 30000 + rr() * 6000, rr() * 23000];
 
-    // plates: jittered seeds, noise-warped nearest-seed partition
-    const np = 9 + ((rr() * 5) | 0), seeds = [];
-    for (let k = 0, t = 0; k < np && t < 4000; t++) {
-      const x = rr() * GW, y = rr() * GH;
-      if (seeds.some((s) => AG.dist2(s.x, s.y, x, y) < (GW * GH) / (np * 3.2))) continue;
-      seeds.push({ x, y }); k++;
+    // ---- a new supercontinent, different in every world: ancient cores (cratons) welded together.
+    // Each craton is an ellipse of its own size, stretch and tilt, attached to the cluster at a
+    // random side; the coastline is the union, warped by noise, cut to a set area, and only the
+    // largest connected piece is kept. Old mountain belts run along the seams between cratons.
+    const nc = 5 + ((rr() * 4) | 0), cratons = [];
+    const cx0 = GW * (0.42 + rr() * 0.16), cy0 = GH * (0.42 + rr() * 0.16), ys = (GH / GW) * 1.5;
+    // a curving chain of cratons (a spine, a crescent, an L...) with the odd one welded on the side
+    let ang = rr() * Math.PI * 2;
+    const bend = (rr() - 0.5) * 1.2;
+    for (let k = 0; k < nc; k++) {
+      const r = GW * (0.06 + rr() * 0.06), asp = 0.35 + rr() * 0.45, rot = rr() * Math.PI;
+      let x = 0, y = 0;
+      if (k) {
+        const side = k > 1 && rr() < 0.35, host = side ? cratons[(rr() * cratons.length) | 0] : cratons[k - 1];
+        const a = side ? ang + (rr() < 0.5 ? 1 : -1) * (Math.PI / 2 + (rr() - 0.5) * 0.6) : (ang += bend + (rr() - 0.5) * 0.5);
+        const d = (host.r + r) * (0.55 + rr() * 0.25);
+        x = host.x + Math.cos(a) * d; y = host.y + Math.sin(a) * d * ys;
+      }
+      cratons.push({ x, y, r, rx: r, ry: r * asp, cos: Math.cos(rot), sin: Math.sin(rot) });
     }
-    Geo.plates = seeds.map((s, id) => ({ id, sx: s.x, sy: s.y, vx: 0, vy: 0, tx: 0, ty: 0, ax: 0, ay: 0, ox: 0, oy: 0, cont: 0, cells: 0, hue: (id * 137.5 + 20) % 360, alive: true, cx: s.x, cy: s.y }));
-    // one supercontinent near the middle
-    const scx = GW * (0.45 + rr() * 0.1), scy = GH * (0.45 + rr() * 0.1), srx = GW * (0.27 + rr() * 0.04), sry = GH * (0.32 + rr() * 0.05);
-    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    // centre the cluster and keep it inside the map with room to drift
+    let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+    for (const C of cratons) { bx0 = Math.min(bx0, C.x - C.r); bx1 = Math.max(bx1, C.x + C.r); by0 = Math.min(by0, C.y - C.r * ys); by1 = Math.max(by1, C.y + C.r * ys); }
+    const fit = Math.min(1.25, (GW * 0.8) / (bx1 - bx0), (GH * 0.8) / (by1 - by0)), mx = (bx0 + bx1) / 2, my = (by0 + by1) / 2;
+    for (const C of cratons) { C.x = cx0 + (C.x - mx) * fit; C.y = cy0 + (C.y - my) * fit; C.r *= fit; C.rx *= fit; C.ry *= fit; }
+    // one or two gulfs bite into the coast (inland seas, like a young Tethys)
+    const gulfs = [];
+    for (let g = 0, ng = rr() < 0.75 ? 1 + (rr() < 0.4 ? 1 : 0) : 0; g < ng; g++) {
+      const C = cratons[(rr() * nc) | 0], a = rr() * Math.PI * 2, L = C.r * (1.1 + rr() * 0.8);
+      gulfs.push({ x: C.x + Math.cos(a) * C.r * 0.9, y: C.y + Math.sin(a) * C.r * 0.9 * ys, ca: Math.cos(a + Math.PI), sa: Math.sin(a + Math.PI), L, w: C.r * (0.18 + rr() * 0.2) });
+    }
+    let scx0 = 0, scy0 = 0; for (const C of cratons) { scx0 += C.x / nc; scy0 += C.y / nc; }
+    const field = (x, y, k) => { const C = cratons[k], dx = x - C.x, dy = y - C.y, u = (dx * C.cos + dy * C.sin) / C.rx, v = (-dx * C.sin + dy * C.cos) / C.ry; return 1 - Math.sqrt(u * u + v * v); };
+    const mass = new Float32Array(GN), seam = new Float32Array(GN), owner = new Int8Array(GN);
+    const warp = 7 + rr() * 5, rough = 0.42 + rr() * 0.3, n4 = AG.makeNoise(seed + 104);
+    const computeMass = () => { for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
       const c = y * GW + x;
-      const wx = x + (n1.fbm(x * 0.06, y * 0.06, 3) - 0.5) * 14, wy = y + (n1.fbm(x * 0.06 + 31, y * 0.06 + 7, 3) - 0.5) * 14;
-      let best = 0, bd = 1e9;
-      for (let k = 0; k < seeds.length; k++) { const d = AG.dist2(wx, wy, seeds[k].x, seeds[k].y); if (d < bd) { bd = d; best = k; } }
-      Geo.plate[c] = best;
-      const dx = (x - scx) / srx, dy = (y - scy) / sry;
-      const m = 1 - Math.sqrt(dx * dx + dy * dy) + (n2.fbm(x * 0.05, y * 0.05, 4) - 0.5) * 0.9;
-      if (m > 0) {
+      const wx = x + (n1.fbm(x * 0.05, y * 0.05, 3) - 0.5) * warp * 2, wy = y + (n1.fbm(x * 0.05 + 31, y * 0.05 + 7, 3) - 0.5) * warp * 2;
+      let b1 = -9, b2 = -9, bk = 0;
+      for (let k = 0; k < nc; k++) { const f = field(wx, wy, k); if (f > b1) { b2 = b1; b1 = f; bk = k; } else if (f > b2) b2 = f; }
+      // smooth union of the two nearest cratons (no pinched necks), then a ragged coast
+      const h = AG.clamp(0.5 + (b1 - b2) / 0.5, 0, 1);
+      let un = b1 * h + b2 * (1 - h) + 0.14 * h * (1 - h);
+      for (const G of gulfs) { const dx = wx - G.x, dy = (wy - G.y) / ys, along = dx * G.ca + dy * G.sa, across = -dx * G.sa + dy * G.ca; if (along > 0 && along < G.L) un -= 0.9 * Math.max(0, 1 - Math.abs(across) / (G.w * (1 - along / G.L * 0.7))); }
+      const edge = Math.min(x, GW - 1 - x) / GW, edgeY = Math.min(y, GH - 1 - y) / GH;
+      mass[c] = un + (n2.fbm(x * 0.07, y * 0.07, 4) - 0.5) * rough + (n4.fbm(x * 0.19, y * 0.19, 3) - 0.5) * 0.32 + (Math.abs(n3.fbm(x * 0.11, y * 0.11, 3) * 2 - 1) - 0.35) * 0.14
+        - Math.max(0, 0.09 - edge) * 9 - Math.max(0, 0.1 - edgeY) * 9;
+      seam[c] = b2 > -0.2 ? AG.clamp(1 - Math.abs(b1 - b2) / 0.12, 0, 1) : 0;
+      owner[c] = bk;
+    } };
+    // grow the cratons until the continent reaches this world's share of the map
+    const target = 0.22 + rr() * 0.08;
+    for (let pass = 0; pass < 3; pass++) {
+      computeMass();
+      let n = 0; for (let c = 0; c < GN; c++) if (mass[c] > 0) n++;
+      if (n / GN > target * 0.9 || pass === 2) break;
+      const k = Math.min(1.35, Math.sqrt(target / Math.max(0.02, n / GN)));
+      for (const C of cratons) { C.x = scx0 + (C.x - scx0) * k; C.y = scy0 + (C.y - scy0) * k; C.r *= k; C.rx *= k; C.ry *= k; }
+      for (const G of gulfs) { G.x = scx0 + (G.x - scx0) * k; G.y = scy0 + (G.y - scy0) * k; G.L *= k; G.w *= k; }
+    }
+
+    // the coast: a threshold that gives this world's land area (about a third of the map)
+    const sorted = Float32Array.from(mass).sort();
+    const thr = Math.max(-0.06, Math.min(0.12, sorted[Math.floor(GN * (1 - target))])); // near the cratons' own outlines
+    // keep the largest connected landmass: one unified continent
+    const comp = new Int32Array(GN).fill(-1), stack = [];
+    let best = -1, bestN = 0;
+    for (let c0 = 0; c0 < GN; c0++) {
+      if (comp[c0] >= 0 || mass[c0] <= thr) continue;
+      let n = 0; stack.length = 0; stack.push(c0); comp[c0] = c0;
+      while (stack.length) {
+        const c = stack.pop(); n++;
+        const x = c % GW, y = (c / GW) | 0;
+        for (const o of [x > 0 ? c - 1 : -1, x < GW - 1 ? c + 1 : -1, y > 0 ? c - GW : -1, y < GH - 1 ? c + GW : -1]) if (o >= 0 && comp[o] < 0 && mass[o] > thr) { comp[o] = c0; stack.push(o); }
+      }
+      if (n > bestN) { bestN = n; best = c0; }
+    }
+    // lakes smaller than a few cells inside the continent are filled (they read as holes at this scale)
+    const seen = new Uint8Array(GN);
+    for (let c0 = 0; c0 < GN; c0++) {
+      if (seen[c0] || comp[c0] === best) continue;
+      const cells = []; let open = false; stack.length = 0; stack.push(c0); seen[c0] = 1;
+      while (stack.length) {
+        const c = stack.pop(); cells.push(c);
+        const x = c % GW, y = (c / GW) | 0;
+        if (x === 0 || y === 0 || x === GW - 1 || y === GH - 1) open = true;
+        for (const o of [x > 0 ? c - 1 : -1, x < GW - 1 ? c + 1 : -1, y > 0 ? c - GW : -1, y < GH - 1 ? c + GW : -1]) if (o >= 0 && !seen[o] && comp[o] !== best) { seen[o] = 1; stack.push(o); }
+      }
+      if (!open && cells.length < 14) for (const c of cells) { comp[c] = best; mass[c] = Math.max(mass[c], thr + 0.01); }
+    }
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+      const c = y * GW + x, m = mass[c] - thr;
+      if (comp[c] === best) {
         const old = 1 - Math.abs(n3.fbm(x * 0.07, y * 0.07, 3) * 2 - 1); // worn-down ancient mountain belts
-        Geo.crust[c] = 0.46 + Math.min(0.12, m * 0.3) + Math.pow(old, 6) * 0.16 + (n3.fbm(x * 0.2, y * 0.2, 2) - 0.5) * 0.03;
+        const belt = Math.max(Math.pow(old, 6) * 0.7, seam[c] * (0.55 + n2.fbm(x * 0.2, y * 0.2, 2) * 0.6));
+        Geo.crust[c] = 0.46 + Math.min(0.12, m * 0.35) + belt * 0.16 + (n3.fbm(x * 0.2, y * 0.2, 2) - 0.5) * 0.03;
         Geo.age[c] = 400 + rr() * 800; Geo.lith[c] = 1;
-        Geo.rock[c] = n3.fbm(x * 0.09 + 50, y * 0.09, 2) > 0.56 ? ROCK.SEDIMENT : Math.pow(old, 6) > 0.4 ? ROCK.META : ROCK.GRANITE;
+        Geo.rock[c] = n3.fbm(x * 0.09 + 50, y * 0.09, 2) > 0.56 ? ROCK.SEDIMENT : belt > 0.4 ? ROCK.META : ROCK.GRANITE;
       } else {
         Geo.age[c] = 20 + rr() * 140;
-        Geo.crust[c] = oceanDepth(Geo.age[c]) + Math.max(0, 0.06 + m * 0.4) * (m > -0.15 ? 1 : 0); // shelves around the continent
+        Geo.crust[c] = oceanDepth(Geo.age[c]) + (m > -0.12 ? Math.max(0, 0.06 + m * 0.5) : 0); // shelves around the continent
         Geo.rock[c] = ROCK.BASALT;
       }
     }
+    // ---- plates: one on each craton (the continent will part along its old seams), the rest at sea
+    const np = Math.max(nc + 4, 9 + ((rr() * 5) | 0)), seeds = [];
+    for (const C of cratons) seeds.push({ x: C.x + (rr() - 0.5) * C.r * 0.4, y: C.y + (rr() - 0.5) * C.r * 0.4 });
+    for (let t = 0; seeds.length < np && t < 4000; t++) {
+      const x = rr() * GW, y = rr() * GH, c = (y | 0) * GW + (x | 0);
+      if (comp[c] === best && t < 3000) continue;
+      if (seeds.some((q) => AG.dist2(q.x, q.y, x, y) < (GW * GH) / (np * 3.2))) continue;
+      seeds.push({ x, y });
+    }
+    Geo.plates = seeds.map((q, id) => ({ id, sx: q.x, sy: q.y, vx: 0, vy: 0, tx: 0, ty: 0, ax: 0, ay: 0, ox: 0, oy: 0, cont: 0, cells: 0, hue: (id * 137.5 + 20) % 360, alive: true, cx: q.x, cy: q.y }));
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+      const c = y * GW + x;
+      const wx = x + (n1.fbm(x * 0.06, y * 0.06, 3) - 0.5) * 14, wy = y + (n1.fbm(x * 0.06 + 31, y * 0.06 + 7, 3) - 0.5) * 14;
+      let bp = 0, bd = 1e9;
+      for (let k = 0; k < seeds.length; k++) { const d = AG.dist2(wx, wy, seeds[k].x, seeds[k].y) * (k < nc && comp[c] === best && owner[c] === k ? 0.55 : 1); if (d < bd) { bd = d; bp = k; } }
+      Geo.plate[c] = bp;
+    }
+    let scx = 0, scy = 0; for (const C of cratons) { scx += C.x / nc; scy += C.y / nc; }
     // plates carrying the supercontinent pull away from its centre: the breakup
     platesCensus();
     for (const p of Geo.plates) {
@@ -157,7 +250,7 @@
   Geo.deepStep = function (dt) {
     const t0 = AG.now ? AG.now() : 0;
     Geo.stepN++;
-    Geo.mya = Math.max(0, Geo.mya - dt);
+    Geo.myr += dt;
     platesCensus();
     steer(dt);
     let any = false;
@@ -371,7 +464,7 @@
     q.vx = q.tx = p.vx + nx * sp; q.vy = q.ty = p.vy + ny * sp;
     p.tx = p.vx - nx * sp * 0.6; p.ty = p.vy - ny * sp * 0.6;
     Geo.splits++;
-    Geo.events.push({ kind: 'rift', mya: Geo.mya, x: p.cx * CS, y: p.cy * CS });
+    Geo.events.push({ kind: 'rift', myr: Geo.myr, x: p.cx * CS, y: p.cy * CS });
   }
   function suture(a, b) {
     if (!a.alive || !b.alive) return;
@@ -412,7 +505,7 @@
   }
   function climateDeep(dt) {
     const cl = Geo.climate;
-    cl.carbon = 0.3 * Math.min(1, Geo.mya / 250) + 0.05 * Math.sin(Geo.mya / 30 * Math.PI * 2);
+    cl.carbon = 0.3 * Math.max(0, 1 - Geo.myr / 250) + 0.05 * Math.sin(Geo.myr / 30 * Math.PI * 2); // greenhouse gases slowly draw down
     cl.aerosol *= Math.pow(0.5, dt * 4);
     cl.anomaly = cl.carbon - 0.08 - cl.aerosol;
     baseClimate();
@@ -502,7 +595,7 @@
 
   // ------------------------------------------------------------ time-lapse frames
   function recordFrame() {
-    const f = { mya: Geo.mya, year: Geo.year, e: new Uint8Array(GN), p: new Uint8Array(GN), sea: Geo.seaLevel };
+    const f = { myr: Geo.phase === 'deep' ? Geo.myr : Geo.dawnMyr, year: Geo.year, e: new Uint8Array(GN), p: new Uint8Array(GN), sea: Geo.seaLevel };
     for (let c = 0; c < GN; c++) { f.e[c] = AG.clamp(((Geo.crust[c] - Geo.seaLevel) * 255) | 0, 0, 255); f.p[c] = Geo.plate[c]; }
     Geo.frames.push(f);
     if (Geo.frames.length > 260) Geo.frames.splice(0, Geo.frames.length - 260);
@@ -563,7 +656,7 @@
 
   // ------------------------------------------------------------ the Dawn: finish the world
   Geo.dawn = function () {
-    Geo.phase = 'history'; Geo.mya = 0; Geo.year = 0;
+    Geo.phase = 'history'; Geo.dawnMyr = Geo.myr; Geo.year = 0;
     const cl = Geo.climate; cl.carbon = 0; cl.aerosol = 0;
     cl.orbital = Geo.orbital(0); cl.anomaly = cl.orbital;
     Geo.iceVol = iceTarget(cl.anomaly);
@@ -577,7 +670,7 @@
     const r = AG.mulberry32((Geo.seed * 7919) >>> 0);
     rivers(r); fertility(); underground(r); resources(r); findVolcanoes();
     Wd.updateCereal();
-    Geo.frames.length = 0; recordFrame();
+    recordFrame(); // the time-lapse keeps deep time and carries on
   };
 
   function rivers(r) {
@@ -855,8 +948,14 @@
     const b = ['interior', 'convergent boundary', 'divergent boundary', 'transform fault'][Geo.bound[c]];
     return { plate: p ? p.id : -1, plateSpeed: p ? Math.hypot(p.vx, p.vy) : 0, boundary: b, rock: AG.ROCKS[Wd.rock[y * W + x]], strain: Geo.strain[c], magma: Geo.magma[c] };
   };
+  // One calendar from the world's birth: Year 0, 1, 2, ... Deep time counts in millions of years;
+  // the Age of People continues the same count from the Dawn. y = years since the Dawn (or null for now).
+  AG.calYear = function (y) {
+    if (Geo.phase === 'deep' && (y === null || y === undefined)) return Math.round(Geo.myr * 1e6);
+    return Math.round(Geo.dawnMyr * 1e6) + Math.floor(y === null || y === undefined ? Geo.year : y);
+  };
+  AG.calText = (y) => `Year ${AG.calYear(y).toLocaleString('en-US')}`;
   Geo.label = function () {
-    if (Geo.phase === 'deep') return `${Geo.mya.toFixed(1)} million years ago`;
-    return `Year ${Math.floor(Geo.year + 1).toLocaleString('en-US')}`;
+    return `Year ${AG.calYear(Geo.phase === 'deep' ? null : Geo.year).toLocaleString('en-US')}`;
   };
 })();

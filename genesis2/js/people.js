@@ -526,13 +526,13 @@
     const born = P.story.find((s) => s.k === MK.BORN);
     const parents = [P.mom, P.dad].map(People.get).filter(Boolean);
     const out = [];
-    out.push(`${P.name} was born ${born && born.d ? 'in ' + born.d + ' ' : ''}in ${AG.Geo.label ? 'year ' + Math.floor(P.born + 1).toLocaleString('en-US') : ''}${parents.length ? ', the child of ' + parents.map((q) => q.name).join(' and ') : ''}.`);
+    out.push(`${P.name} was born ${born && born.d ? 'in ' + born.d + ' ' : ''}in ${AG.calText ? AG.calText(P.born).replace('Year', 'year') : ''}${parents.length ? ', the child of ' + parents.map((q) => q.name).join(' and ') : ''}.`);
     const tr = TRAITS.filter((t) => P.traits & t.bit).slice(0, 3).map((t) => t.name.toLowerCase());
     const likes = People.likes(P, 2), hates = People.dislikes(P, 1);
     out.push(`${He} grew up ${tr.length ? tr.join(', ') : 'quiet'}${likes.length ? `, fond of ${likes.join(' and ')}` : ''}${hates.length ? ` and wary of ${hates[0]}` : ''}.`);
     const notable = P.story.filter((s) => s.k !== MK.BORN && s.k !== -1).slice(-6);
     for (const s of notable) out.push(sentence(P, s, he, his, He));
-    if (P.died !== null) out.push(`${He} died in year ${Math.floor(P.died + 1).toLocaleString('en-US')}, aged ${age}${P.cause ? ', of ' + P.cause : ''}.`);
+    if (P.died !== null) out.push(`${He} died in ${AG.calText(P.died).replace('Year', 'year')}, aged ${age}${P.cause ? ', of ' + P.cause : ''}.`);
     else out.push(`${He} is ${age}, ${AG.JOBS[P.job].toLowerCase()}${c ? ' of ' + c.name : ''}${P.goal >= 0 && !P.goalDone ? `, still hoping to ${AG.GOALS[P.goal].toLowerCase()}` : ''}.`);
     return out.join(' ');
   };
