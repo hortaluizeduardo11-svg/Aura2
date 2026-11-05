@@ -36,7 +36,7 @@
   Sky.year = () => Math.floor(AG.tick / YEAR_TICKS) + 1;
   Sky.season = () => Math.floor(Sky.yearFrac() * 4);
   Sky.sunHeight = () => Math.sin((Sky.dayFrac() - 0.25) * Math.PI * 2);   // -1..1
-  Sky.daylight = () => AG.smooth(-0.28, 0.32, Sky.sunHeight());
+  Sky.daylight = () => (AG.mode !== 'watch' ? 1 : AG.smooth(-0.28, 0.32, Sky.sunHeight())); // deep time and history are drawn in daylight
   // Sun direction across the map for hillshading: rises in the east, sets in the west.
   Sky.sunDir = function () {
     const a = (Sky.dayFrac() - 0.25) * Math.PI * 2;

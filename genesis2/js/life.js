@@ -393,6 +393,7 @@
   Life.speciationCheck = speciationCheck;
   function extinctionCheck(cause) {
     for (const s of Life.alive()) {
+      if (s.sapient) { s.census = AG.People ? AG.People.alive : 0; continue; } // people live in person records, not regions
       let n = 0; for (const R of s.regions.values()) n += R.n;
       if (n > 0 && !s.sapient) { // the species' traits are its living population's
         s.mean.fill(0);
@@ -551,9 +552,22 @@
       Life.phenotype(U.gen, i * GL, ph); for (let k = 0; k < NL; k++) a.mu[k] += ph[k];
       a.n++; if (a.ids.length < 12) a.ids.push(i); else if (rr() < 12 / a.n) a.ids[(rr() * 12) | 0] = i;
     }
-    for (const s of Life.species) if (!s.sapient) for (const R of s.regions.values()) R.n = s.domestic ? R.n : 0; // bodies were the population
-    for (const a of acc.values()) {
-      const R = a.s.regions.get(a.r) || newRegion(a.s.mean, 0);
+    // The regional record stays the population; the bodies tell how it fared while watched:
+    // survivors over those embodied scale it (within limits), and their genes update its mean and reservoir.
+    for (const s of Life.species) {
+      if (s.sapient || s.domestic) continue;
+      for (const [r, R] of s.regions) {
+        const a = acc.get(s.id * RN + r), cnt = a ? a.n : 0;
+        if (R.emb > 0) R.n *= AG.clamp((cnt + 0.5) / (R.emb + 0.5), 0.5, 1.5);
+        R.emb = 0;
+        if (a) acc.delete(s.id * RN + r);
+        if (!a) continue;
+        for (let k = 0; k < NL; k++) R.mu[k] = R.mu[k] * 0.5 + (a.mu[k] / a.n) * 0.5;
+        a.ids.forEach((i, k) => R.res.set(U.gen.subarray(i * GL, i * GL + GL), k * GL)); R.nres = Math.max(R.nres, a.ids.length);
+      }
+    }
+    for (const a of acc.values()) { // bodies that wandered into a region their species did not hold
+      const R = newRegion(a.s.mean, 0);
       for (let k = 0; k < NL; k++) R.mu[k] = a.mu[k] / a.n;
       R.n = a.n * BODY_SCALE[a.s.arch];
       a.ids.forEach((i, k) => R.res.set(U.gen.subarray(i * GL, i * GL + GL), k * GL)); R.nres = a.ids.length;
@@ -576,6 +590,7 @@
     for (const s of Life.alive()) {
       if (s.sapient || s.domestic) continue;
       for (const [r, R] of s.regions) {
+        R.emb = 0;
         let want = R.n * k[s.arch]; want = Math.floor(want) + (rr() < want % 1 ? 1 : 0);
         const x0 = (r % RW) * RS, y0 = ((r / RW) | 0) * RS;
         for (let m = 0, tries = 0; m < want && tries < want * 12; tries++) {
@@ -587,6 +602,7 @@
           if (b < 0) return;
           m++;
         }
+        R.emb = m;
       }
     }
   };

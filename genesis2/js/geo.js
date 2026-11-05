@@ -390,7 +390,7 @@
     const { crust, precip, temp } = Geo, sl = seaLine(), an = Geo.climate.anomaly;
     for (let c = 0; c < GN; c++) {
       const y = (c / GW) | 0, lat = (y + 0.5) / GH;
-      temp[c] = 0.2 + lat * 0.58 + an - Math.max(0, crust[c] - sl) * 0.5;
+      temp[c] = 0.24 + lat * 0.58 + an - Math.max(0, crust[c] - sl) * 0.5;
     }
     for (let y = 0; y < GH; y++) {
       const lat = (y + 0.5) / GH, east = lat < 0.68;
@@ -400,11 +400,13 @@
         const x = east ? k : GW - 1 - k, c = y * GW + x, e = crust[c];
         if (e <= sl) { m = Math.min(1, m + 0.08); precip[c] = 0.7 * m * belt; prev = sl; continue; }
         // moist air rains out slowly over the plains and fast where it is forced up a mountain
+        // (the climb is measured against the smoothed ground, so small hills do not wring it dry);
+        // forests give part of the rain back to the air
         const lift = Math.max(0, e - prev);
-        const rain = m * (0.016 + lift * 4);
-        precip[c] = Math.min(1, (m * 0.8 + lift * 2.5 * m) * belt + 0.03);
-        m = Math.max(0.05, m - rain - 0.002);
-        prev = e;
+        const rain = m * (0.01 + lift * 1.4);
+        precip[c] = Math.min(1, (m * 0.95 + lift * 2.5 * m) * belt + 0.05);
+        m = Math.max(0.08, m - rain * 0.8 - 0.0015);
+        prev = prev * 0.6 + e * 0.4;
       }
     }
   }
@@ -537,7 +539,7 @@
       plate[i] = Geo.plate[c]; rock[i] = Geo.rock[c];
       const t = sampleField(Geo.temp, x + 0.5, y + 0.5) - Math.max(0, elev[i] - base) * 0.7, m = sampleField(Geo.precip, x + 0.5, y + 0.5);
       tbase[i] = AG.clamp(t + tileA[(tI + 7777) & (T * T - 1)] * 0.06, -0.3, 1.1);
-      moist[i] = AG.clamp(m * 1.05 + tileA[(tI + 33333) & (T * T - 1)] * 0.25, 0, 1);
+      moist[i] = AG.clamp(m * 1.25 + tileA[(tI + 33333) & (T * T - 1)] * 0.25, 0, 1);
       const gi = sampleField(Geo.ice, x + 0.5, y + 0.5);
       ice[i] = elev[i] >= SEA - 0.02 && gi > 0.35 ? AG.clamp(((gi - 0.35) * 600) | 0, 0, 255) : 0;
       frozen[i] = 0;
@@ -710,7 +712,7 @@
     cl.anomaly = cl.orbital - cl.aerosol + cl.carbon;
     Geo.shift = cl.anomaly - Geo.dawnAnomaly;
     // ice responds slowly: sheets build over millennia, collapse faster
-    const tgt = iceTarget(cl.orbital), tau = tgt > Geo.iceVol ? 6000 : 2200;
+    const tgt = iceTarget(cl.orbital + cl.carbon), tau = tgt > Geo.iceVol ? 6000 : 2200; // greenhouse (and the Warm/Ice-age powers) moves the ice; brief volcanic winters do not
     Geo.iceVol += (tgt - Geo.iceVol) * Math.min(1, dy / tau);
     Geo.seaLevel = -Geo.iceVol * SEA_AMP;
     applySea(false);

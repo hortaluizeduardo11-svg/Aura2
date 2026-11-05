@@ -169,6 +169,37 @@
   .deity { font: italic 400 14px/1.35 var(--lore); }
   .deity b { font-style: normal; font-weight: 500; }
 
+  /* ---------- Genesis 2 panels ---------- */
+  .subtabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 10px; }
+  .subtabs button { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .subtabs button.on { color: var(--gold-ink); background: var(--gold); border-color: var(--gold); }
+  .bio { font: italic 400 15px/1.45 var(--lore); margin: 8px 0 4px; }
+  .tie { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 2px 0; }
+  .phylo { display: grid; gap: 1px; font-size: 13px; }
+  .phylo .prow { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 4px; padding: 3px 6px; color: var(--ink); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .phylo .prow:hover { background: var(--raise); }
+  .phylo .prow.dead { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(165, 156, 135, 0.5); }
+  .phylo .prow.sapient { color: var(--gold); font-weight: 700; }
+  .phylo .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .ttree { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(118px, 1fr); gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+  .tcol { display: grid; gap: 4px; align-content: start; }
+  .tcol .head { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .node { font-size: 11.5px; line-height: 1.2; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+  .node.got { color: var(--ink); background: var(--raise); border-color: rgba(232, 182, 76, 0.45); }
+  .node.next { border-style: dashed; }
+  .node.banned { text-decoration: line-through; color: var(--war); }
+  .eras { display: grid; gap: 4px; margin: 6px 0 10px; }
+  .era { display: grid; grid-template-columns: 100px 1fr; gap: 8px; font-size: 13px; }
+  .era b { color: var(--gold); font-weight: 700; }
+  .era span { color: var(--muted); }
+  .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .maps figure { margin: 0; }
+  .maps img { width: 100%; image-rendering: pixelated; border-radius: 6px; border: 1px solid var(--line); display: block; }
+  .maps figcaption { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  #btn-dawn[hidden] { display: none; }
+  #locus { width: 100%; }
+  #speed button:disabled { opacity: 0.35; cursor: default; }
+
   /* ---------- overlays ---------- */
   #toast { position: absolute; z-index: 9; top: 70px; left: 50%; transform: translateX(-50%); max-width: min(520px, calc(100% - 32px)); padding: 9px 14px; font-size: 14px; text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
   #toast.show { opacity: 1; }
@@ -227,11 +258,14 @@
     <div class="grow"></div>
     <div class="seg" id="speed" role="group" aria-label="Simulation speed">
       <button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause"><svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true"><rect x="1" y="1" width="3" height="10" fill="currentColor"/><rect x="6" y="1" width="3" height="10" fill="currentColor"/></svg></button>
-      <button type="button" data-speed="1" class="on">1×</button>
-      <button type="button" data-speed="2">2×</button>
-      <button type="button" data-speed="4">4×</button>
-      <button type="button" data-speed="8">8×</button>
+      <button type="button" data-speed="1" class="on" title="Watch: real time near the camera (1)">1×</button>
+      <button type="button" data-speed="4" title="Watch, faster (2)">4×</button>
+      <button type="button" data-speed="16" title="Watch, fastest (3)">16×</button>
+      <button type="button" data-speed="c" title="History: centuries go by, about 20 years a second (4)">Centuries</button>
+      <button type="button" data-speed="m" title="History: millennia go by, hundreds of years a second (5)">Millennia</button>
+      <button type="button" data-speed="a" title="Deep time: millions of years a second">Ages</button>
     </div>
+    <button type="button" id="btn-dawn" class="hudbtn on" title="Run the rest of deep time to the Dawn of people">Skip to the Dawn</button>
     <div class="seg" id="layers" role="group" aria-label="World layer">
       <button type="button" data-view="0" title="Underground layer (Tab)">Deep</button>
       <button type="button" data-view="1" class="on">Surface</button>
@@ -240,6 +274,13 @@
     <select id="overlay" class="hudbtn" aria-label="Map overlay">
       <option value="realms">Realms</option>
       <option value="faith">Faiths</option>
+      <option value="language">Languages</option>
+      <option value="era">Eras</option>
+      <option value="genes">Genes</option>
+      <option value="plates">Plates</option>
+      <option value="strain">Fault strain</option>
+      <option value="rock">Rock</option>
+      <option value="resources">Resources</option>
       <option value="heat">Climate</option>
       <option value="none">No overlay</option>
     </select>
@@ -256,6 +297,7 @@
       <div id="tooldesc"></div>
       <label class="slider" id="sizerow"><span>Brush</span><input id="bsize" type="range" min="1" max="20" step="1" value="5"><output id="bsizev">5</output></label>
       <label class="slider" id="strrow"><span>Strength</span><input id="bstr" type="range" min="0.1" max="1" step="0.05" value="0.6"><output id="bstrv">60</output></label>
+      <label class="slider" id="locusrow" hidden><span>Gene</span><select id="locus" class="hudbtn" aria-label="Gene to edit"></select></label>
       <div id="diseaserow" hidden><select id="disease" class="hudbtn" aria-label="Disease to spread"></select><button type="button" class="btn" id="btn-editdisease" title="Design a new disease">New…</button></div>
     </div>
   </nav>
@@ -269,8 +311,9 @@
   <aside id="panel" class="glass" aria-label="Chronicle and inspector" hidden>
     <div class="tabs" role="tablist">
       <button type="button" class="tab" data-tab="inspect">Inspect</button>
-      <button type="button" class="tab" data-tab="realms">Realms</button>
-      <button type="button" class="tab on" data-tab="chronicle">Chronicle</button>
+      <button type="button" class="tab" data-tab="peoples">Peoples</button>
+      <button type="button" class="tab" data-tab="life">Life</button>
+      <button type="button" class="tab on" data-tab="chronicle">History</button>
       <button type="button" class="tab" data-tab="world">World</button>
     </div>
     <div class="pbody" id="pbody"></div>
@@ -284,19 +327,28 @@
   </div>
 
   <div id="toast" class="glass" role="status" aria-live="polite"></div>
+  <input type="file" id="loadfile" accept=".json,application/json" hidden>
   <div id="modal" hidden><div class="box glass" id="modalbox" role="dialog" aria-modal="true"></div></div>
 </div>
 
 <script src="vendor/three.min.js"></script>
 <script src="js/core.js"></script>
 <script src="js/world.js"></script>
+<script src="js/geo.js"></script>
 <script src="js/sky.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/physics.js"></script>
+<script src="js/life.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/people.js"></script>
+<script src="js/lang.js"></script>
+<script src="js/tech.js"></script>
+<script src="js/history.js"></script>
 <script src="js/civ.js"></script>
+<script src="js/war.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/god.js"></script>
+<script src="js/sim.js"></script>
 <script src="js/render.js"></script>
 <script src="js/view3d.js"></script>
 <script src="js/ui.js"></script>

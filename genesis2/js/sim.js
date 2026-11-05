@@ -72,6 +72,7 @@
       AG.mode = 'history';
     } else {
       AG.mode = 'watch';
+      AG.tick += (192 - (AG.tick % AG.DAY_TICKS) + AG.DAY_TICKS) % AG.DAY_TICKS; // arrive in the morning
       Life.embody();
       Civ.lod();
     }
@@ -118,7 +119,7 @@
       if (elev[i] < SEA || fl[i] > 0.02) continue;
       if (ice[i]) { veg[i] = 0; continue; }
       const t = Wd.Tc(i);
-      if (snow[i] && t > 0.15 && elev[i] < AG.PEAK) snow[i] = 0; else if (!snow[i] && t < 0.04) snow[i] = 200;
+      snow[i] = t < 0.06 || (elev[i] > AG.PEAK && t < 0.16) ? 200 : 0; // year-round snow only where it is cold all year (watch-time winters melt away)
       if (bgrid[i]) continue;
       const cap = Wd.vegCap(moist[i], t, soil[i]);
       veg[i] = AG.clamp(veg[i] + (cap - veg[i]) * k, 0, 255) | 0;

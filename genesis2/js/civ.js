@@ -318,7 +318,7 @@
     c.crowded = c.members.length > Math.min(housing(c) * 1.1, c.K * 0.9);
     // fields wear out and recover; the land around a band is foraged out
     for (const bid of c.buildings) { const b = Civ.buildings[bid]; if (b.type === BT.FARM && b.alive) { b.fert = AG.clamp((b.fert === undefined ? 1 : b.fert) - dy * (Tech.knows(c, 'plough') ? 0.012 : 0.008) + dy * 0.004, 0.35, 1.1); } }
-    const fc = c.cap ? c.cap.forage : 1, fw = c.jobs ? c.jobs[J.GATHER] : 0;
+    const fc = c.survey.forage / 14, fw = c.jobs ? c.jobs[J.GATHER] : 0; // pressure on the untouched land (not the already-thinned capacity)
     c.overForage = AG.clamp(c.overForage + dy * (fw / Math.max(1, fc) - 0.8) * 0.15, 0, 0.7);
     if (c.nutr < 0.62 && !c.famine) { c.famine = true; famine(c); } else if (c.nutr > 0.85) c.famine = false;
     return ratio;
@@ -481,15 +481,18 @@
   function siteScore(x, y, nomadic) {
     const i = (y | 0) * W + (x | 0);
     if (!Wd.passLand(i) || Wd.ice[i] || Wd.elev[i] > AG.MOUNTAIN || Wd.bgrid[i]) return -1e9;
-    let s = 0, water = 0, veg = 0, cereal = 0, fert = 0, ice = 0;
+    let s = 0, water = 0, veg = 0, cereal = 0, fert = 0, ice = 0, food = 0;
     for (let oy = -12; oy <= 12; oy += 4) for (let ox = -12; ox <= 12; ox += 4) {
       const nx = (x + ox) | 0, ny = (y + oy) | 0; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const j = ny * W + nx;
       if (Wd.fl[j] > 0.01 && Wd.ft[j] === FT.WATER) water++;
       veg += Wd.veg[j]; cereal += Wd.cereal[j]; fert += Wd.fert[j]; if (Wd.ice[j]) ice++;
+      if (Wd.elev[j] >= SEA) food += Wd.veg[j] * AG.smooth(0.05, 0.3, Wd.Tc(j)); // what foragers can actually eat
     }
-    s += water > 0 && water < 12 ? 1 : water ? 0.4 : -0.6;
-    s += veg / (49 * 255) * (nomadic ? 2.2 : 0.8) + cereal / (49 * 255) * (nomadic ? 0.4 : 1.8) + fert / (49 * 255) * (nomadic ? 0 : 1.2);
+    const fd = food / (49 * 255);
+    s += water > 0 && water < 12 ? 0.6 : water ? 0.25 : -0.4;
+    s += fd * (nomadic ? 3.5 : 1.0) + veg / (49 * 255) * (nomadic ? 0.3 : 0.4) + cereal / (49 * 255) * (nomadic ? 0.4 : 1.8) + fert / (49 * 255) * (nomadic ? 0 : 1.2);
+    if (nomadic && fd < 0.18) s -= 1.2; // a camp needs plants to gather
     s -= ice * 0.4;
     const t = Wd.Tc(i); s -= Math.max(0, 0.2 - t) * 4 + Math.max(0, t - 0.85) * 3;
     if (nomadic) s += Math.min(1, gameAt(Life.regionOf(x, y)) / 30) * 0.8; // game
