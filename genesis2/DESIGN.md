@@ -90,17 +90,25 @@ the HUD shows "at capacity" and the achieved years per second appear in World �
 
 ### 3.3 Calendar and world story
 
-1. **Deep time** starts at 250 million years ago (Mya) with a supercontinent.
-   - Plates rift it apart, drift, collide and raise mountains.
+The world keeps one calendar that counts forward from its birth: Year 0, 1, 2 and so on. Deep
+time advances it half a million years per step; the Age of People carries on the same count one
+year at a time. The world is not heading toward any real present: it is its own planet.
+
+1. **Deep time** starts at Year 0 with a new supercontinent, different in every world.
+   - The plates first stretch it (a slow rifting phase), then rift it apart along its old seams,
+     drift, collide and raise mountains.
    - Founder lineages (grazers, browsers, predators, small foragers, birds, primates) spread
      and radiate as the land splits.
    - The player watches at Ages speed or skips ahead.
-2. **The Dawn** (0 Mya, Year 1). The world is finalised: fine terrain, rivers, soils,
-   vegetation, ores. Animals are embodied from their regional gene pools.
-   - The primate species with the highest mean cognition becomes **sapient**. Its range is the
-     **cradle**, and the first hunter-gatherer bands appear there.
+2. **The Dawn** comes when evolution gets there, so its year differs between worlds (typically
+   between Year 130 million and Year 270 million, with a cap at 340 million). Social primates face
+   a slowly rising payoff for intelligence; once a lineage's mean cognition passes the threshold,
+   people appear within some millions of years, by chance. The world is then finalised: fine
+   terrain, rivers, soils, vegetation, ores. Animals are embodied from their regional gene pools.
+   - The cleverest primate lineage becomes **sapient**. Its range is the **cradle**, and the first
+     hunter-gatherer bands appear there.
    - The Dawn falls near a glacial maximum, so the sea is low and land bridges are open.
-3. **The Age of People** runs from Year 1 onward.
+3. **The Age of People** runs from the Dawn onward, on the same calendar.
    - Bands spread out of the cradle, split, and carry diverging languages.
    - As the ice retreats (orbital cycles), the sea rises and drowns land bridges, climate
      warms, and wild cereals spread.
@@ -292,8 +300,13 @@ materialised (§6).
 
 ### 5.1 Plates and drift
 
-- **Setup:** a jittered Voronoi tessellation of the coarse grid gives 9–13 plates. The deep-time
-  start places one supercontinent of continental crust near the centre; the rest is ocean.
+- **Setup:** every world grows a new supercontinent from 5–8 ancient cores (cratons): ellipses
+  of their own size, stretch and tilt, attached in a curving chain (a spine, a crescent, an S) with
+  the odd one welded on the side. Their smooth union is warped by noise and bitten by one or two
+  gulfs, then cut to this world's land share (22–30%), keeping only the largest connected piece.
+  Old mountain belts run along the seams between cratons. Plates are seeded one per craton plus
+  more at sea (a noise-warped Voronoi partition), so the continent later parts along its seams.
+  Continental plates start slowly (rifting) and reach 2–10 cm/yr.
 - **Movement:** each plate accumulates `v·dt`, and when it crosses a whole cell the plate shifts
   one cell. All plates shift together in one pass, writing into a new grid in a fixed order
   (stationary plates first, then by plate id), so results are deterministic. Then:

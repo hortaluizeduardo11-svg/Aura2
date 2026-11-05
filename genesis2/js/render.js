@@ -551,9 +551,7 @@
         const i = y * W + x, c = Geo.cellOf(x, y), p = Geo.plates[Geo.plate[c]];
         const bd = Geo.bound[c];
         if (mode === 'strain') { const s2 = AG.clamp(Geo.strain[c] * 3, 0, 1), m = AG.clamp(Geo.magma[c], 0, 1); if (s2 > 0.02 || m > 0.05) bpix[i] = pack(255, (200 - s2 * 160) | 0, (60 + m * 160) | 0, (s2 * 200 + m * 120) | 0); continue; }
-        if (bd && ((x & 3) === 0 || (y & 3) === 0)) { bpix[i] = bd === 1 ? pack(255, 70, 50, 230) : bd === 2 ? pack(80, 170, 255, 230) : pack(255, 220, 60, 230); continue; }
-        const hc = p ? AG.hsl(p.hue, 0.55, 0.55) : [128, 128, 128];
-        bpix[i] = pack(hc[0], hc[1], hc[2], 60);
+        // (the Plates overlay is drawn by drawTectonics)
       }
       bctx.putImageData(bimg, 0, 0); return;
     }
@@ -902,6 +900,233 @@
     }
   }
 
+  // ------------------------------------------------------------ tectonics
+  // Deep time (and the Plates overlay): the map morphs between repaints instead of jumping; plates
+  // are soft washes of colour; boundaries are glowing ribbons of beads whose light flows along
+  // them (molten amber at rifts, red heat where plates collide, with teeth on the overriding side
+  // of a subduction zone, pale flicker along sliding faults); chevrons show each plate's motion
+  // in cm/yr; hotspots pulse; quakes ring out; rifts and collisions are named where they happen.
+  const prevC = mk(W, H), pctx = prevC.getContext('2d');
+  let fade = 0, snapWanted = false;
+  const FADE = 0.26;
+  R.deepRepaint = function () { snapWanted = true; };
+  const TG = AG.Geo, GW = TG.GW, GH = TG.GH, CSZ = 4; // fine cells per coarse geology cell
+  const tintC = mk(GW, GH), tctx = tintC.getContext('2d'), timg = tctx.createImageData(GW, GH), tpix = new Uint32Array(timg.data.buffer);
+  const bead = { n: 0, x: new Float32Array(GW * GH * 2), y: new Float32Array(GW * GH * 2), t: new Uint8Array(GW * GH * 2), ph: new Float32Array(GW * GH * 2), cont: new Uint8Array(GW * GH * 2), tx: new Int8Array(GW * GH * 2), ty: new Int8Array(GW * GH * 2) };
+  let tecT = -1, fxSeen = 0, fxGen = -1, idleT = 0;
+  const fx = [];
+  function glowSprite(inner, outer) {
+    const c = mk(48, 48), g = c.getContext('2d'), gr = g.createRadialGradient(24, 24, 0, 24, 24, 24);
+    gr.addColorStop(0, inner); gr.addColorStop(0.35, outer); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 48, 48); return c;
+  }
+  const SPR = {
+    div: glowSprite('rgba(255,244,190,1)', 'rgba(255,170,40,0.55)'),
+    conv: glowSprite('rgba(255,210,220,1)', 'rgba(235,40,90,0.55)'),
+    coll: glowSprite('rgba(255,236,200,1)', 'rgba(255,110,40,0.6)'),
+    trans: glowSprite('rgba(230,250,255,1)', 'rgba(110,200,255,0.45)'),
+    hot: glowSprite('rgba(255,250,220,1)', 'rgba(255,120,30,0.6)'),
+  };
+  // rebuild the plate wash and the bead list from the coarse grid
+  function tecRebuild() {
+    const pl = TG.plate, cr = TG.crust, bd = TG.bound, sl = AG.SEA + TG.seaLevel;
+    for (let c = 0; c < GW * GH; c++) {
+      const p = TG.plates[pl[c]];
+      if (!p) { tpix[c] = 0; continue; }
+      const h = AG.hsl(p.hue, 0.6, cr[c] > sl ? 0.62 : 0.5);
+      tpix[c] = pack(h[0], h[1], h[2], cr[c] > sl ? 70 : 105);
+    }
+    tctx.putImageData(timg, 0, 0);
+    let n = 0;
+    const add = (x, y, c, o, tx, ty) => {
+      const type = bd[c] === 1 || bd[o] === 1 ? 1 : bd[c] === 2 || bd[o] === 2 ? 2 : 3;
+      bead.x[n] = x; bead.y[n] = y; bead.t[n] = type; bead.ph[n] = (x * 0.9 + y * 0.6) * 0.35;
+      bead.cont[n] = cr[c] > AG.SEA - 0.02 && cr[o] > AG.SEA - 0.02 ? 1 : 0;
+      // subduction teeth point to the overriding (more buoyant) side
+      const s = cr[c] >= cr[o] ? -1 : 1; bead.tx[n] = tx * s; bead.ty[n] = ty * s;
+      n++;
+    };
+    for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+      const c = gy * GW + gx;
+      if (gx < GW - 1 && pl[c] !== pl[c + 1]) add((gx + 1) * CSZ, (gy + 0.5) * CSZ, c, c + 1, 1, 0);
+      if (gy < GH - 1 && pl[c] !== pl[c + GW]) add((gx + 0.5) * CSZ, (gy + 1) * CSZ, c, c + GW, 0, 1);
+    }
+    bead.n = n;
+    // join neighbouring beads into lines (diagonal links make the boundary run smooth, not stepped)
+    const key = new Map();
+    for (let k = 0; k < n; k++) key.set(((bead.x[k] / 2) | 0) * 4096 + ((bead.y[k] / 2) | 0), k);
+    let m = 0;
+    for (let k = 0; k < n; k++) {
+      const kx = (bead.x[k] / 2) | 0, ky = (bead.y[k] / 2) | 0;
+      for (const [dx, dy] of [[1, 1], [1, -1], [2, 0], [0, 2]]) {
+        const j = key.get((kx + dx) * 4096 + ky + dy);
+        if (j === undefined) continue;
+        if ((dx === 2 || dy === 2) && (key.has((kx + 1) * 4096 + ky + 1) || key.has((kx + 1) * 4096 + ky - 1) || key.has((kx - 1) * 4096 + ky + 1))) continue; // a diagonal route exists
+        if (m < seg.a.length) { seg.a[m] = k; seg.b[m] = j; m++; }
+      }
+    }
+    seg.n = m;
+  }
+  const seg = { n: 0, a: new Int32Array(GW * GH * 6), b: new Int32Array(GW * GH * 6) };
+  const LINE = { 2: ['rgba(255,166,58,1)', 'rgba(255,244,200,1)', 2.6], 1: ['rgba(232,36,92,1)', 'rgba(255,214,224,1)', 1.7], 4: ['rgba(255,106,42,1)', 'rgba(255,240,214,1)', 1.7], 3: ['rgba(127,208,255,1)', 'rgba(232,248,255,1)', 4.2] };
+  const cmPerYr = (p) => Math.hypot(p.vx, p.vy) * CSZ * (40000 / W) / 10; // cells/Myr -> km/Myr -> cm/yr
+  function spawnFx(kind, x, y, mag, text) {
+    if (fx.length > 60) fx.shift();
+    fx.push({ kind, x, y, mag: mag || 1, t: 0, dur: kind === 'quake' ? 1.6 : kind === 'erupt' ? 2.2 : kind === 'label' ? 3.2 : 1.8, text });
+  }
+  function tecEvents(dt) {
+    const ev = TG.events;
+    if (fxGen !== TG.seed || fxSeen > ev.length) { fxSeen = ev.length; fxGen = TG.seed; fx.length = 0; } // new world or a trimmed list
+    for (; fxSeen < ev.length; fxSeen++) {
+      const e = ev[fxSeen];
+      if (e.kind === 'quake') { spawnFx('quake', e.x, e.y, (e.mag - 4) / 4); if (e.mag >= 6.5) spawnFx('label', e.x, e.y, 1, `Magnitude ${e.mag.toFixed(1)}`); }
+      else if (e.kind === 'eruption') spawnFx('erupt', e.x, e.y, (e.vei || 3) / 5);
+      else if (e.kind === 'rift') { spawnFx('rift', e.x, e.y, 1.4); spawnFx('label', e.x, e.y, 1, 'A rift opens'); }
+      else if (e.kind === 'suture') { spawnFx('coll', e.x, e.y, 1.4); spawnFx('label', e.x, e.y, 1, 'Continents collide'); }
+      else if (e.kind === 'lip') spawnFx('label', TG.hotspots[0] ? TG.hotspots[0].x * CSZ : W / 2, TG.hotspots[0] ? TG.hotspots[0].y * CSZ : H / 2, 1, 'Flood basalts erupt');
+    }
+    // deep time runs too fast for single quakes to be simulated: show the restless boundaries
+    if (AG.mode === 'deep' && !AG.paused && bead.n) {
+      idleT += dt;
+      while (idleT > 0.12) {
+        idleT -= 0.12;
+        const k = (Math.random() * bead.n) | 0, t = bead.t[k];
+        if (t === 2 && Math.random() < 0.4) spawnFx('erupt', bead.x[k], bead.y[k], 0.35);
+        else if (t !== 2) spawnFx('quake', bead.x[k], bead.y[k], 0.25 + Math.random() * 0.5);
+      }
+    }
+  }
+  function drawTectonics(ox, oy, z, dt, full) {
+    if (tecT < 0 || TG.stepN !== tecT || frameN % 30 === 0) { tecRebuild(); tecT = TG.stepN; }
+    tecEvents(dt);
+    const cz = CSZ * z;
+    if (full) {
+      // plate washes (smoothly upscaled so edges stay soft)
+      ctx.imageSmoothingEnabled = true;
+      ctx.globalAlpha = 0.6;
+      ctx.drawImage(tintC, ox, oy, GW * cz, GH * cz);
+      ctx.globalAlpha = 1;
+      // boundary ribbons: glowing lines whose light flows along them, in four brightness steps
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      const wide = Math.max(5, cz * 0.95), core = Math.max(1.6, cz * 0.2);
+      for (const g of [2, 1, 4, 3]) {
+        const [outer, inner, speed] = LINE[g];
+        if (g === 3) { ctx.setLineDash([Math.max(4, cz * 0.7), Math.max(3, cz * 0.45)]); ctx.lineDashOffset = -tm * 14; } // the two sides slide past
+        for (let bkt = 0; bkt < 4; bkt++) {
+          ctx.beginPath(); let any = false;
+          for (let q = 0; q < seg.n; q++) {
+            const a1 = seg.a[q], b1 = seg.b[q], t = bead.t[a1] === 1 && bead.cont[a1] ? 4 : bead.t[a1];
+            if (t !== g) continue;
+            const ph = (bead.ph[a1] + bead.ph[b1]) / 2, w = 0.5 + 0.5 * Math.sin(tm * speed - ph);
+            if (Math.min(3, (w * 4) | 0) !== bkt) continue;
+            const x1 = ox + bead.x[a1] * z, y1 = oy + bead.y[a1] * z, x2 = ox + bead.x[b1] * z, y2 = oy + bead.y[b1] * z;
+            if ((x1 < -wide && x2 < -wide) || (y1 < -wide && y2 < -wide) || (x1 > cw + wide && x2 > cw + wide) || (y1 > ch + wide && y2 > ch + wide)) continue;
+            ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); any = true;
+          }
+          if (!any) continue;
+          const a = 0.35 + bkt * 0.2;
+          ctx.globalAlpha = a * 0.32; ctx.strokeStyle = outer; ctx.lineWidth = wide; ctx.stroke();
+          ctx.globalAlpha = a * 0.55; ctx.lineWidth = wide * 0.45; ctx.stroke();
+          ctx.globalAlpha = Math.min(1, a + 0.15); ctx.strokeStyle = inner; ctx.lineWidth = core; ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+      // a soft bloom here and there along the hottest boundaries
+      const r = Math.max(8, cz * 1.3);
+      for (let k = 0; k < bead.n; k += 3) {
+        const t = bead.t[k]; if (t === 3) continue;
+        const sx = ox + bead.x[k] * z, sy = oy + bead.y[k] * z;
+        if (sx < -r || sy < -r || sx > cw + r || sy > ch + r) continue;
+        const w = 0.5 + 0.5 * Math.sin(tm * (t === 2 ? 2.6 : 1.7) - bead.ph[k]);
+        ctx.globalAlpha = w * 0.35;
+        ctx.drawImage(t === 2 ? SPR.div : bead.cont[k] ? SPR.coll : SPR.conv, sx - r, sy - r, r * 2, r * 2);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+      // teeth on subduction zones (the overriding plate's side), once they are big enough to read
+      if (cz >= 7) {
+        ctx.fillStyle = 'rgba(120,20,40,0.85)'; ctx.strokeStyle = 'rgba(255,200,210,0.8)'; ctx.lineWidth = 1;
+        const ts = cz * 0.38;
+        for (let k = 0; k < bead.n; k += 2) {
+          if (bead.t[k] !== 1 || bead.cont[k]) continue;
+          const sx = ox + bead.x[k] * z, sy = oy + bead.y[k] * z; if (sx < 0 || sy < 0 || sx > cw || sy > ch) continue;
+          const nx = bead.tx[k], ny = bead.ty[k], px = -ny, py = nx;
+          ctx.beginPath(); ctx.moveTo(sx + px * ts * 0.6, sy + py * ts * 0.6); ctx.lineTo(sx - px * ts * 0.6, sy - py * ts * 0.6); ctx.lineTo(sx + nx * ts, sy + ny * ts); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+      }
+      // plate motion: chevrons streaming the way each plate drifts, with its speed
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const p of TG.plates) {
+        if (!p.alive || p.cells < 12) continue;
+        const sp = Math.hypot(p.vx, p.vy); if (sp < 0.02) continue;
+        const dx = p.vx / sp, dy = p.vy / sp, cx = ox + (p.cx + 0.5) * cz, cy = oy + (p.cy + 0.5) * cz;
+        if (cx < -60 || cy < -60 || cx > cw + 60 || cy > ch + 60) continue;
+        const size = 7 + Math.min(1.2, sp) * 9, span = 26 + sp * 20, hc = AG.hsl(p.hue, 0.7, 0.75);
+        for (let q = 0; q < 3; q++) {
+          const f = (tm * 0.55 + q / 3) % 1, along = (f - 0.5) * span, a = Math.sin(f * Math.PI);
+          const x = cx + dx * along, y = cy + dy * along;
+          ctx.beginPath();
+          ctx.moveTo(x - dx * size + dy * size * 0.8, y - dy * size - dx * size * 0.8);
+          ctx.lineTo(x, y);
+          ctx.lineTo(x - dx * size - dy * size * 0.8, y - dy * size + dx * size * 0.8);
+          ctx.globalAlpha = a * 0.55; ctx.strokeStyle = 'rgba(10,14,24,1)'; ctx.lineWidth = 6; ctx.stroke();
+          ctx.globalAlpha = a; ctx.strokeStyle = `rgb(${hc[0]},${hc[1]},${hc[2]})`; ctx.lineWidth = 3; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        if (cz >= 5) {
+          ctx.font = '600 11px "Alegreya Sans", system-ui, sans-serif'; ctx.textAlign = 'center';
+          const label = `${cmPerYr(p).toFixed(1)} cm/yr`;
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,10,18,0.8)'; ctx.strokeText(label, cx, cy + span / 2 + 16);
+          ctx.fillStyle = 'rgba(240,236,224,0.95)'; ctx.fillText(label, cx, cy + span / 2 + 16);
+        }
+      }
+    }
+    // hotspots: a plume under the crust, pulsing
+    ctx.globalCompositeOperation = 'lighter';
+    for (const hs of TG.hotspots) {
+      const sx = ox + (hs.x + 0.5) * cz, sy = oy + (hs.y + 0.5) * cz, pr = Math.max(6, cz * 1.4) * (0.8 + 0.25 * Math.sin(tm * 2 + hs.x));
+      ctx.globalAlpha = 0.75; ctx.drawImage(SPR.hot, sx - pr, sy - pr, pr * 2, pr * 2);
+      const f = (tm * 0.6 + hs.y * 0.1) % 1;
+      ctx.globalAlpha = (1 - f) * 0.7; ctx.strokeStyle = 'rgba(255,170,80,1)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sx, sy, pr * (0.6 + f * 2.2), 0, Math.PI * 2); ctx.stroke();
+    }
+    // events: quake rings, eruption blooms, rift and collision flares
+    for (let k = fx.length - 1; k >= 0; k--) {
+      const e = fx[k]; e.t += dt;
+      if (e.t >= e.dur) { fx.splice(k, 1); continue; }
+      if (e.kind === 'label') continue;
+      const f = e.t / e.dur, sx = ox + e.x * z, sy = oy + e.y * z;
+      if (sx < -200 || sy < -200 || sx > cw + 200 || sy > ch + 200) continue;
+      if (e.kind === 'quake') {
+        for (let q = 0; q < 3; q++) {
+          const g = f * 1.4 - q * 0.2; if (g <= 0 || g >= 1) continue;
+          ctx.globalAlpha = (1 - g) * (0.5 + e.mag * 0.5); ctx.strokeStyle = 'rgba(255,236,200,1)'; ctx.lineWidth = 1.5 + e.mag;
+          ctx.beginPath(); ctx.arc(sx, sy, (4 + g * (16 + e.mag * 40)) * Math.max(0.6, z / 3), 0, Math.PI * 2); ctx.stroke();
+        }
+      } else {
+        const spr = e.kind === 'erupt' || e.kind === 'rift' ? SPR.div : e.kind === 'coll' ? SPR.coll : SPR.hot;
+        const rr2 = (6 + e.mag * 26) * Math.sin(Math.min(1, f * 2.5) * Math.PI / 2) * Math.max(0.7, z / 2.5);
+        ctx.globalAlpha = (1 - f) * 0.95; ctx.drawImage(spr, sx - rr2, sy - rr2, rr2 * 2, rr2 * 2);
+      }
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  // names of what is happening, over everything else
+  function drawTecLabels(ox, oy, z) {
+    ctx.font = '700 13px "Pixelify Sans", "Courier New", monospace'; ctx.textAlign = 'center';
+    let shown = 0;
+    for (const e of fx) {
+      if (e.kind !== 'label' || shown > 3) continue;
+      const f = e.t / e.dur, a = Math.min(1, f * 6, (1 - f) * 3), sx = ox + e.x * z, sy = oy + e.y * z - 14 - f * 18;
+      if (sx < 0 || sy < 0 || sx > cw || sy > ch) continue;
+      shown++;
+      ctx.globalAlpha = a; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,10,18,0.85)'; ctx.strokeText(e.text, sx, sy);
+      ctx.fillStyle = '#ffe6b0'; ctx.fillText(e.text, sx, sy);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // ------------------------------------------------------------ main frame
   R.frame = function (dt, alpha) {
     const t0 = performance.now();
@@ -911,6 +1136,7 @@
     const V3 = AG.View3D;
     if (V3 && V3.ok) { V3.update(dt); if (V3.active) { frame3D(dt, alpha, t0); return; } }
     const z = c.z, under = R.view === 0;
+    if (snapWanted) { pctx.clearRect(0, 0, W, H); pctx.drawImage(worldC, 0, 0); fade = 1; snapWanted = false; } // keep the last picture to morph from
     const tp = performance.now();
     updateTerrain();
     R.stats.terrainMs = performance.now() - tp;
@@ -925,13 +1151,16 @@
     ctx.fillStyle = under ? '#0b090d' : '#0e2a5a';
     ctx.fillRect(0, 0, cw, ch);
     ctx.drawImage(under ? underC : worldC, ox, oy, W * z, H * z);
-    if (!under && R.overlay !== 'none') ctx.drawImage(borderC, ox, oy, W * z, H * z);
+    if (!under && fade > 0) { ctx.globalAlpha = fade; ctx.drawImage(prevC, ox, oy, W * z, H * z); ctx.globalAlpha = 1; fade = Math.max(0, fade - dt / FADE); }
+    const tecFull = !under && R.overlay === 'plates';
+    if (!under && R.overlay !== 'none' && !tecFull) ctx.drawImage(borderC, ox, oy, W * z, H * z);
+    if (tecFull || (!under && AG.mode === 'deep')) { drawTectonics(ox, oy, z, dt, tecFull); ctx.imageSmoothingEnabled = false; }
 
     // viewport in world cells
     const vx0 = -ox / z - 2, vy0 = -oy / z - 2, vx1 = vx0 + cw / z + 4, vy1 = vy0 + ch / z + 6;
     const s = Math.max(1, Math.round(z / 4)); // integer sprite scale keeps pixels crisp
     const td = performance.now();
-    if (!under) drawDeco(ox, oy, z, vx0, vy0, vx1, vy1);
+    if (!under && !(AG.mode === 'deep' && z < 5)) drawDeco(ox, oy, z, vx0, vy0, vx1, vy1); // deep time: the land's shape, not its trees
     R.stats.decoMs = performance.now() - td;
     if (!under && z >= 3) drawBuildings(ox, oy, z, s, vx0, vy0, vx1, vy1);
     if (!under && R.showTrade) drawRoutes(ox, oy, z);
@@ -975,7 +1204,7 @@
       ctx.globalAlpha = 1;
     }
     ctx.imageSmoothingEnabled = false;
-    if (!under) { weather(dt, ox, oy, z); drawSkyUnitsOver(ox, oy, z, alpha); }
+    if (!under && AG.mode === 'watch') { weather(dt, ox, oy, z); drawSkyUnitsOver(ox, oy, z, alpha); } // no rain streaks while centuries or ages fly by
     drawParticles(ox, oy, z, under, true);
     if (!under) { drawDisasters(ox, oy, z); drawLightning(ox, oy, z); godRays(); }
     if (!under && Sky.flash > 0) { ctx.fillStyle = `rgba(230,236,255,${Sky.flash * 0.35})`; ctx.fillRect(0, 0, cw, ch); }
@@ -983,6 +1212,7 @@
     grade(under);
     R.stats.gradeMs = performance.now() - tg;
     drawLabels(ox, oy, z, under);
+    if (!under && (AG.mode === 'deep' || R.overlay === 'plates')) drawTecLabels(ox, oy, z);
     drawSelection(ox, oy, z, alpha);
     drawCursor(ox, oy, z);
     if (frameN % 12 === 0) drawMinimap();

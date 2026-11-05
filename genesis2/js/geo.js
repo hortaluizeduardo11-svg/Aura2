@@ -218,9 +218,10 @@
     platesCensus();
     for (const p of Geo.plates) {
       let a, sp;
-      if (p.cont > 0.25) { a = Math.atan2(p.cy - scy, p.cx - scx) + (rr() - 0.5) * 0.7; sp = 0.35 + rr() * 0.35; }
-      else { a = rr() * Math.PI * 2; sp = 0.25 + rr() * 0.6; }
-      p.vx = p.tx = Math.cos(a) * sp; p.vy = p.ty = Math.sin(a) * sp;
+      if (p.cont > 0.25) { a = Math.atan2(p.cy - scy, p.cx - scx) + (rr() - 0.5) * 0.7; sp = 0.22 + rr() * 0.2; }
+      else { a = rr() * Math.PI * 2; sp = 0.15 + rr() * 0.35; }
+      // the continent first stretches (a slow rifting phase), then the pieces gather speed
+      p.tx = Math.cos(a) * sp; p.ty = Math.sin(a) * sp; p.vx = p.tx * 0.12; p.vy = p.ty * 0.12;
     }
     Geo.hotspots = [];
     for (let k = 0, n = 3 + ((rr() * 3) | 0); k < n; k++) Geo.hotspots.push({ x: 4 + rr() * (GW - 8), y: 4 + rr() * (GH - 8), power: 0.6 + rr() * 0.6 });
@@ -288,7 +289,7 @@
     if (Geo.scripted) return;
     for (const p of Geo.plates) {
       if (!p.alive) continue;
-      if (rr() < dt / 40) { const a = rr() * Math.PI * 2, sp = 0.2 + rr() * (p.cont > 0.25 ? 0.45 : 0.7); p.tx = Math.cos(a) * sp; p.ty = Math.sin(a) * sp; }
+      if (rr() < dt / 40) { const a = rr() * Math.PI * 2, sp = 0.12 + rr() * (p.cont > 0.25 ? 0.3 : 0.48); p.tx = Math.cos(a) * sp; p.ty = Math.sin(a) * sp; }
       if (p.cont > 0.08) {
         if (p.edge[0] > 1 && p.tx < 0.1) { p.tx = 0.25 + rr() * 0.3; p.vx = Math.max(p.vx, 0); }
         if (p.edge[1] > 1 && p.tx > -0.1) { p.tx = -0.25 - rr() * 0.3; p.vx = Math.min(p.vx, 0); }
@@ -474,6 +475,7 @@
     keep.vy = (keep.vy * keep.cells + gone.vy * gone.cells) / (keep.cells + gone.cells);
     keep.tx = keep.vx; keep.ty = keep.vy; gone.alive = false; gone.cells = 0;
     Geo.sutures++;
+    Geo.events.push({ kind: 'suture', myr: Geo.myr, x: ((a.cx + b.cx) / 2) * CS, y: ((a.cy + b.cy) / 2) * CS });
   }
 
   // ------------------------------------------------------------ climate

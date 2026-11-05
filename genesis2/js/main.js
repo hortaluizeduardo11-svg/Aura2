@@ -43,7 +43,9 @@
     R.overlay = 'plates'; const o = document.querySelector('#overlay'); if (o) o.value = 'plates';
     R.bordersDirty = true;
     AG.creating = false;
+    AG.deepHold = 3; // a moment to see the newborn continent before the plates start to move
     AG.UI.syncSpeed();
+    AG.UI.toast('Year 0: a new world is born, one great continent in a world ocean. The plates begin to move…');
   };
 
   // When the Dawn comes: watch the first band at its fire, speed 1.
@@ -134,13 +136,14 @@
       if (AG.mode === 'deep') {
         if (!AG.paused || AG.fastDawn) {
           if (AG.fastDawn) { const y0 = Geo.myr; Sim.skipDeep(60); myr += Geo.myr - y0; }
+          else if (AG.deepHold > 0) AG.deepHold -= dt / 1000;
           else {
             acc += (dt / 1000) * DEEP_MYPS;
             let n = 0;
             while (acc >= Sim.DEEP_DT && n < 8) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; n++; if (performance.now() - t0 > BUDGET_MS) break; }
             if (acc > Sim.DEEP_DT * 4) acc = Sim.DEEP_DT * 4;
           }
-          if (AG.mode === 'deep' && now - lastPaint > 180) { Geo.paintFine(); AG.World.dirty.fill(1); R.bordersDirty = true; lastPaint = now; }
+          if (AG.mode === 'deep' && now - lastPaint > 250) { R.deepRepaint(); Geo.paintFine(); AG.World.dirty.fill(1); R.bordersDirty = true; lastPaint = now; }
         }
         if (AG.mode !== 'deep') { acc = 0; if (AG.Demos._after) { const f = AG.Demos._after; AG.Demos._after = null; f(); } }
       } else if (AG.mode === 'watch') {

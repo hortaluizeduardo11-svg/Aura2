@@ -255,10 +255,12 @@ test('technology: prerequisites, conditions and bans gate every invention', () =
   for (const p of pot.preIds) c.tech[p] = 1;
   assert(Tech.chance(c, pot, ctx) === 0 && Tech.learn(c, 'pottery', 'god') === false, 'a banned invention never appears');
   Tech.banned.delete('pottery');
-  // and in a running history, no invention is ever first found before its prerequisites
-  for (let y = 0; y < 1500; y += 5) AG.Sim.yearStep(5);
+  // and in a running history (a fresh copy of the world, untouched by the probes above), no
+  // invention is ever first found before its prerequisites
+  const B = fromSave(dawnSave(7, W, H), W, H), TB = B.Tech;
+  for (let y = 0; y < 1500; y += 5) B.Sim.yearStep(5);
   let checked = 0;
-  for (const t of Tech.LIST) { const f = Tech.firsts[t.key]; if (!f) continue; for (const p of t.pre) { if (Tech.STARTING.includes(p)) continue; const fp = Tech.firsts[p]; assert(fp && fp.year <= f.year, `${t.name} (${f.year}) came before its prerequisite ${p}`); } checked++; }
+  for (const t of TB.LIST) { const f = TB.firsts[t.key]; if (!f) continue; for (const p of t.pre) { if (TB.STARTING.includes(p)) continue; const fp = TB.firsts[p]; assert(fp && fp.year <= f.year, `${t.name} (${f.year}) came before its prerequisite ${p}`); } checked++; }
   return `${gated} gated at the Dawn; ${checked} first discoveries in 1,500 years all followed their prerequisites`;
 });
 

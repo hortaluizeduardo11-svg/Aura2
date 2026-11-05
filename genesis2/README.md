@@ -1,9 +1,10 @@
 # AURA: Genesis 2
 
-A god sandbox of deep time that runs in the browser. The world begins 250 million years ago as
-one supercontinent. Plates drift, rift and collide, and evolving species spread and split as the
-land moves. At the Dawn the cleverest primates become people, and from then on history runs on
-its own:
+A god sandbox of deep time that runs in the browser. Every world is born in Year 0 as one
+unified supercontinent of its own shape, and its calendar counts forward from there: Year 1, 2,
+3, through hundreds of millions of years. Plates drift, rift and collide, and evolving species
+spread and split as the land moves. When a primate lineage has evolved the minds for it (a
+different year in every world), people appear, and from then on history runs on its own:
 - hunter-gatherer bands spread, split and marry between camps
 - languages drift apart
 - wherever the land and climate allow, and only there, farming, metal, writing and states
@@ -31,7 +32,7 @@ geology and evolution models, the invention graph, LOD, update order and the per
 
 | Control | Clock | What happens |
 |---|---|---|
-| **Ages** | deep time, ~6 million years a second | Plates drift; species radiate and go extinct. Use the Plates, Fault strain and Rock overlays. |
+| **Ages** | deep time, ~6 million years a second | Plates drift; species radiate and go extinct. The Plates overlay shows glowing boundaries (rifts, subduction with teeth, collisions, sliding faults), each plate's drift in cm/yr, hotspots, quake rings and named rifts and collisions, and the map morphs smoothly as the plates move. |
 | **Skip to the Dawn** | deep time, fast | The rest of deep time runs at once, and the camera lands on the first band at its fire. |
 | **1× · 4× · 16×** | watch | People and animals near the camera act moment to moment: work trips, meals, courtship, fights, hunting. You can possess one of them. |
 | **Centuries · Millennia** | history | Everyone lives on their records in year steps. Bands become villages, chiefdoms rise and fall, the sea creeps up the coast. |
@@ -178,9 +179,12 @@ This is a prototype, and these are the honest gaps:
   - Languages change by regular sound laws on a small core vocabulary, and names come from
     their phonology.
   - Religions are built from a fixed vocabulary of domains.
-- **Grounded, not exact.**
-  - Rates (invention difficulty, mortality, sea-level timing, orbital cycles) are tuned for play
-    and the right order of events, not calibrated to real dates.
+- **A plausible world, not Earth.**
+  - The aim is how life and humanity could plausibly evolve over time in a simulated world, not
+    a replay of Earth's dates or geography. Rates (invention difficulty, mortality, sea-level
+    timing, orbital cycles) are tuned for play and a believable order of events.
+  - The "brain drive" that brings the Dawn is a simple rising payoff for primate intelligence,
+    not a model of brain evolution.
   - The orbital cycle is a stylised 100k/41k/23k-year sum, and farming tends to arrive around
     4,000–7,000 years after the Dawn.
 - **2D first.**

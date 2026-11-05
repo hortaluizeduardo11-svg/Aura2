@@ -298,6 +298,8 @@
     else if (dx || dy) R.pan(-dx * dt * 700, -dy * dt * 700);
     if (frameN % 10 === 0) hud();
     if (frameN % 8 === 0 && R.hover.on) $('#hoverinfo').innerHTML = cellInfo(R.hover.x | 0, R.hover.y | 0);
+    const leg = $('#tlegend'), showLeg = R.overlay === 'plates' && !R.is3D() && R.view !== 0;
+    if (leg.hidden === showLeg) leg.hidden = !showLeg;
     const comp = $('#compass'), in3d = R.is3D();
     if (comp.hidden === in3d) comp.hidden = !in3d;
     if (in3d) comp.firstElementChild.style.transform = `rotate(${(AG.View3D.yaw * 180) / Math.PI}deg)`;
