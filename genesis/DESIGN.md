@@ -335,12 +335,30 @@ blizzards"*), and how the renderer meets it:
       palette (without baked shading, since it is lit for real), with a 16×16 detail texture
       that gives each face crisp pixels up close
     - translucent water and unlit glowing lava, packed into compact instance lists
-    - instanced pines, broadleaf, jungle and dead trees, rocks and cacti
-    - a hand-built model for each of the 11 building types: windmill sails turn, windows glow at
-      night, and construction sites show scaffolding with walls rising
-    - instanced figures for every creature and vehicle
-  - **Light and air:** a sun with soft shadows follows the day, and sky and fog colours shift
-    from dawn to night.
+    - instanced pines (stacked open cones), clustered broadleaf and jungle crowns, dead trees with
+      branches, rocks, cacti with arms, bushes and flowers, all recoloured by season
+    - a detailed model for each of the 11 building types, merged from dozens of parts into one
+      mesh per type, realm colour and variant (cached). Houses have timber frames, gable roofs,
+      shutters, flower boxes and smoking chimneys. Keeps have curtain walls with merlons, a donjon,
+      conical corner towers with gold finials, a gatehouse and banners. Temples have colonnades and
+      braziers, windmills have lattice sails that turn, and farms have furrows, fences, a scarecrow,
+      hay bales and crops that grow. Markets get striped awnings, and mines get rails and an ore
+      cart. Windows glow at night, and construction sites show scaffolding with walls rising.
+    - instanced figures for every creature and vehicle, drawn 1.4× life size so they read at a
+      glance: jointed people with heads and hats (crowns, helmets, hoods), spears and cargo, deer
+      with antlers, wyrms with flapping wings, ships with cabins, sails and pennants, and ox carts
+  - **Stylised shading:** buildings, flora and figures use a four-band cel (toon) ramp and
+    per-vertex colours, so each model is a single draw call with flat, painterly light.
+  - **Light and air:** a sun with soft shadows follows the day. A gradient sky and the fog shift
+    from dawn to night, and turn grey under storms, where the light dims and rain haze closes
+    in. Lightning lights the whole scene for a moment.
+  - **Weather:** clouds are low-poly puffs on a lattice that scrolls with the 2D cloud field, so
+    they drift with the wind, cast real shadows and line up with the storms on the flat map.
+    Storm clouds are darker and hang lower. Around the point you are looking at, the cloud deck
+    parts, so a storm frames the view instead of hiding it. The deck fades as the camera sinks
+    toward it. Rain streaks, snowflakes and green acid rain fall only in the patch around the
+    camera, so the closer you zoom the denser it gets. Each drop respawns at the top when it
+    lands. Lightning bolts are jagged, unlit, flickering segments.
   - **Overlays:** city plates, selection rings and the brush cursor are projected from 3D onto
     the 2D overlay canvas. Picking ray-marches the height field, so every god tool works while
     tilted.
@@ -408,7 +426,9 @@ What makes that possible:
 9. **3D window, not the whole world.** The WebGL scene only holds the cells around the camera.
    It is rebuilt when the camera drifts a fifth of the way out, and otherwise refreshed a band of
    rows per frame with partial buffer uploads. Flora rebuilds every few seconds and buildings
-   sync every 0.4 s.
+   sync every 0.4 s. Building models are merged and cached per type, realm and variant, the
+   cloud lattice is resampled every 0.4 s, and rain is a single line-segment buffer of at most
+   3,600 drops. Terrain columns have no bottom faces.
 10. **Fixed timestep with a budget.** The sim runs at 20 ticks/s × speed, but never more than
    14 ms per frame. If the requested speed can't be met, the HUD says "sim at capacity"
    rather than stuttering. Rendering interpolates unit positions between ticks.

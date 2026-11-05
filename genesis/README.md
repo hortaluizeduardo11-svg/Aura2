@@ -21,10 +21,22 @@ The full system design and performance plan is in [DESIGN.md](DESIGN.md).
 
 - **3D close-up:** zoom up to 48×. Past 8× the camera glides and tilts, map-app style, into a
   real 3D view (three.js / WebGL) of the area around you. You get voxel terrain, water, glowing
-  lava and 3D trees, and every building is its own model: keeps with corner towers and banners,
-  houses with chimneys and lit windows, temples, windmills with turning sails, and farms with
-  crop rows. People, animals, carts, ships and wyrms move about as 3D figures under a sun that
-  casts shadows. Right-drag (or twist two fingers) to turn and tilt; tap the compass to face north.
+  lava and cel-shaded, low-poly trees, bushes and flowers. Every building is a detailed,
+  stylized model:
+  - keeps with curtain walls, towers, a gatehouse and banners
+  - timber-framed houses with smoking chimneys and lit windows
+  - colonnaded temples
+  - windmills with turning sails
+  - farms with scarecrows and growing crops
+  - markets with striped awnings
+  - mines with ore carts
+
+  People wear crowns, helmets and hoods. Animals, ox carts, ships and wyrms move about under a
+  sun that casts shadows.
+- **3D weather:** clouds drift overhead and cast shadows, and they part around the spot you're
+  looking at. Rain, snow and acid rain fall around you, thicker the closer you zoom. Lightning
+  forks down from the storm, the sky goes grey and haze rolls in. Right-drag (or twist two
+  fingers) to turn and tilt; tap the compass to face north.
 - **16-bit HD look:** terraced hills, depth-banded water with shoreline foam and sun glints,
   hand-drawn trees, rocks, flowers and cacti that change with the seasons, outlined sprites with
   sun-cast shadows, golden-hour colour grading and glowing nights.
