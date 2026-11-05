@@ -123,7 +123,7 @@
         while (q.length) { const a = q.pop(); for (const b of list) if (!group.has(b.id) && contactOf(a, b)) { group.set(b.id, g); q.push(b); } }
         g++;
       }
-      if (g < 2) { for (const c of list) c.langIso = 0; continue; }
+      if (g < 2) { distant(lid, list, dy); continue; }
       const size = new Array(g).fill(0);
       for (const c of list) size[group.get(c.id)] += c.members.length;
       const main = size.indexOf(Math.max(...size));
@@ -142,6 +142,27 @@
       }
     }
   };
+  // A dialect continuum: even without a break in contact, the far ends of a widespread language
+  // drift apart. Communities far from its speakers' centre for centuries become a daughter tongue.
+  function distant(lid, list, dy) {
+    let sx = 0, sy = 0, n = 0;
+    for (const c of list) { sx += c.x * c.members.length; sy += c.y * c.members.length; n += c.members.length; }
+    if (!n) return;
+    const cx = sx / n, cy = sy / n, far = [];
+    for (const c of list) {
+      const d = Math.hypot(c.x - cx, c.y - cy);
+      if (d > 150) { c.langIso = (c.langIso || 0) + dy; if (c.langIso > 400) far.push(c); } else c.langIso = 0;
+    }
+    if (far.length < 2) return;
+    // the far speakers on one side (the side of the farthest) become one daughter language
+    far.sort((a, b) => Math.hypot(b.x - cx, b.y - cy) - Math.hypot(a.x - cx, a.y - cy));
+    const f0 = far[0], ax = f0.x - cx, ay = f0.y - cy;
+    const side = far.filter((c) => (c.x - cx) * ax + (c.y - cy) * ay > 0);
+    const D = Lang.create(Lang.list[lid], Math.floor(AG.Geo.year));
+    for (const c of side) { c.lang = D.id; c.langIso = 0; }
+    Lang.splits++;
+    if (AG.History) AG.History.event('language', `At the far edge of the ${Lang.list[lid].name}-speaking lands, the speech of ${side.map((c) => c.name).slice(0, 3).join(', ')} has become a tongue of its own, ${D.name}`, { x: f0.x, y: f0.y, cause: 'distance (a dialect continuum)', lang: D.id });
+  }
 
   // Shared meanings with similar words (first two letters) out of the core list.
   Lang.similarity = function (a, b) {

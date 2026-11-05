@@ -488,15 +488,70 @@
         for (const x of [-0.75, 0.75]) { k.cyl(0x4e3a2a, x, 0.42, 1.32, 0.15, 0.34, 0.15); k.glow(0xff8a2c, x, 0.76, 1.32, 0.13, 0.1, 0.13); }
         break;
       }
-      case BT.WINDMILL: {
-        k.cyl(STONE2, 0, 0, 0, 1.35, 0.3, 1.35);
-        k.taper(0xeee8da, 0, 0.3, 0, 1.15, 2.2, 1.15);
-        k.cyl(BEAM, 0, 1.05, 0, 1.06, 0.06, 1.06);
-        k.box(DOOR, 0, 0.3, 0.55, 0.3, 0.5, 0.06);
-        k.glow(WIN, 0, 1.35, 0.47, 0.16, 0.22, 0.04); k.glow(WIN, 0.42, 1.0, 0, 0.04, 0.2, 0.14);
-        k.cone(roof, 0, 2.48, 0, 1.0, 0.68, 1.0);
-        k.ico(GOLD, 0, 3.2, 0, 0.14, 0.14, 0.14);
-        k.box(BEAM, 0, 2.05, 0.4, 0.14, 0.14, 0.3);
+      case BT.GRANARY: { // a raised store: clay silos on stone stilts, thatched
+        k.box(STONE2, 0, 0, 0, 1.7, 0.12, 1.5);
+        for (const sx of [-0.45, 0.45]) {
+          for (const dz of [-0.3, 0.3]) k.box(STONE, sx + (dz > 0 ? 0.2 : -0.2), 0.12, dz, 0.14, 0.32, 0.14);
+          k.cyl(0xc9a77a, sx, 0.44, 0, 0.78, 0.9, 0.78);
+          k.cyl(shade(0xc9a77a, 0.82), sx, 0.78, 0, 0.8, 0.05, 0.8);
+          k.cone(0xc8a660, sx, 1.34, 0, 0.92, 0.62, 0.92);
+          k.box(DOOR, sx, 0.62, 0.38, 0.2, 0.26, 0.03);
+        }
+        k.box(BEAM, 0, 0.12, 0.62, 0.08, 0.6, 0.08, 0, 0.5);
+        break;
+      }
+      case BT.TENT: { // hide tent on poles
+        const hide = [0xb08a62, 0xa47c55, 0xbf9a70][v];
+        k.cone(hide, 0, 0, 0, 0.9, 0.95, 0.9);
+        for (const a of [0.4, 2.2, 4.1]) k.box(BEAM, Math.sin(a) * 0.08, 0.85, Math.cos(a) * 0.08, 0.04, 0.3, 0.04, a, 0.3);
+        k.box(DOOR, 0, 0, 0.36, 0.22, 0.38, 0.03);
+        break;
+      }
+      case BT.HEARTH: { // ring of stones and a fire
+        for (let q = 0; q < 8; q++) { const a = (q / 8) * Math.PI * 2; k.ico(STONE, Math.cos(a) * 0.32, 0.05, Math.sin(a) * 0.32, 0.16, 0.12, 0.16); }
+        for (const a of [0, 1.1, 2.2]) k.box(0x4a3020, 0, 0.06, 0, 0.42, 0.06, 0.06, a);
+        k.glow(0xff9a3c, 0, 0.1, 0, 0.18, 0.22, 0.18); k.glow(0xffd27a, 0, 0.22, 0, 0.09, 0.16, 0.09);
+        smokes.push([0, 0.5, 0]);
+        break;
+      }
+      case BT.HUT: { // round wattle-and-daub hut with a thatched cone
+        k.cyl(0xb59a74, 0, 0, 0, 1.45, 0.75, 1.45);
+        k.cyl(shade(0xb59a74, 0.8), 0, 0.7, 0, 1.5, 0.06, 1.5);
+        k.cone(0xc9a85e, 0, 0.74, 0, 1.75, 0.95, 1.75);
+        k.box(DOOR, 0, 0, 0.7, 0.3, 0.5, 0.04);
+        smokes.push([0, 1.75, 0]);
+        break;
+      }
+      case BT.PEN: { // a fold of stakes and rails
+        for (let q = 0; q < 12; q++) { const a = (q / 12) * Math.PI * 2; k.box(BEAM, Math.cos(a) * 1.3, 0, Math.sin(a) * 1.3, 0.07, 0.5, 0.07); }
+        for (let q = 0; q < 12; q++) { const a = ((q + 0.5) / 12) * Math.PI * 2; for (const y of [0.18, 0.38]) k.box(WOOD, Math.cos(a) * 1.3, y, Math.sin(a) * 1.3, 0.04, 0.04, 0.7, -a); }
+        k.box(0x8a6a3a, 0.5, 0, -0.4, 0.5, 0.18, 0.3); // trough
+        break;
+      }
+      case BT.MEGALITH: { // a stone circle with a trilithon
+        for (let q = 0; q < 10; q++) { const a = (q / 10) * Math.PI * 2; k.box(q % 2 ? STONE : 0x8e8a84, Math.cos(a) * 1.25, 0, Math.sin(a) * 1.25, 0.26, 1.0 + (q % 3) * 0.12, 0.18, -a); }
+        for (const sx of [-0.32, 0.32]) k.box(0x8e8a84, sx, 0, 0, 0.26, 1.3, 0.24);
+        k.box(STONE, 0, 1.3, 0, 0.95, 0.2, 0.28);
+        k.box(0x7f7a73, 0, 0, 0.55, 0.5, 0.16, 0.3); // altar stone
+        break;
+      }
+      case BT.SHRINE: { // a small ancestor shrine
+        k.box(STONE2, 0, 0, 0, 0.8, 0.12, 0.8);
+        k.box(0xd8c9a8, 0, 0.12, 0, 0.5, 0.5, 0.5);
+        k.prism(roof, 0, 0.62, 0, 0.7, 0.32, 0.66);
+        k.glow(0xffc46b, 0, 0.18, 0.26, 0.16, 0.22, 0.02);
+        break;
+      }
+      case BT.HALL: { // a long timber hall for the headman's feasts
+        k.box(STONE2, 0, 0, 0, 2.8, 0.12, 1.8);
+        k.box(0x8a6440, 0, 0.12, 0, 2.6, 0.85, 1.5);
+        for (const sx of [-1.25, -0.4, 0.4, 1.25]) for (const sz of [-0.72, 0.72]) k.box(BEAM, sx, 0.12, sz, 0.1, 0.85, 0.1);
+        k.prism(0xb8964e, 0, 0.97, 0, 2.95, 1.0, 1.9);
+        for (const sx of [-1.38, 1.38]) { k.box(BEAM, sx, 1.7, 0, 0.06, 0.4, 0.06, 0, 0.5); k.box(BEAM, sx, 1.7, 0, 0.06, 0.4, 0.06, 0, -0.5); }
+        k.box(DOOR, 0, 0.12, 0.76, 0.4, 0.6, 0.03);
+        k.box(flagC, 0.55, 0.5, 0.77, 0.36, 0.26, 0.02);
+        k.glow(WIN, -0.7, 0.45, 0.76, 0.2, 0.14, 0.02);
+        smokes.push([0, 2.0, 0]);
         break;
       }
       case BT.TOWER: {
@@ -642,12 +697,8 @@
     const base = new THREE.Mesh(kit.base, toonV); base.receiveShadow = true; g.add(base);
     if (kit.glow) g.add(new THREE.Mesh(kit.glow, glowV));
     g.userData = { kd: b.kd, smoke: kit.smoke };
-    if (b.type === BT.WINDMILL) {
-      const blades = new THREE.Mesh(bladeGeo(), toonV); blades.position.set(0, 2.12, 0.58); blades.castShadow = true;
-      g.add(blades); g.userData.blades = blades;
-    }
     if (b.type === BT.FARM) { const crops = new THREE.Mesh(cropGeo(), cropMat(b.growth)); crops.castShadow = true; g.add(crops); g.userData.crops = crops; }
-    if (b.type === BT.HOUSE || b.type === BT.WALL) g.rotation.y = ((b.id >>> 2) % 4) * (Math.PI / 2);
+    if (b.type === BT.HOUSE || b.type === BT.WALL || b.type === BT.TENT || b.type === BT.HUT || b.type === BT.HALL || b.type === BT.SHRINE) g.rotation.y = ((b.id >>> 2) % 4) * (Math.PI / 2);
     return g;
   }
   function syncBuildings() {

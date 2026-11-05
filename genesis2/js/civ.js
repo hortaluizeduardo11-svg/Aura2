@@ -26,7 +26,7 @@
   Civ.AGENT_YIELD = AGENT_YIELD;
   const year = () => AG.Geo.year;
 
-  Civ.resetFree = () => { freeB.length = 0; for (const b of Civ.buildings) if (b && !b.alive) freeB.push(b.id); };
+  Civ.resetFree = () => { freeB.length = 0; for (let k = Civ.buildings.length - 1; k >= 0; k--) { const b = Civ.buildings[k]; if (b && !b.alive) freeB.push(b.id); } };
   Civ.reset = function () {
     freeB.length = 0;
     Civ.kingdoms.length = 0; Civ.cities.length = 0; Civ.buildings.length = 0; Civ.religions.length = 0;
@@ -213,7 +213,7 @@
       default: return 0;
     }
   };
-  const FOOD_JOBS = [J.GATHER, J.HUNT, J.FISH, J.FARM, J.HERD];
+  const FOOD_JOBS = (Civ.FOOD_JOBS = [J.GATHER, J.HUNT, J.FISH, J.FARM, J.HERD]);
   const RKEY = ['', 'forage', 'farm', '', '', '', '', '', '', 'hunt', 'fish', 'herd'];
   const capOf = (cap, j) => (j === J.GATHER ? cap.forage : j === J.HUNT ? cap.hunt : j === J.FISH ? cap.fish : j === J.FARM ? cap.farm : cap.herd);
 
@@ -301,7 +301,15 @@
         c.metal += (c.jobs[J.MINE] || 0) * (Tech.knows(c, 'copper') ? 3 : 0) * dy;
         c.goods += (c.jobs[J.CRAFT] || 0) * 4 * dy;
       }
-    } else prod = c.recentProd || 0;
+    } else {
+      // embodied: the same model, nudged by how the watched workers actually did (their trips),
+      // so a community eats alike whether or not the camera is on it
+      let model = 0;
+      if (c.jobs) for (const j of FOOD_JOBS) if (c.jobs[j]) model += c.jobs[j] * Civ.yieldPerYear(c, j, null);
+      const seen = c.recentProd === undefined ? model : c.recentProd;
+      prod = model * AG.clamp(0.8 + 0.4 * (seen / Math.max(0.5, model)), 0.8, 1.2);
+      c.food += prod * dy;
+    }
     c.food -= need * dy;
     const keep = Tech.knows(c, 'granaries') ? 0.88 : Tech.knows(c, 'pottery') ? 0.7 : 0.45; // what survives a year in store
     if (c.food > 0) c.food *= Math.pow(keep, dy); else c.food *= 0.2;
@@ -564,7 +572,7 @@
       Wd.dirty[Wd.chunkOfIdx(i)] = 1;
     }
     if (!quiet) AG.FX.burst(b.cx, b.cy, 'debris', 6 + b.w * b.h);
-    freeB.push(id); // the slot is reused by the next building
+    freeB.push(id); freeB.sort((a, b) => b - a); // the lowest free slot is reused next (the same order after a reload)
     const c = Civ.cities[b.city];
     if (c) {
       const p = c.buildings.indexOf(id); if (p >= 0) c.buildings.splice(p, 1);
@@ -877,7 +885,7 @@
     let horses = false;
     for (const sp of Life.byArch(Life.ARCH.GRAZER)) { const R = sp.regions.get(gameRegion(c)); if (R && R.mu[Life.L.SPEED] > 160 && R.mu[Life.L.SIZE] > 140 && R.mu[Life.L.BOLD] < 140) horses = true; }
     return {
-      pop: ps.length, sedentary: c.sedentary, res: s.res, tradeRes: c.tradeRes, cereal: s.cereal / Math.max(1, s.cells) * 6, water: c.water, coast: c.coastal, river: c.river, forest: s.forest / Math.max(1, s.cells),
+      pop: ps.length, sedentary: c.sedentary, farming: Tech.knows(c, 'cultivation'), res: s.res, tradeRes: c.tradeRes, cereal: s.cereal / Math.max(1, s.cells) * 6, water: c.water, coast: c.coastal, river: c.river, forest: s.forest / Math.max(1, s.cells),
       stone: s.stone > 20, cold: s.temp < 0.28, wolves, domesticable: !!dom, domesticableName: dom ? dom.common : '', horses,
       contacts: c.contacts.size, gov: k ? k.gov : 0, war: k ? k.atWar : false, deaths: c.stats.deaths, stable: AG.Geo.climate.anomaly > -0.065 && AG.Geo.climate.aerosol < 0.02, // a warm, settled climate
       innovation: ni ? inno / ni : 0.5, stability: k ? 0.6 + k.stability * 0.6 : 1, maxSkill, visible: c.materialized, inspired: c.inspired > year(),
@@ -913,8 +921,8 @@
     // government transitions
     const sedCap = cap && cap.sedentary;
     if (k.gov === 0 && k.cities.length >= 3) setGov(k, 1, 'kinship among growing bands');
-    else if (k.gov === 1 && sedCap && pop >= 330 && (k.inequality >= 0.22 || k.atWar)) setGov(k, 2, k.atWar ? 'war called for a war leader' : 'surplus and rank made a chief');
-    else if (k.gov === 2 && pop >= 1100 && cap && cap.members.length >= 250 && (Tech.knows(cap, 'writing') || Tech.knows(cap, 'monuments') || k.cities.length >= 6)) setGov(k, 3, Tech.knows(cap, 'writing') ? 'scribes and law bind the towns into a state' : 'the chief became a king');
+    else if (k.gov === 1 && sedCap && pop >= 260 && (k.inequality >= 0.2 || k.atWar)) setGov(k, 2, k.atWar ? 'war called for a war leader' : 'surplus and rank made a chief');
+    else if (k.gov === 2 && pop >= 700 && cap && cap.members.length >= 170 && (Tech.knows(cap, 'writing') || Tech.knows(cap, 'monuments') || k.cities.length >= 5)) setGov(k, 3, Tech.knows(cap, 'writing') ? 'scribes and law bind the towns into a state' : 'the chief became a king');
     if (k.stability < -0.15 && k.cities.length >= 2 && (famine || k.atWar || (k.unrest || 0) > 0.2) && rnd() < dy * 0.2) collapse(k);
     else if (k.gov <= 1 && k.cities.length > 8 && rnd() < dy * 0.05) { // a sprawling tribe drifts apart
       let far = null, fd = 0; for (const cid of k.cities) { const c = Civ.cities[cid]; const d = cap ? dist2(c.x, c.y, cap.x, cap.y) : 0; if (cid !== k.capital && d > fd) { fd = d; far = c; } }
@@ -1034,6 +1042,9 @@
     People.remember(mover, MK.EXILE, { v: 0.1, s: 0.4, d: home ? home.name : '' });
   }
   Civ.contactOf = (a, b) => (a.contacts.get(b.id) || 0) > 0.15;
+  // Speech stays one language only through frequent talk between neighbours: a dialect chain
+  // breaks where contact thins out or the distance grows too long for regular visits.
+  Civ.speechLink = (a, b) => (a.contacts.get(b.id) || 0) > 0.3 && dist2(a.x, a.y, b.x, b.y) < 70 * 70;
 
   // ============================================================ LOD
   // Near the camera every person is a body; far away they live on their records.
@@ -1145,17 +1156,23 @@
   // ============================================================ clocks
   // History mode: dy years for everything.
   Civ.yearStep = function (dy) {
-    const t0 = AG.now();
-    const cs = Civ.cities.filter((c) => c.alive);
+    const cs = Civ.yearBegin();
     for (const c of cs) Civ.communityYear(c, dy);
-    for (const c of cs) if (c.alive) { const ctx = Civ.techContext(c); Tech.yearStep(c, ctx, dy); }
+    for (const c of cs) Civ.yearTech(c, dy);
+    Civ.yearEnd(dy);
+  };
+  // The same step in three parts, so the browser can spread one step over several frames
+  // (sim.js); the order of work is identical either way.
+  Civ.yearBegin = function () { Civ._t0 = AG.now(); Civ._ms = 0; return Civ.cities.filter((c) => c.alive); };
+  Civ.yearTech = function (c, dy) { if (c.alive) { const ctx = Civ.techContext(c); Tech.yearStep(c, ctx, dy); } };
+  Civ.yearEnd = function (dy) {
     contacts(dy);
     for (const k of Civ.kingdoms) if (k.alive) polityYear(k, dy);
     AG.War.yearStep(dy);
-    if (Math.floor(year() / 25) !== Math.floor((year() - dy) / 25)) AG.Lang.checkSplits(Civ.cities, Civ.contactOf, 25);
+    if (Math.floor(year() / 25) !== Math.floor((year() - dy) / 25)) AG.Lang.checkSplits(Civ.cities, Civ.speechLink, 25);
     AG.Lang.yearStep(dy);
     if (Civ.recomputeBordersSoon || Math.floor(year() / 10) !== Math.floor((year() - dy) / 10)) Civ.recomputeBorders();
-    Civ.stats.ms = Civ.stats.ms * 0.9 + (AG.now() - t0) * 0.1;
+    Civ.stats.ms = Civ.stats.ms * 0.9 + (AG.now() - Civ._t0) * 0.1;
   };
   // Watch mode: the same yearly processes in slices, plus LOD and the embodied systems.
   Civ.tick = function () {
@@ -1171,11 +1188,11 @@
     }
     if (t % 120 === 60) contacts(120 / Y);
     for (const k of Civ.kingdoms) if (k.alive && (k.id * 11 + t) % 240 === 0) polityYear(k, 240 / Y);
-    if (t % 240 === 120) { AG.Lang.yearStep(240 / Y); if (t % (240 * 25) === 120) AG.Lang.checkSplits(Civ.cities, Civ.contactOf, 25 * 240 / Y); }
+    if (t % 240 === 120) { AG.Lang.yearStep(240 / Y); if (t % (240 * 25) === 120) AG.Lang.checkSplits(Civ.cities, Civ.speechLink, 25 * 240 / Y); }
     if (t % 30 === 0) Civ.lod();
     if (t % 40 === 0 || Civ.recomputeBordersSoon) Civ.recomputeBorders();
     AG.War.tick();
   };
   // Embodied workers credit food like this (scaled so the expected rate matches the model).
-  Civ.creditFood = function (c, amount) { c.food += amount; c.prodAcc += amount; };
+  Civ.creditFood = function (c, amount) { c.prodAcc += amount; }; // the trips' measure of effort (economy() pays the food)
 })();

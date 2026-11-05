@@ -21,6 +21,7 @@
   // ------------------------------------------------------------ events
   History.event = function (kind, text, o) {
     o = o || {};
+    text = text.replace(/\b([Tt]he) the\b/g, '$1'); // polity names that already begin with 'the'
     const e = { id: History.nextId++, year: year(), tick: AG.tick, kind, text, x: o.x === undefined ? -1 : o.x, y: o.y === undefined ? -1 : o.y, cause: o.cause || '', polity: o.polity === undefined ? -1 : o.polity, comm: o.comm === undefined ? -1 : o.comm, person: o.person || 0, tech: o.tech || '', first: !!o.first, era: o.era, lang: o.lang };
     History.events.push(e);
     if (History.events.length > 4000) History.events.splice(0, 500);
@@ -41,7 +42,18 @@
   History.lod = function (kind, cid) { History.record('lod', { k: kind, c: cid }); };
 
   // ------------------------------------------------------------ snapshots
-  const clone = (v) => (typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v)));
+  // Deep copies for snapshots: the browser's structuredClone, or (headless, where it would copy
+  // across V8 realms) a plain recursive copy of typed arrays, Maps, Sets, arrays and objects.
+  function deepClone(v) {
+    if (v === null || typeof v !== 'object') return v;
+    if (ArrayBuffer.isView(v)) return v.slice();
+    if (Array.isArray(v)) return v.map(deepClone);
+    if (v instanceof Map) { const m = new Map(); for (const [k, x] of v) m.set(k, deepClone(x)); return m; }
+    if (v instanceof Set) return new Set([...v].map(deepClone));
+    const o = {}; for (const k in v) o[k] = deepClone(v[k]); return o;
+  }
+  const native = typeof structuredClone === 'function' && !(window.AG_CONFIG && window.AG_CONFIG.headless);
+  const clone = (v) => (native ? structuredClone(v) : deepClone(v));
   const WORLD_FIELDS = () => Object.keys(AG.World).filter((k) => ArrayBuffer.isView(AG.World[k]));
   // Volatile caches are reset at every capture (in the live world too) so a restored copy and
   // the original continue identically.
@@ -50,6 +62,7 @@
     if (AG.Physics.normalize) AG.Physics.normalize();
   }
   History.capture = function () {
+    if (AG.Sim && AG.Sim.h) AG.Sim.finish(); // never capture half a step
     normalize();
     const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U;
     const world = {}; for (const k of WORLD_FIELDS()) world[k] = Wd[k].slice();
@@ -63,7 +76,8 @@
       world, worldMisc: clone({ springs: Wd.springs, vents: Wd.vents, epoch: Wd.epoch }),
       geo, geoScalars: gs, geoObj: clone({ plates: Geo.plates, hotspots: Geo.hotspots, volcanoes: Geo.volcanoes.map((v) => Object.assign({}, v)), climate: Geo.climate, events: Geo.events.slice(-60) }),
       life: clone({ species: Life.species, extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, env: Life.env }),
-      people: clone({ entries: [...AG.People.map.entries()], alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous }),
+      people: clone({ entries: [...AG.People.map.entries()], alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }),
+      sim: { stripe: AG.Sim ? AG.Sim.stripe : 0, geoSeen: AG.Sim ? Math.max(0, AG.Sim.geoSeen - Math.max(0, Geo.events.length - 60)) : 0 }, // geo events keep their last 60
       lang: clone({ list: AG.Lang.list, splits: AG.Lang.splits, changes: AG.Lang.changes }),
       tech: clone({ banned: [...AG.Tech.banned], firsts: AG.Tech.firsts, discoveries: AG.Tech.discoveries, losses: AG.Tech.losses }),
       civ: clone({ kingdoms: AG.Civ.kingdoms, cities: AG.Civ.cities, buildings: AG.Civ.buildings, religions: AG.Civ.religions, squads: AG.Civ.squads, routes: AG.Civ.routes, expeditions: AG.Civ.expeditions, contact: AG.Civ.contact, embodied: AG.Civ.embodied }),
@@ -77,6 +91,7 @@
     };
   };
   History.restore = function (s) {
+    if (AG.Sim) AG.Sim.h = null; // a step in progress belongs to the timeline being left
     const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U;
     if (AG.God.possessed >= 0) AG.God.release();
     AG.seed = s.seed; AG.tick = s.tick; AG.mode = s.mode;
@@ -92,7 +107,8 @@
     Life.people = li.people >= 0 ? Life.species[li.people] : null; Life.envYear = li.envYear;
     for (const k in li.env) { const v = li.env[k]; if (ArrayBuffer.isView(v)) Life.env[k].set(v); else Life.env[k] = v; }
     const pe = clone(s.people);
-    AG.People.map = new Map(pe.entries); AG.People.alive = pe.alive; AG.People.nextId = pe.nextId; AG.People.births = pe.births; AG.People.deaths = pe.deaths; AG.People.dead = pe.dead; AG.People.famous = pe.famous;
+    AG.People.map = new Map(pe.entries); AG.People.alive = pe.alive; AG.People.nextId = pe.nextId; AG.People.births = pe.births; AG.People.deaths = pe.deaths; AG.People.dead = pe.dead; AG.People.famous = pe.famous; AG.People.pruneAt = pe.pruneAt || 14000;
+    if (s.sim && AG.Sim) { AG.Sim.stripe = s.sim.stripe; AG.Sim.geoSeen = s.sim.geoSeen; }
     const la = clone(s.lang); AG.Lang.list = la.list; AG.Lang.splits = la.splits; AG.Lang.changes = la.changes;
     const te = clone(s.tech); AG.Tech.banned = new Set(te.banned); AG.Tech.firsts = te.firsts; AG.Tech.discoveries = te.discoveries; AG.Tech.losses = te.losses;
     const cv = clone(s.civ);

@@ -9,7 +9,7 @@
   const AG = window.AG, Sim = AG.Sim, R = AG.Render, Civ = AG.Civ, Geo = AG.Geo;
   const STEP = 1000 / AG.TPS, BUDGET_MS = 14;
   // speed buttons: watch speeds are tick multipliers; history speeds are years per second
-  const HIST = { c: { rate: 20, dy: 1 }, m: { rate: 400, dy: 5 } };
+  const HIST = { c: { rate: 20, dy: 1 }, m: { rate: 400, dy: 8 } };
   const DEEP_MYPS = 6; // million years per second in deep time
   AG.speed = 1; AG.paused = false; AG.throttled = false; AG.histRate = 20; AG.histDy = 1; AG.fastDawn = false;
   AG.stats = { fps: 60, simMs: 0, renderMs: 0, tps: 0, yps: 0, myps: 0 };
@@ -154,13 +154,15 @@
         ticks += steps;
         if (now - lodT > 400) { setFocus(); Civ.lod(); lodT = now; }
       } else {
+        // history: whole steps of Δ years, each spread over as many frames as it needs
         if (!AG.paused) acc += (dt / 1000) * AG.histRate;
-        const dy = AG.histDy;
-        while (acc >= dy) {
-          Sim.yearStep(dy); acc -= dy; years += dy;
-          if (performance.now() - t0 > BUDGET_MS) { AG.throttled = acc >= dy; if (acc > dy) acc = dy; break; }
+        const dy = AG.histDy, until = t0 + BUDGET_MS;
+        for (;;) {
+          if (Sim.h && !Sim.stepRun(until)) { AG.throttled = true; break; }
+          if (AG.paused || acc < dy || performance.now() > until) break;
+          Sim.stepBegin(dy); acc -= dy; years += dy;
         }
-        if (AG.World.dirtyAll) { AG.World.dirty.fill(1); AG.World.dirtyAll = false; }
+        if (acc > dy * 2) { acc = dy * 2; AG.throttled = true; }
       }
       const t1 = performance.now();
       AG.FX.update(dt / 1000);

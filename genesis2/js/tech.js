@@ -33,7 +33,7 @@
     ['bow', 'Bow and arrow', 1, ['spear'], 2600, null, 30, SK.HUNT, null, 'Hunting at range (+30% hunting), deadlier raids'],
     ['microliths', 'Microliths', 1, ['knapping', 'bow'], 1500, null, 20, SK.CRAFT, null, 'Tiny blades set in composite tools'],
     ['cultivation', 'Cultivation', 2, ['foraging'], 650, (c) => (c.cereal > 0.15 && c.stable ? Math.min(1.5, c.cereal) : 0), 0, SK.FARM, null, 'Wild grasses sown and harvested: fields, villages, surplus'],
-    ['herding', 'Herding', 2, ['spear'], 3200, (c) => (c.domesticable ? 1 : 0), 0, SK.HERD, null, 'Docile herd animals kept in pens: meat, milk, wealth on the hoof'],
+    ['herding', 'Herding', 2, ['spear'], 3200, (c) => (c.domesticable ? (c.sedentary || c.farming ? 1 : 0.12) : 0), 0, SK.HERD, null, 'Docile herd animals kept in pens: meat, milk, wealth on the hoof'],
     ['pottery', 'Pottery', 2, ['fire'], 1800, (c) => (has(c, RES.CLAY) || c.river ? (c.sedentary ? 1.4 : 0.35) : 0), 30, SK.CRAFT, (c) => (has(c, RES.CLAY) && c.sedentary ? 0.0005 : 0), 'Fired clay pots: storage and cooking'],
     ['weaving', 'Weaving', 2, ['cultivation'], 1400, null, 40, SK.CRAFT, null, 'Cloth from flax and wool'],
     ['groundstone', 'Polished stone', 2, ['knapping', 'cultivation'], 1200, null, 30, SK.CRAFT, null, 'Ground stone axes fell forests (+woodcutting, more clearing)'],
@@ -42,22 +42,22 @@
     ['megaliths', 'Megaliths', 2, ['burial', 'cultivation'], 2200, (c) => (c.pop >= 70 ? 1 : 0), 60, SK.BUILD, null, 'Stone circles and tombs: cohesion, authority'],
     ['irrigation', 'Irrigation', 2, ['cultivation'], 2200, (c) => (c.river && c.pop >= 90 ? 1 : 0), 80, SK.FARM, null, 'Channels from the river (+50% farming in dry land)'],
     ['plough', 'Plough', 2, ['cultivation', 'herding'], 2000, null, 60, SK.FARM, null, 'Oxen pull the plough (+40% farming); land becomes property'],
-    ['kilns', 'Kilns', 2, ['pottery'], 1500, null, 50, SK.CRAFT, null, 'High-temperature firing (the way to metal)'],
+    ['kilns', 'Kilns', 2, ['pottery'], 1500, (c) => (c.sedentary && c.pop >= 50 ? 1 : 0), 50, SK.CRAFT, null, 'High-temperature firing (the way to metal)'],
     ['wheel', 'The wheel', 2, ['pottery', 'groundstone'], 2600, (c) => (c.pop >= 60 ? 1 : 0.3), 60, SK.CRAFT, null, 'Carts carry trade over land'],
     ['sailing', 'Sailing', 2, ['boats', 'weaving'], 2400, (c) => (c.coast ? 1 : 0), 60, SK.CRAFT, null, 'Sails: ships, harbours, sea trade'],
-    ['tokens', 'Counting tokens', 2, ['pottery'], 1800, (c) => (c.contacts >= 1 ? 1 : 0.3), 80, SK.LORE, null, 'Clay tokens keep accounts'],
+    ['tokens', 'Counting tokens', 2, ['pottery', 'cultivation'], 1800, (c) => (c.contacts >= 1 ? 1 : 0.3), 80, SK.LORE, null, 'Clay tokens keep accounts'],
     ['brewing', 'Brewing', 2, ['cultivation', 'pottery'], 1600, null, 40, SK.CRAFT, (c) => (c.sedentary ? 0.0004 : 0), 'Beer and feasts (and drunkenness)'],
-    ['copper', 'Copper working', 3, ['kilns'], 1800, (c) => (has(c, RES.COPPER) ? 1 : c.tradeRes[RES.COPPER] ? 0.4 : 0), 80, SK.CRAFT, (c) => (has(c, RES.COPPER) ? 0.0004 : 0), 'Smelted copper: tools, ornaments, prestige'],
+    ['copper', 'Copper working', 3, ['kilns', 'cultivation'], 1800, (c) => (has(c, RES.COPPER) ? 1 : c.tradeRes[RES.COPPER] ? 0.4 : 0), 80, SK.CRAFT, (c) => (has(c, RES.COPPER) ? 0.0004 : 0), 'Smelted copper: tools, ornaments, prestige'],
     ['bronze', 'Bronze', 4, ['copper'], 1800, (c) => (has(c, RES.TIN) ? 1 : c.tradeRes[RES.TIN] ? 0.7 : 0), 120, SK.CRAFT, null, 'Copper and tin: weapons and armour (+30% fighting)'],
-    ['writing', 'Writing', 4, ['tokens'], 2600, (c) => (c.gov >= GOV.chiefdom && c.pop >= 300 ? 1 : 0), 200, SK.LORE, null, 'Scribes keep records: law, history, faster learning'],
+    ['writing', 'Writing', 4, ['tokens'], 2600, (c) => (c.gov >= GOV.chiefdom && c.pop >= 200 ? 1 : 0), 200, SK.LORE, null, 'Scribes keep records: law, history, faster learning'],
     ['mathematics', 'Mathematics', 4, ['writing'], 2000, null, 200, SK.LORE, null, 'Number, measure, geometry'],
     ['astronomy', 'Astronomy', 4, ['megaliths'], 2500, (c) => (c.pop >= 150 ? 1 : 0.3), 120, SK.LORE, null, 'A calendar of the sky (+10% farming)'],
     ['masonry', 'Masonry', 3, ['groundstone', 'mudbrick'], 1800, (c) => (c.stone ? 1 : 0.4), 100, SK.BUILD, null, 'Cut stone: walls, temples, citadels'],
     ['fortification', 'Fortification', 3, ['mudbrick'], 1600, (c) => (c.war ? 2 : 0.4), 120, SK.BUILD, null, 'Palisades, then walls and towers'],
     ['law', 'Law codes', 4, ['writing'], 2000, (c) => (c.gov >= GOV.state ? 1 : 0), 400, SK.LORE, null, 'Written law: less corruption, more stability'],
     ['currency', 'Currency', 4, ['tokens', 'copper'], 1800, (c) => (c.contacts >= 2 ? 1 : 0.3), 200, SK.CRAFT, null, 'Weighed metal: markets and trade'],
-    ['monuments', 'Monumental architecture', 4, ['masonry'], 2200, (c) => (c.gov >= GOV.chiefdom && c.pop >= 300 ? 1 : 0), 250, SK.BUILD, null, 'Temples and palaces: legitimacy for rulers'],
-    ['riding', 'Horse riding', 3, ['herding'], 2600, (c) => (c.horses ? 1 : 0), 50, SK.HERD, null, 'Mounted herders and raiders'],
+    ['monuments', 'Monumental architecture', 4, ['masonry'], 2200, (c) => (c.gov >= GOV.chiefdom && c.pop >= 200 ? 1 : 0), 250, SK.BUILD, null, 'Temples and palaces: legitimacy for rulers'],
+    ['riding', 'Horse riding', 3, ['herding', 'cultivation'], 3600, (c) => (c.horses && c.pop >= 60 ? 1 : 0), 50, SK.HERD, null, 'Mounted herders and raiders'],
     ['chariots', 'Chariots', 4, ['wheel', 'bronze', 'riding'], 1800, null, 200, SK.CRAFT, null, 'War chariots (+20% fighting)'],
     ['iron', 'Iron smelting', 5, ['bronze', 'kilns'], 2400, (c) => (has(c, RES.IRON) ? (c.forest > 0.15 ? 1 : 0.4) : c.tradeRes[RES.IRON] ? 0.3 : 0), 200, SK.CRAFT, null, 'Cheap, hard iron (+20% fighting, +farming); forests burn for charcoal'],
     ['alphabet', 'Alphabet', 5, ['writing'], 2000, (c) => (c.contacts >= 2 ? 1 : 0.3), 300, SK.LORE, null, 'Few letters, many readers: ideas spread faster'],
@@ -78,6 +78,7 @@
   const PACE = 9;
   const Tech = (AG.Tech = { PACE, LIST, IDX, ERAS, GOV, NT: LIST.length, banned: new Set(), discoveries: 0, losses: 0, firsts: {} });
   Tech.reset = function () { Tech.banned = new Set(); Tech.discoveries = 0; Tech.losses = 0; Tech.firsts = {}; };
+  Tech.STARTING = STARTING;
   Tech.newSet = function () { const k = new Uint8Array(LIST.length); for (const s of STARTING) k[IDX[s]] = 1; return k; };
   Tech.knows = (c, key) => !!(c && c.tech && c.tech[IDX[key]]);
   Tech.prereqsMet = (c, t) => t.preIds.every((p) => c.tech[p]);

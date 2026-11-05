@@ -462,9 +462,11 @@
         if (Life.env.land[r] < 0.06 && s.arch !== ARCH.BIRD) { s.regions.delete(r); s.lastLoss = 'drowned range'; continue; }
         const K = Math.max(0.01, CAP[s.arch] * forage(s.arch, r, prey[r]) * R.fit * R.fit / Math.max(1e-6, share.get(s.arch * RN + r)) * R.fit) * (s.domestic ? 0 : 1);
         if (s.domestic) continue; // herds are kept by people (civ.js)
-        let dn = grow * R.n * (1 - R.n / K) * dy;
-        if (s.arch === ARCH.GRAZER && pred[r] > 0) dn -= Math.min(R.n * 0.3, pred[r] * 0.9 * dy * R.n / (R.n + 5));
-        R.n = Math.max(0, R.n + dn);
+        // logistic growth below the capacity; above it the excess dies back smoothly (stable for long steps)
+        if (R.n <= K) R.n = Math.min(K, R.n + grow * R.n * (1 - R.n / K) * dy);
+        else R.n = K + (R.n - K) * Math.exp(-grow * dy);
+        if (s.arch === ARCH.GRAZER && pred[r] > 0) R.n -= Math.min(R.n * 0.3, pred[r] * 0.9 * dy * R.n / (R.n + 5));
+        R.n = Math.max(0, R.n);
         optimum(s.arch, r, opt);
         const sel = Math.min(1, 0.012 * dy / gen);
         for (let k = 0; k < NL; k++) if (opt[k] >= 0) R.mu[k] += (opt[k] - R.mu[k]) * sel;
@@ -579,7 +581,7 @@
   };
   // One body stands for this many animals of the regional population.
   const BODY_SCALE = [1, 1, 1, 1];
-  const BODY_CAP = [3200, 520, 600, 420];
+  const BODY_CAP = [1500, 260, 320, 220]; // bodies on the map at once (the rest stay in the regional record)
   Life.BODY_SP = null; // filled by entities.js: archetype -> body kind
   // Embody every region's population (capped per archetype) with genomes bred from the reservoir.
   Life.embody = function () {
@@ -593,7 +595,8 @@
         R.emb = 0;
         let want = R.n * k[s.arch]; want = Math.floor(want) + (rr() < want % 1 ? 1 : 0);
         const x0 = (r % RW) * RS, y0 = ((r / RW) | 0) * RS;
-        for (let m = 0, tries = 0; m < want && tries < want * 12; tries++) {
+        let m = 0;
+        for (let tries = 0; m < want && tries < want * 12; tries++) {
           const x = x0 + rr() * RS, y = y0 + rr() * RS;
           if (x >= W || y >= H) continue;
           const i = (y | 0) * W + (x | 0);

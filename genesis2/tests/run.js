@@ -103,6 +103,188 @@ test('determinism: geology from one seed is identical; another seed differs', ()
   return `hash ${a}`;
 });
 
+// ------------------------------------------------------------------ worlds after the Dawn
+// Deep time is the slow part, so tests share Dawn worlds through save files (which also
+// exercises save/load): dawnSave() runs one and caches the text; fromSave() loads it fresh.
+const saves = {};
+function dawnSave(seed, W, H) {
+  const key = `${seed}:${W}x${H}`;
+  if (!saves[key]) { const AG = load({ W, H }); AG.Sim.newWorld(seed); AG.Sim.skipDeep(); saves[key] = AG.History.serialize(); }
+  return saves[key];
+}
+function fromSave(text, W, H) { const AG = load({ W, H }); AG.History.deserialize(text); return AG; }
+function simHash(AG) {
+  const ps = [...AG.People.map.values()].map((P) => [P.id, P.born, P.died, P.comm, P.spouse, P.job, Array.from(P.gen.slice(0, 8))]);
+  const cs = AG.Civ.cities.filter((c) => c.alive).map((c) => [c.id, c.x.toFixed(3), c.y.toFixed(3), c.members.length, c.kd, c.lang, Array.from(c.tech).join(''), c.food.toFixed(4)]);
+  const sp = AG.Life.alive().map((s) => [s.id, [...s.regions.values()].reduce((a, R) => a + R.n, 0).toFixed(4)]);
+  return hash([AG.World.elev, AG.Geo.crust, ps, cs, sp, AG.History.events.length, AG.Lang.list.length, AG.Geo.seaLevel]);
+}
+
+// ------------------------------------------------------------------ the whole simulation
+test('determinism: the whole world (deep time, Dawn, history) replays from its seed', () => {
+  const run = (seed, sliced) => {
+    const AG = load({ W: 224, H: 144 });
+    AG.Sim.newWorld(seed); AG.Sim.skipDeep();
+    for (let y = 0; y < 400; y += 4) {
+      if (!sliced) AG.Sim.yearStep(4);
+      else { AG.Sim.stepBegin(4); while (!AG.Sim.stepRun(AG.now() - 1)) { /* one community per call: the browser's frame slicing */ } }
+    }
+    return [simHash(AG), AG.People.alive];
+  };
+  const [a, n] = run(7), [b] = run(7), [c] = run(7, true), [d] = run(8);
+  assert(a === b, `same seed must replay identically (${a} vs ${b})`);
+  assert(a === c, `slicing a step over frames must not change the result (${a} vs ${c})`);
+  assert(a !== d, 'another seed should give another history');
+  assert(n > 0, 'people should survive 400 years');
+  return `hash ${a}, ${n} people at year 400`;
+});
+
+test('save/load: a loaded world has the same future as the original', () => {
+  const W = 224, H = 144, A = fromSave(dawnSave(7, W, H), W, H);
+  for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);
+  const mid = A.History.serialize();
+  for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);
+  const B = fromSave(mid, W, H);
+  for (let y = 0; y < 120; y += 2) B.Sim.yearStep(2);
+  const a = simHash(A), b = simHash(B);
+  assert(a === b, `futures differ after loading (${a} vs ${b})`);
+  return `year ${Math.floor(A.Geo.year)}, ${A.People.alive} people, hash ${a}`;
+});
+
+// ------------------------------------------------------------------ genetics
+test('genetics: Mendelian inheritance (recessive albinism 1:2:1, alleles from each parent)', () => {
+  const AG = load({ W: 128, H: 96, modules: ['core', 'world', 'geo', 'life'] }), Life = AG.Life, GL = Life.GL, L = Life.L;
+  const rng = AG.makeRng(12345), rand = () => rng();
+  const mom = new Uint8Array(GL), dad = new Uint8Array(GL), kid = new Uint8Array(GL);
+  for (let k = 0; k < Life.NL; k++) { mom[2 * k] = 100 + k; mom[2 * k + 1] = 150 + k; dad[2 * k] = 60 + k; dad[2 * k + 1] = 200 - k; }
+  mom[2 * L.HUE] = 10; mom[2 * L.HUE + 1] = 140; dad[2 * L.HUE] = 12; dad[2 * L.HUE + 1] = 160; // both carriers
+  const n = 8000; let albino = 0, carrier = 0, fromBoth = 0;
+  for (let i = 0; i < n; i++) {
+    Life.breed(kid, 0, mom, 0, dad, 0, rand, 0);
+    if (Life.isAlbino(kid, 0)) albino++; else if (Life.carrier(kid, 0)) carrier++;
+    let ok = true;
+    for (let k = 0; k < Life.NL; k++) { if (kid[2 * k] !== mom[2 * k] && kid[2 * k] !== mom[2 * k + 1]) ok = false; if (kid[2 * k + 1] !== dad[2 * k] && kid[2 * k + 1] !== dad[2 * k + 1]) ok = false; }
+    if (ok) fromBoth++;
+  }
+  const pa = albino / n, pc = carrier / n;
+  assert(fromBoth === n, 'without mutation every allele must come from the matching parent');
+  assert(Math.abs(pa - 0.25) < 0.02, `albino share ${fmt(pa)} should be ~0.25`);
+  assert(Math.abs(pc - 0.5) < 0.025, `carrier share ${fmt(pc)} should be ~0.5`);
+  assert(Life.express(mom, 0, L.HUE) === 140, 'a single albino allele stays hidden (recessive)');
+  // mutation: ~3.2% of alleles change per birth
+  let changed = 0;
+  for (let i = 0; i < 3000; i++) { Life.breed(kid, 0, mom, 0, dad, 0, rand, 1); for (let k = 0; k < Life.NL; k++) { if (kid[2 * k] !== mom[2 * k] && kid[2 * k] !== mom[2 * k + 1]) changed++; if (kid[2 * k + 1] !== dad[2 * k] && kid[2 * k + 1] !== dad[2 * k + 1]) changed++; } }
+  const mr = changed / (3000 * GL);
+  assert(mr > 0.02 && mr < 0.045, `mutation rate ${fmt(mr)} per allele should be ~0.03`);
+  return `albino ${fmt(pa)}, carriers ${fmt(pc)}, mutation ${fmt(mr)}/allele`;
+});
+
+// A test species placed by hand in chosen regions (a grazer, mean phenotype = the region optimum).
+function testSpecies(AG, regions, n) {
+  const Life = AG.Life, NL = Life.NL;
+  const m = Float32Array.from(Life.optimum(Life.ARCH.GRAZER, regions[0]).map((v) => (v < 0 ? 128 : v)));
+  m[Life.L.MATE] = 128; m[Life.L.NEUTRAL] = 128;
+  const s = Life.newSpecies(Life.ARCH.GRAZER, m, null, Life.when());
+  for (const r of regions) { const R = Life.newRegion(m, n); Life.seedReservoir(R, 10); s.regions.set(r, R); }
+  return s;
+}
+function landRegions(AG) { // land regions grouped by landmass, largest masses first
+  const Life = AG.Life, e = Life.env, by = new Map();
+  for (let r = 0; r < Life.RN; r++) if (e.land[r] > 0.5 && e.mass[r] >= 0 && e.ice[r] < 0.2) { const k = e.mass[r]; if (!by.has(k)) by.set(k, []); by.get(k).push(r); }
+  return [...by.values()].sort((a, b) => b.length - a.length);
+}
+
+test('evolution: a new seaway splits a population into two species; a connected one stays one', () => {
+  const W = 224, H = 144, text = dawnSave(7, W, H);
+  const run = (split) => {
+    const AG = fromSave(text, W, H), Life = AG.Life, Wd = AG.World, RS = Life.RS;
+    Life.envFromWorld();
+    const land = landRegions(AG)[0];
+    // two columns of regions in the middle of the main landmass
+    const xs = land.map((r) => r % Life.RW).sort((a, b) => a - b), cx = xs[xs.length >> 1];
+    if (split) { // flood a strait two regions wide straight across the map (as a rising sea or a rift would)
+      for (let y = 0; y < H; y++) for (let x = (cx - 1) * RS; x < Math.min(W, (cx + 1) * RS); x++) { const i = y * W + x; Wd.elev[i] = AG.SEA - 0.06; Wd.fl[i] = 0.06; Wd.ft[i] = AG.FT.WATER; }
+      Life.envFromWorld();
+    }
+    const west = land.filter((r) => r % Life.RW === cx - 3).slice(0, 2), east = land.filter((r) => r % Life.RW === cx + 2).slice(0, 2);
+    assert(west.length === 2 && east.length === 2, 'regions on both sides of the strait');
+    const s = testSpecies(AG, [...west, ...east], 18);
+    for (let y = 0; y < 6000; y += 10) { Life.yearStep(10); if (s.died !== null) break; }
+    return { kids: Life.species.filter((x) => x.parent === s.id).length, masses: new Set([...west, ...east].map((r) => Life.env.mass[r])).size };
+  };
+  const apart = run(true), together = run(false);
+  assert(apart.masses === 2 && together.masses === 1, 'the strait should part the land (and only when flooded)');
+  assert(apart.kids >= 1, 'isolated populations should speciate within 6,000 years');
+  assert(together.kids === 0, 'one connected population should stay one species');
+  return `${apart.kids} daughter species across the strait, ${together.kids} without it`;
+});
+
+test('evolution: selection fits cold tolerance to the climate', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Life = AG.Life, L = Life.L, e = Life.env;
+  Life.envFromWorld();
+  // the coldest and warmest regions where wild grazers already live (so the land can feed them)
+  const lived = new Set(); for (const sp of Life.byArch(Life.ARCH.GRAZER)) if (!sp.domestic) for (const [r, R] of sp.regions) if (R.n > 2) lived.add(r);
+  const land = [...lived].sort((a, b) => e.temp[a] - e.temp[b]);
+  const cold = land[Math.floor(land.length * 0.2)], warm = land[Math.floor(land.length * 0.8)]; // a cool and a warm country
+  const s = testSpecies(AG, [cold, warm], 25);
+  const start = (Life.optimum(Life.ARCH.GRAZER, cold)[L.COLD] + Life.optimum(Life.ARCH.GRAZER, warm)[L.COLD]) / 2;
+  for (const [r, R] of s.regions) { const o = Life.optimum(Life.ARCH.GRAZER, r); for (let k = 0; k < Life.NL; k++) if (o[k] >= 0) R.mu[k] = o[k]; R.mu[L.COLD] = start; }
+  for (let y = 0; y < 1500; y += 5) Life.yearStep(5);
+  const Rc = s.regions.get(cold), Rw = s.regions.get(warm);
+  assert(Rc && Rw, 'both populations should survive');
+  const oc = Life.optimum(Life.ARCH.GRAZER, cold)[L.COLD], ow = Life.optimum(Life.ARCH.GRAZER, warm)[L.COLD];
+  assert(Rc.mu[L.COLD] > Rw.mu[L.COLD] + 30, `cold region ${fmt(Rc.mu[L.COLD])} should out-evolve warm ${fmt(Rw.mu[L.COLD])}`);
+  assert(Math.abs(Rc.mu[L.COLD] - oc) < Math.abs(start - oc) * 0.5, 'the cold population moves most of the way to its optimum');
+  return `cold-tolerance gene: ${fmt(Rc.mu[L.COLD])} in the cold (optimum ${fmt(oc)}), ${fmt(Rw.mu[L.COLD])} in the heat (optimum ${fmt(ow)})`;
+});
+
+// ------------------------------------------------------------------ technology
+test('technology: prerequisites, conditions and bans gate every invention', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Tech = AG.Tech, Civ = AG.Civ;
+  const c = Civ.cities.find((q) => q.alive);
+  const ctx = Object.assign(Civ.techContext(c), { pop: 400, innovation: 3, contacts: 6 });
+  let gated = 0;
+  for (const t of Tech.LIST) if (!Tech.prereqsMet(c, t)) { assert(Tech.chance(c, t, ctx) === 0, `${t.name} must be impossible without ${t.pre.join(', ')}`); gated++; }
+  // conditions: cultivation needs wild cereals
+  const cult = Tech.LIST[Tech.IDX.cultivation];
+  for (const p of cult.preIds) c.tech[p] = 1;
+  assert(Tech.chance(c, cult, Object.assign({}, ctx, { cereal: 0 })) === 0, 'no wild grain, no cultivation');
+  // bans (the counterfactual tool): never discovered, never learned
+  Tech.banned.add('pottery');
+  const pot = Tech.LIST[Tech.IDX.pottery];
+  for (const p of pot.preIds) c.tech[p] = 1;
+  assert(Tech.chance(c, pot, ctx) === 0 && Tech.learn(c, 'pottery', 'god') === false, 'a banned invention never appears');
+  Tech.banned.delete('pottery');
+  // and in a running history, no invention is ever first found before its prerequisites
+  for (let y = 0; y < 1500; y += 5) AG.Sim.yearStep(5);
+  let checked = 0;
+  for (const t of Tech.LIST) { const f = Tech.firsts[t.key]; if (!f) continue; for (const p of t.pre) { if (Tech.STARTING.includes(p)) continue; const fp = Tech.firsts[p]; assert(fp && fp.year <= f.year, `${t.name} (${f.year}) came before its prerequisite ${p}`); } checked++; }
+  return `${gated} gated at the Dawn; ${checked} first discoveries in 1,500 years all followed their prerequisites`;
+});
+
+// ------------------------------------------------------------------ level of detail
+test('LOD: embodying and folding keeps every person record, and both modes feed people alike', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Civ = AG.Civ, People = AG.People, Sim = AG.Sim;
+  for (let y = 0; y < 60; y += 2) Sim.yearStep(2);
+  const c = Civ.cities.filter((q) => q.alive).sort((a, b) => b.members.length - a.members.length)[0];
+  const before = new Set(c.members);
+  const expected = Civ.FOOD_JOBS.reduce((a, j) => a + (c.jobs[j] || 0) * Civ.yieldPerYear(c, j, null), 0);
+  Civ.focus = { x0: c.x - 20, y0: c.y - 20, x1: c.x + 20, y1: c.y + 20 };
+  Sim.setMode('watch');
+  Civ.materialize(c);
+  assert(c.materialized && Civ.embodied > 0, 'the community near the camera should be embodied');
+  for (const id of c.members) { const P = People.get(id); assert(P.body >= 0 && AG.U.pid[P.body] === id, 'every member gets a body linked to its record'); }
+  const n0 = c.nutr;
+  for (let t = 0; t < AG.YEAR_TICKS; t++) Sim.tick();
+  const trips = c.recentProd, n1 = c.nutr;
+  Sim.setMode('history');
+  assert(!c.materialized && Civ.embodied === 0, 'history mode folds everyone back');
+  for (const id of before) { const P = People.get(id); assert(P, 'no record is lost by folding'); assert(P.body === -1, 'folded records hold no body'); }
+  assert(trips > 0, 'embodied workers bring food home on their trips');
+  assert(n1 > Math.min(0.75, n0 - 0.15), `an embodied year should feed people about as well as the model (nutrition ${fmt(n0)} -> ${fmt(n1)})`);
+  return `${before.size} people embodied and folded; trips ${fmt(trips)}/yr vs model ${fmt(expected)}/yr; nutrition ${fmt(n0)} -> ${fmt(n1)}`;
+});
+
 // ------------------------------------------------------------------ runner
 const filter = process.argv[2];
 let pass = 0, fail = 0;

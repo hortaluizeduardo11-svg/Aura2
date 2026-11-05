@@ -62,6 +62,7 @@
   // ------------------------------------------------------------ modes
   Sim.setMode = function (m) {
     if (m === AG.mode || AG.mode === 'deep') return;
+    Sim.finish();
     AG.History.record('mode', { m });
     if (m === 'history') {
       Civ.foldAll(); Life.fold();
@@ -97,22 +98,37 @@
   };
 
   // ------------------------------------------------------------ history step
-  Sim.yearStep = function (dy) {
+  Sim.yearStep = function (dy) { Sim.stepBegin(dy); Sim.stepRun(Infinity); };
+  // One history step, begun now and run to completion over as many calls (frames) as needed.
+  Sim.h = null;
+  Sim.stepBegin = function (dy) {
+    if (Sim.h) Sim.stepRun(Infinity);
     dy = dy || 1;
     AG.tick += Math.round(dy * AG.YEAR_TICKS);
     time('geo', () => Geo.yearStep(dy));
     time('world', () => worldYear(dy));
     time('life', () => Life.yearStep(dy));
-    time('civ', () => Civ.yearStep(dy));
+    Sim.h = { dy, cs: Civ.yearBegin(), i: 0, phase: 1 };
+  };
+  // Returns true when the step is complete; stops early once AG.now() passes `until`.
+  Sim.stepRun = function (until) {
+    const h = Sim.h; if (!h) return true;
+    while (h.phase === 1 && h.i < h.cs.length) { Civ.communityYear(h.cs[h.i++], h.dy); if ((h.i & 3) === 0 && t0() > until) return false; }
+    if (h.phase === 1) { h.phase = 2; h.i = 0; }
+    while (h.i < h.cs.length) { Civ.yearTech(h.cs[h.i++], h.dy); if ((h.i & 7) === 0 && t0() > until) return false; }
+    Sim.h = null;
+    Civ.yearEnd(h.dy);
     geoEvents();
     AG.History.yearTick();
+    return true;
   };
+  Sim.finish = function () { if (Sim.h) Sim.stepRun(Infinity); };
   // Land between ticks: vegetation regrows toward its climate, a strided pass over the map.
-  let stripe = 0;
+  Sim.stripe = 0; // which eighth of the map regrows this step (saved with the world)
   function worldYear(dy) {
     const { veg, soil, moist, elev, ice, snow, fl, bgrid, traffic } = Wd;
-    const rows = Math.ceil(H / 8), y0 = (stripe * rows) % H, y1 = Math.min(H, y0 + rows);
-    stripe = (stripe + 1) % 8;
+    const rows = Math.ceil(H / 8), y0 = (Sim.stripe * rows) % H, y1 = Math.min(H, y0 + rows);
+    Sim.stripe = (Sim.stripe + 1) % 8;
     const k = Math.min(1, dy * 8 * 0.15);
     for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x;

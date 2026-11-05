@@ -23,8 +23,8 @@
   const year = () => AG.Geo.year;
   People.year = year;
 
-  People.budget = Math.round(9000 * Math.min(1.6, Math.max(0.5, AG.SCALE / 2.4)));
-  People.reset = function () { pruneAt = 14000; People.map.clear(); People.alive = 0; People.nextId = 1; People.births = 0; People.deaths = 0; People.dead.length = 0; People.famous.length = 0; };
+  People.budget = Math.round(6000 * Math.min(1.6, Math.max(0.5, AG.SCALE / 2))); // simulated individuals the world can afford (fertility eases off above 80%)
+  People.reset = function () { People.pruneAt = 14000; People.map.clear(); People.alive = 0; People.nextId = 1; People.births = 0; People.deaths = 0; People.dead.length = 0; People.famous.length = 0; };
   People.get = (id) => People.map.get(id);
   People.age = (P) => (P.died !== null ? P.died : year()) - P.born;
   People.ph = (P, k) => AG.Life.express(P.gen, 0, k); // phenotype of a locus
@@ -277,7 +277,7 @@
     if (P.body >= 0 && AG.Ent) { const b = P.body; P.body = -1; AG.Ent.remove(b, true); }
     if (P.fame > 6 || P.rank >= 2) People.famous.push(P.id);
     People.dead.push(P.id);
-    if (People.dead.length > pruneAt) prune2();
+    if (People.dead.length > People.pruneAt) prune2();
     P.story.push({ t: year(), k: -1, d: `Died at ${age}${cause ? ', ' + cause : ''}` });
     // the dead keep their family and their defining memories; the rest is forgotten with them
     for (const [id, t] of P.ties) if (!(t.k & (TIE.FAMILY | TIE.SPOUSE))) P.ties.delete(id);
@@ -292,9 +292,9 @@
     const out = [];
     for (const id of People.dead) { const P = People.get(id); if (!P) continue; if (keep.has(id) || P.fame > 4 || P.rank >= 2) out.push(id); else People.map.delete(id); }
     People.dead = out;
-    pruneAt = Math.max(14000, out.length * 1.5 + 4000); // hysteresis: the kept ancestors alone can exceed the limit
+    People.pruneAt = Math.max(14000, out.length * 1.5 + 4000); // hysteresis: the kept ancestors alone can exceed the limit
   }
-  let pruneAt = 14000;
+  People.pruneAt = 14000;
 
   // ------------------------------------------------------------ births
   People.conceive = function (M, F) {

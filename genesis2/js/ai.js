@@ -594,7 +594,7 @@
         Ent.gainSkill(i, SK.BUILD, 1); break;
       }
       case TK.WORSHIP: if (c && P) { c.faith += 1; P.belief.devotion = Math.min(1, P.belief.devotion + 0.01); P.emo.grief *= 0.8; P.emo.fear *= 0.8; Ent.gainSkill(i, SK.LORE, 0.5); } break;
-      case TK.EAT: if (P && c) { if (c.food > 0) { P.needs.food = 1; U.energy[i] = 1; } else P.needs.food = Math.min(1, P.needs.food + 0.3); P.emo.joy = Math.min(1, P.emo.joy + 0.03); } break;
+      case TK.EAT: if (P && c) { if (c.food > 0) { P.needs.food = 1; U.energy[i] = 1; } else P.needs.food = Math.max(P.needs.food, Math.min(1, c.nutr + 0.1)); /* the day's gathering, as well as the band is fed */ P.emo.joy = Math.min(1, P.emo.joy + 0.03); } break;
       case TK.REST: if (P) { P.needs.rest = 1; } break;
       case TK.SOCIAL: case TK.COURT: case TK.PLAY: {
         if (P) {
