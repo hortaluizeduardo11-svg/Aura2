@@ -692,14 +692,14 @@
       <div class="keys">
         <kbd>Pause · 1× 4× 16×</kbd><span>Watch time: people and animals near the camera act moment to moment</span>
         <kbd>Centuries · Millennia</kbd><span>History time: 20 or 400 years a second, everyone living on their records</span>
-        <kbd>Ages</kbd><span>Deep time: 4 million years a second, before the Dawn</span>
+        <kbd>Ages · Skip to the Dawn</kbd><span>Deep time: 6 million years a second, before people; or race to the Dawn</span>
         <kbd>Drag</kbd><span>Use the selected tool (Inspect pans the map)</span>
         <kbd>Right-drag · two fingers</kbd><span>Pan · pinch to zoom</span>
         <kbd>Scroll · + / −</kbd><span>Zoom (past 8× the camera tilts into the 3D close-up)</span>
         <kbd>[ ] · N</kbd><span>In 3D: turn left or right, face north</span>
         <kbd>WASD · arrows</kbd><span>Pan the camera, or walk while possessing</span>
         <kbd>Space</kbd><span>Pause, or strike while possessing</span>
-        <kbd>1 2 3 · C M</kbd><span>Watch at 1×, 4×, 16× · Centuries · Millennia</span>
+        <kbd>1 2 3 · 4 5</kbd><span>Watch at 1×, 4×, 16× · Centuries · Millennia</span>
         <kbd>Tab · B</kbd><span>Cycle layers · cycle overlays</span>
       </div>
       <p class="muted" style="font-size:13px">Try: open History and ask "what if this never happened?" of an invention; sow wild grain near a band; send a dream to a curious child; push a plate in deep time; start an ice age and watch the land bridges open.</p>

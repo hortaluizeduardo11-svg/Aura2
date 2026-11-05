@@ -335,7 +335,7 @@
     const k = Civ.kingdoms[c.kd];
     for (const P of persons(c)) People.remember(P, MK.FAMINE, { v: -0.7, s: 0.8, d: c.name });
     if (k) { k.exp.harvest += 1.5; k.unrest = (k.unrest || 0) + 0.15; }
-    if (c.members.length > 20) AG.History.event('famine', `Famine grips ${c.name}`, { x: c.x, y: c.y, comm: c.id, cause: c.overForage > 0.4 ? 'the land around is spent' : AG.Geo.climate.aerosol > 0.02 ? 'a volcanic winter' : 'poor harvests' });
+    if (c.members.length > 30 && year() - (c.famineEv || -1e9) > 40 && (c.famineEv = year())) AG.History.event('famine', `Famine grips ${c.name}`, { x: c.x, y: c.y, comm: c.id, cause: c.overForage > 0.4 ? 'the land around is spent' : AG.Geo.climate.aerosol > 0.02 ? 'a volcanic winter' : 'poor harvests' });
   }
   Civ.economy = economy;
   function housing(c) {
@@ -1011,7 +1011,7 @@
     namePolity(k);
     k.legit = 0.4; k.stability = 0.2; k.unrest = 0;
     for (const I of k.inst) { I.corrupt *= 0.5; I.str *= 0.5; }
-    AG.History.event('collapse', `The ${k.name} collapses${n ? `: ${n} communities break away` : ''}`, { x: cap ? cap.x : -1, y: cap ? cap.y : -1, polity: k.id, cause: k.inequality > 0.5 ? 'inequality and corruption' : 'famine and unrest' });
+    AG.History.event('collapse', `The ${k.name} ${/(s|clans|people)$/i.test(k.name) ? 'fall' : 'falls'} apart${n ? `: ${n === 1 ? 'one community breaks' : n + ' communities break'} away` : ''}`, { x: cap ? cap.x : -1, y: cap ? cap.y : -1, polity: k.id, cause: k.inequality > 0.5 ? 'inequality and corruption' : 'famine and unrest' });
   }
   Civ.collapse = collapse;
 

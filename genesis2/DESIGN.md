@@ -70,7 +70,7 @@ suite runs determinism, geology, genetics and technology tests without a browser
 |---|---|---|---|
 | **Tick** | 1/20 s of play at 1× (1 year = 960 ticks) | bodies, AI, fluids, fire, weather, combat | Watch speeds |
 | **Year step** | Δ = 1–10 years | communities, persons, techs, languages, species regions, climate, sea level, quakes, eruptions | History speeds and, sliced, in the background of Watch speeds |
-| **Age step** | 0.25 million years | plate drift, collision, rifting, orogeny, erosion, deep evolution | Deep time |
+| **Age step** | 0.5 million years | plate drift, collision, rifting, orogeny, erosion, deep evolution | Deep time |
 
 ### 3.2 Time control
 
@@ -79,11 +79,14 @@ suite runs determinism, geology, genetics and technology tests without a browser
 | Pause | 0 | everything frozen; inspection and tools still work |
 | 1×, 4×, 16× | 1/48, 1/12, 1/3 year per second | **Watch**: bodies near the camera act tick by tick |
 | Centuries | 20 years per second | **History**: aggregate year steps, Δ = 1 |
-| Millennia | 400 years per second | **History**: Δ = 5 |
-| Ages | 4 million years per second | **Deep time** (before the Age of People) |
+| Millennia | up to 400 years per second | **History**: Δ = 8 |
+| Ages | 6 million years per second | **Deep time** (before the Age of People); *Skip to the Dawn* races the rest |
 
-The sim runs under a 14 ms per-frame budget. When a rate can't be met, the HUD shows "at
-capacity" rather than stuttering, as in v1.
+The sim runs under a 14 ms per-frame budget. A history step is split into phases (land and
+life; each community; inventions; contacts, polities, war and languages) and spread over as many
+frames as it needs, so the picture stays smooth while thousands of people live their years. The
+order of work is identical either way (a determinism test checks it). When a rate can't be met,
+the HUD shows "at capacity" and the achieved years per second appear in World → Engine.
 
 ### 3.3 Calendar and world story
 
@@ -458,7 +461,7 @@ migration, hunting pressure, speciation, extinction) → `Civ.year` (production,
 births, deaths, ageing, marriages, ties, memories; band fission and migration; founding;
 building; polity dynamics; statistical wars; trade) → `Tech.year` → `Lang.year` → `History.year`.
 
-### Per age step (Deep, 0.25 Myr)
+### Per age step (Deep, 0.5 Myr)
 `Geo.deep` (drift, collisions, rifts, hotspots, erosion, climate, sea level) → `Life.deep`
 (regional evolution with time-scaled selection, drift, migration, speciation, mass extinctions) →
 every 1 Myr `History.frame` (time-lapse frame) → throttled fine-grid regeneration for rendering.
@@ -642,9 +645,9 @@ These follow from the same rules rather than special cases:
 **Scenario demos** (`tests/demo-*.js`, also in-game under World → Scenarios):
 1. **Emergence:** a hunter-gatherer start with no scripted events. The demo reports when and
    where each era marker appears, and why (the conditions met, the inventor).
-2. **Rising sea:** a coastal band and village on a land bridge during deglaciation. The demo
-   shows the bridge drowning, the migration that follows, the contact loss and the subsequent
-   language split.
+2. **Rising sea:** the world warms after two thousand years of people on the ice-age
+   lowlands. The demo prints maps before and after, the land lost, the settlements swallowed and
+   bands driven inland, and the languages that form as water and distance part peoples.
 
 ---
 
@@ -656,7 +659,14 @@ These follow from the same rules rather than special cases:
   D8 sort runs every 4 steps.
 - Year steps cost O(persons + communities + species-regions), with Δ = 5 at top speed.
 - Embodied people are capped by LOD; v1's spatial hash, staggered AI and flow fields are kept.
-- History snapshots for counterfactuals are taken every 100 years, compressed to a ring of 24.
+- History snapshots for counterfactuals are taken every 500 years, in a ring of 5 plus the Dawn.
+- Person records are capped by a budget that scales with the map (about 5,000 for a 1080p
+  screen); above 80% of it fertility eases off. Dead records keep only family links and core
+  memories, and are forgotten once no living person needs them for a family tree (the famous
+  are remembered for longer).
+- Measured (Node, 544×304 map, ~5,800 people in ~70 communities): about 20–25 ms per
+  simulated year, so Millennia reaches roughly 40–50 years per second; memory stays at 1–1.6 GB
+  over 14,000 years.
 
 ---
 
