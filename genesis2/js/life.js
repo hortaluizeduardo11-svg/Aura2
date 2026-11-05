@@ -31,6 +31,7 @@
     stats: { ms: 0 },
   });
   let rng = Math.random;
+  Life.setRng = (v) => { if (!rng.set) rng = AG.makeRng(0); rng.set(v); Life.rng = rng; };
   const rr = () => rng();
   const gauss = () => { let u = 0, v = 0; while (u === 0) u = rr(); v = rr(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   const clamp8 = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
@@ -255,7 +256,7 @@
 
   // ------------------------------------------------------------ deep time
   Life.init = function (seed) {
-    rng = AG.mulberry32((Math.imul(seed, 1597334677) ^ 0x2545f491) >>> 0);
+    rng = AG.makeRng((Math.imul(seed, 1597334677) ^ 0x2545f491) >>> 0); Life.rng = rng;
     Life.species = []; Life.extinctions = 0; Life.speciations = 0; Life.massExtinctions = 0; Life.macro = 0;
     Life.envFromGeo();
     // five founding lineages on the supercontinent, 250 million years ago

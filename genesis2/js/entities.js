@@ -1,12 +1,13 @@
 /* AURA: Genesis 2 — entities.js
- * Structure-of-arrays entity store sized for 32k units, a free list for slot
- * reuse, a counting-sort spatial hash per layer, genetics (allele picking +
- * blending + mutation), traits, skills, personal goals, and the People ledger
- * (names, family tree links, memory logs) kept for every civilised citizen. */
+ * Bodies: a structure-of-arrays store for 32k embodied creatures and vehicles, a free list and a
+ * counting-sort spatial hash. A person's body points at their record (pid); an animal's body
+ * carries its own diploid genome (gen) and species (sid). Size, speed, strength, senses,
+ * temperature tolerance and colour are all read from the genome. */
 'use strict';
 (function () {
   const AG = window.AG;
-  const { W, H, NG, NS, SP, SPECIES, TRAITS, TR, FL, J, ST, TK, G } = AG;
+  const { W, H, NG, NS, SP, SPECIES, TR, FL, J, ST, TK, G } = AG;
+  const Life = AG.Life, L = Life.L, GL = Life.GL;
   const rnd = AG.rnd;
   const MAXU = (AG.MAXU = 32768);
   const A = (T, n) => new T(n || MAXU);
@@ -18,168 +19,197 @@
     st: A(Uint8Array), task: A(Uint8Array), tref: A(Int32Array), tm: A(Float32Array), aux: A(Int32Array),
     hp: A(Float32Array), mhp: A(Float32Array), dmg: A(Float32Array), spd: A(Float32Array),
     age: A(Float32Array), life: A(Float32Array), sex: A(Uint8Array),
-    kd: A(Int16Array), city: A(Int16Array), home: A(Int16Array), cidx: A(Int32Array),
+    kd: A(Int16Array), city: A(Int16Array), home: A(Int16Array),
     job: A(Uint8Array), food: A(Float32Array), carry: A(Uint8Array), camt: A(Uint8Array),
-    genes: A(Uint8Array, MAXU * NG), traits: A(Uint32Array), skills: A(Uint8Array, MAXU * NS),
-    uid: A(Uint32Array), spouse: A(Int32Array), goal: A(Uint8Array),
+    genes: A(Uint8Array, MAXU * NG), traits: A(Uint32Array), uid: A(Uint32Array),
     dis: A(Uint8Array), dtm: A(Float32Array), imm: A(Uint16Array),
     tgt: A(Int32Array), sq: A(Int16Array), cd: A(Float32Array), flags: A(Uint16Array),
     kills: A(Uint16Array), anim: A(Float32Array), stuck: A(Uint8Array), faith: A(Float32Array),
+    // Genesis 2
+    pid: A(Int32Array), sid: A(Int16Array), tm0: A(Int32Array), gen: A(Uint8Array, MAXU * GL), fgen: A(Uint8Array, MAXU * GL),
+    energy: A(Float32Array), preg: A(Float32Array), scale: A(Float32Array), sense: A(Float32Array),
+    cold: A(Float32Array), heat: A(Float32Array), bold: A(Float32Array), social: A(Float32Array), hue: A(Uint8Array),
   });
   const free = new Int32Array(MAXU);
   let freeTop = 0, nextUid = 1;
   const Ent = (AG.Ent = { count: new Int32Array(SPECIES.length), births: 0, deaths: 0 });
 
-  // ------------------------------------------------------------ people ledger
-  const People = (AG.People = { map: new Map() });
-  People.get = (uid) => People.map.get(uid);
-  People.rec = (i) => People.map.get(U.uid[i]);
-  People.prune = function () {
-    if (People.map.size < 60000) return;
-    let n = People.map.size - 45000;
-    for (const [k, r] of People.map) { if (n <= 0) break; if (r.died) { People.map.delete(k); n--; } }
-  };
-
+  Ent.state = () => ({ free: Array.from(free.subarray(0, freeTop)), nextUid, counts: Array.from(Ent.count), births: Ent.births, deaths: Ent.deaths });
+  Ent.setState = function (s) { freeTop = s.free.length; free.set(s.free); nextUid = s.nextUid; Ent.count.set(s.counts); Ent.births = s.births; Ent.deaths = s.deaths; };
   Ent.reset = function () {
     U.alive.fill(0); U.hi = 0; U.count = 0; freeTop = 0; nextUid = 1;
     Ent.count.fill(0); Ent.births = 0; Ent.deaths = 0;
-    People.map.clear();
   };
 
-  // ------------------------------------------------------------ genetics
-  function inheritGenes(i, d, mom, dad, mutate) {
-    const g = i * NG, base = d.genes, mut = 12 + mutate * 40;
-    for (let k = 0; k < NG; k++) {
-      let v;
-      if (mom >= 0 && dad >= 0) {
-        const a = U.genes[mom * NG + k], b = U.genes[dad * NG + k];
-        // dominant allele from one parent, blended with both, plus drift
-        v = (rnd() < 0.5 ? a : b) * 0.7 + (a + b) * 0.15 + (rnd() - 0.5) * mut;
-        if (rnd() < 0.02 + mutate * 0.1) v += (rnd() - 0.5) * 140;
-      } else if (mom >= 0) v = U.genes[mom * NG + k] + (rnd() - 0.5) * mut;
-      else v = (base ? base[k] : 128) + (rnd() - 0.5) * 90;
-      U.genes[g + k] = v < 0 ? 0 : v > 255 ? 255 : v;
-    }
+  function slot() {
+    if (freeTop > 0) return free[--freeTop];
+    if (U.hi < MAXU) return U.hi++;
+    return -1;
   }
-
-  function makeTraits(i, mom, dad, civ) {
-    let t = 0;
-    for (const tr of TRAITS) {
-      if (tr.gene) { const v = U.genes[i * NG + tr.gene[0]]; if (tr.low ? v < tr.gene[1] : v > tr.gene[1]) t |= tr.bit; continue; }
-      if (!civ || !tr.heritable) continue;
-      if (mom >= 0 && (U.traits[mom] & tr.bit) && rnd() < tr.heritable) t |= tr.bit;
-      if (dad >= 0 && (U.traits[dad] & tr.bit) && rnd() < tr.heritable) t |= tr.bit;
-    }
-    if (civ) {
-      for (const k of ['brave', 'coward', 'kind', 'cruel', 'greedy', 'pious', 'curious', 'ambitious']) if (rnd() < 0.07) t |= TR[k];
-      if (U.genes[i * NG + G.DEV] > 190 && rnd() < 0.5) t |= TR.pious;
-      if ((t & TR.brave) && (t & TR.coward)) t &= ~(rnd() < 0.5 ? TR.brave : TR.coward);
-      if ((t & TR.kind) && (t & TR.cruel)) t &= ~(rnd() < 0.5 ? TR.kind : TR.cruel);
-    }
-    return t;
-  }
-
-  function pickGoal(i) {
-    const t = U.traits[i], w = [3, 1, 1, 1, 1, 0.4, 1];
-    if (t & TR.kind) w[0] += 2; if (t & TR.greedy) w[1] += 3; if (t & TR.brave) w[2] += 3; if (t & TR.curious) w[3] += 3;
-    if (t & TR.pious) w[4] += 3; if (t & TR.ambitious) w[5] += 4; if (t & TR.genius) w[6] += 3;
-    let s = 0; for (const v of w) s += v;
-    let r = rnd() * s;
-    for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) return k; }
-    return 0;
-  }
-
-  Ent.deriveStats = function (i) {
-    const d = SPECIES[U.sp[i]], g = i * NG, t = U.traits[i];
-    const str = U.genes[g + G.STR] / 255, agi = U.genes[g + G.AGI] / 255, sta = U.genes[g + G.STAT] / 255, lon = U.genes[g + G.LONG] / 255;
-    let mhp = d.hp * (0.7 + sta * 0.45 + str * 0.25), dmg = d.dmg * (0.6 + str * 0.8), spd = d.spd * (0.8 + agi * 0.4);
-    if (t & TR.giant) { mhp *= 1.35; dmg *= 1.2; spd *= 0.92; }
-    if (t & TR.swift) spd *= 1.2;
-    if (t & TR.blessed) { mhp *= 1.2; dmg *= 1.2; }
-    if (t & TR.cursed) mhp *= 0.85;
-    if (t & TR.veteran) dmg *= 1.15;
-    if (t & TR.hero) { mhp *= 1.5; dmg *= 1.4; }
-    const ratio = U.mhp[i] > 0 ? U.hp[i] / U.mhp[i] : 1;
-    U.mhp[i] = mhp; U.hp[i] = Math.min(mhp, mhp * ratio); U.dmg[i] = dmg; U.spd[i] = spd;
-    let life = d.life[0] + (d.life[1] - d.life[0]) * lon;
-    if (t & TR.longlived) life *= 1.25; if (t & TR.sickly) life *= 0.8;
-    U.life[i] = life;
-  };
-
-  // ------------------------------------------------------------ spawn / kill
-  Ent.spawn = function (sp, x, y, o) {
-    o = o || {};
+  function base(i, sp, x, y, o) {
     const d = SPECIES[sp];
-    if (d.cap && Ent.count[sp] >= d.cap && !o.force) return -1;
-    let i;
-    if (freeTop > 0) i = free[--freeTop]; else if (U.hi < MAXU) i = U.hi++; else return -1;
     x = AG.clamp(x, 0.5, W - 0.5); y = AG.clamp(y, 0.5, H - 0.5);
     U.alive[i] = 1; U.sp[i] = sp;
     U.x[i] = U.px[i] = U.tx[i] = x; U.y[i] = U.py[i] = U.ty[i] = y;
     U.fx[i] = rnd() < 0.5 ? 1 : -1; U.fy[i] = 0;
-    U.layer[i] = o.layer !== undefined ? o.layer : d.flying ? 2 : d.layer !== undefined ? d.layer : 1;
+    U.layer[i] = o.layer !== undefined ? o.layer : d.flying ? 2 : 1;
     U.st[i] = ST.IDLE; U.task[i] = TK.NONE; U.tref[i] = -1; U.tm[i] = 0; U.aux[i] = 0;
-    U.age[i] = o.age !== undefined ? o.age : d.adult + rnd() * 6;
+    U.age[i] = o.age !== undefined ? o.age : d.adult + rnd() * 4;
     U.sex[i] = o.sex !== undefined ? o.sex : rnd() < 0.5 ? 0 : 1;
-    U.kd[i] = o.kd !== undefined ? o.kd : -1; U.city[i] = -1; U.home[i] = o.home !== undefined ? o.home : -1; U.cidx[i] = -1;
-    U.job[i] = d.kind === 'civ' && U.age[i] < d.adult ? J.CHILD : J.GATHER;
-    U.food[i] = 1; U.carry[i] = 0; U.camt[i] = 0;
-    U.spouse[i] = -1; U.dis[i] = 0; U.dtm[i] = 0; U.imm[i] = 0; U.tgt[i] = -1; U.sq[i] = -1; U.cd[i] = 0; U.flags[i] = 0;
-    U.kills[i] = 0; U.anim[i] = rnd() * 10; U.stuck[i] = 0; U.faith[i] = 0;
-    const mom = o.mom !== undefined ? o.mom : -1, dad = o.dad !== undefined ? o.dad : -1;
-    const civ = d.kind === 'civ';
-    inheritGenes(i, d, mom, dad, o.mutate || 0);
-    const gb = i * NS; for (let s = 0; s < NS; s++) U.skills[gb + s] = (rnd() * 20) | 0;
-    U.traits[i] = makeTraits(i, mom, dad, civ);
-    U.goal[i] = civ ? pickGoal(i) : 0;
-    U.mhp[i] = 0; Ent.deriveStats(i); U.hp[i] = U.mhp[i];
+    U.kd[i] = o.kd !== undefined ? o.kd : -1; U.city[i] = o.city !== undefined ? o.city : -1; U.home[i] = o.home !== undefined ? o.home : -1;
+    U.job[i] = J.GATHER; U.food[i] = 1; U.carry[i] = 0; U.camt[i] = 0;
+    U.dis[i] = 0; U.dtm[i] = 0; U.imm[i] = 0; U.tgt[i] = -1; U.sq[i] = -1; U.cd[i] = 0; U.flags[i] = 0;
+    U.kills[i] = 0; U.anim[i] = rnd() * 10; U.stuck[i] = 0; U.faith[i] = 0; U.traits[i] = 0;
+    U.pid[i] = -1; U.sid[i] = -1; U.energy[i] = 0.8; U.preg[i] = 0; U.scale[i] = 1; U.sense[i] = 6;
+    U.cold[i] = 0.5; U.heat[i] = 0.5; U.bold[i] = 0.5; U.social[i] = 0.5; U.hue[i] = 128;
     U.uid[i] = nextUid++;
-    if (civ) {
-      const mr = mom >= 0 ? People.rec(mom) : null, dr = dad >= 0 ? People.rec(dad) : null;
-      const rec = { uid: U.uid[i], name: AG.Names.person(sp), sp, sex: U.sex[i], mom: mr ? mr.uid : 0, dad: dr ? dr.uid : 0, kids: [], born: AG.tick, died: 0, cause: '', idx: i, log: [], realm: '', lastBirth: 0, age: 0 };
-      People.map.set(rec.uid, rec);
-      if (mr) { mr.kids.push(rec.uid); mr.lastBirth = AG.tick; }
-      if (dr) dr.kids.push(rec.uid);
-      if (o.city !== undefined && o.city >= 0) AG.Civ.joinCity(i, o.city);
-      if (U.kd[i] >= 0) rec.realm = AG.Civ.kingdoms[U.kd[i]].name;
-      if (mom >= 0) Ent.births++;
-    }
     Ent.count[sp]++; U.count++;
+  }
+
+  // Read abilities from the genome at body slot i (persons add their health and traits).
+  Ent.deriveStats = function (i) {
+    const sp = U.sp[i], d = SPECIES[sp], g = U.gen, o = i * GL, ph = (k) => Life.express(g, o, k) / 255;
+    const size = ph(L.SIZE), str = ph(L.STR), spd = ph(L.SPEED);
+    const grow = U.age[i] < d.adult ? 0.55 + 0.45 * (U.age[i] / Math.max(0.1, d.adult)) : 1;
+    U.scale[i] = (0.72 + size * 0.6) * grow;
+    U.mhp[i] = d.hp * (0.55 + size * 0.6 + str * 0.35) * grow;
+    U.dmg[i] = d.dmg * (0.5 + str * 0.7 + size * 0.3);
+    U.spd[i] = d.spd * (0.75 + spd * 0.5 - size * 0.12);
+    U.sense[i] = 3 + ph(L.SENSE) * 9;
+    U.cold[i] = ph(L.COLD); U.heat[i] = ph(L.HEAT); U.bold[i] = ph(L.BOLD); U.social[i] = ph(L.SOCIAL);
+    U.hue[i] = Life.express(g, o, L.HUE);
+    U.life[i] = d.life[0] + (d.life[1] - d.life[0]) * ph(L.LIFE);
+    const gb = i * NG; // renderer cache
+    U.genes[gb + G.STR] = str * 255; U.genes[gb + G.AGI] = spd * 255; U.genes[gb + G.INT] = ph(L.COGN) * 255; U.genes[gb + G.FERT] = ph(L.FERT) * 255;
+    U.genes[gb + G.LONG] = ph(L.LIFE) * 255; U.genes[gb + G.STAT] = size * 255; U.genes[gb + G.HUE] = U.hue[i]; U.genes[gb + G.RES] = ph(L.IMMUNE) * 255; U.genes[gb + G.DEV] = 128;
+    const pid = U.pid[i];
+    if (pid >= 0) {
+      const P = AG.People.get(pid);
+      if (P) {
+        U.traits[i] = P.traits;
+        if (P.traits & TR.giant) { U.mhp[i] *= 1.2; U.dmg[i] *= 1.15; }
+        if (P.traits & TR.swift) U.spd[i] *= 1.15;
+        if (P.traits & TR.hero) { U.mhp[i] *= 1.4; U.dmg[i] *= 1.3; }
+        U.spd[i] *= AG.People.speedMul(P);
+        U.dmg[i] *= AG.People.workMul(P);
+        U.genes[gb + G.DEV] = P.belief.devotion * 255;
+      }
+    }
+  };
+
+  // ------------------------------------------------------------ spawning
+  // An animal of species s near (x, y), its genome bred from the region's reservoir.
+  Ent.spawnCreature = function (s, x, y, R, o) {
+    o = o || {};
+    const bodyKind = s.arch === Life.ARCH.GRAZER ? SP.GRAZER : s.arch === Life.ARCH.PREDATOR ? SP.PREDATOR : s.arch === Life.ARCH.BIRD ? SP.BIRD : SP.APE;
+    const i = slot(); if (i < 0) return -1;
+    base(i, bodyKind, x, y, o);
+    U.sid[i] = s.id;
+    const go = i * GL;
+    if (o.mom >= 0 && o.mom !== undefined) Life.breed(U.gen, go, U.gen, o.mom * GL, U.fgen, o.mom * GL, rnd, 1);
+    else if (R && R.nres >= 2) { const a = (rnd() * R.nres) | 0, b = (rnd() * R.nres) | 0; Life.breed(U.gen, go, R.res, a * GL, R.res, b * GL, rnd, 1); }
+    else Life.founder(U.gen, go, R ? R.mu : s.mean, 14, rnd);
+    if (o.age === undefined) U.age[i] = rnd() * SPECIES[bodyKind].life[0] * 0.8;
+    Ent.deriveStats(i);
+    U.hp[i] = U.mhp[i];
+    if (s.domestic) U.flags[i] |= FL.DOMESTIC;
     return i;
   };
-
-  Ent.kill = function (i, cause, killer) {
-    if (!U.alive[i]) return;
-    const sp = U.sp[i], d = SPECIES[sp];
-    killer = killer === undefined ? -1 : killer;
-    AG.Civ.onDeath(i, cause, killer);
-    const s = U.spouse[i];
-    const rec = d.kind === 'civ' ? People.rec(i) : null;
-    if (s >= 0 && U.alive[s] && U.spouse[s] === i) { U.spouse[s] = -1; if (rec) Ent.memory(s, `Mourned ${rec.name}, taken by ${cause}`); }
-    if (rec) { rec.died = AG.tick; rec.cause = cause; rec.idx = -1; rec.age = U.age[i]; }
-    if (U.city[i] >= 0) AG.Civ.leaveCity(i);
-    if (AG.God.possessed === i) AG.God.release();
-    const x = U.x[i], y = U.y[i], layer = U.layer[i], dis = U.dis[i];
-    U.alive[i] = 0; free[freeTop++] = i; U.count--; Ent.count[sp]--; Ent.deaths++;
-    if (cause !== 'retired') AG.FX.burst(x, y, d.kind === 'vehicle' ? 'debris' : 'blood', d.kind === 'vehicle' ? 10 : 4, layer);
-    // the Hollowing raises the dead
-    if (d.kind === 'civ' && ((dis && AG.DISEASES[dis - 1] && AG.DISEASES[dis - 1].hollow) || cause === 'the Hollow')) {
-      const h = Ent.spawn(SP.HOLLOW, x, y, { layer });
-      if (h >= 0) AG.FX.burst(x, y, 'curse', 6, layer);
+  // A body for a person record, at (x, y).
+  Ent.spawnPerson = function (P, x, y) {
+    if (P.body >= 0 && U.alive[P.body] && U.pid[P.body] === P.id) return P.body;
+    const i = slot(); if (i < 0) return -1;
+    const c = AG.Civ.cities[P.comm];
+    base(i, SP.PERSON, x, y, { age: AG.People.age(P), sex: P.sex, kd: c ? c.kd : -1, city: P.comm, home: P.comm });
+    U.pid[i] = P.id; U.sid[i] = Life.people ? Life.people.id : -1;
+    U.gen.set(P.gen, i * GL);
+    U.job[i] = P.job; U.dis[i] = P.dis; U.dtm[i] = P.dtm; U.imm[i] = P.imm; U.kills[i] = P.kills;
+    U.energy[i] = P.needs.food; U.faith[i] = P.belief.devotion * 10;
+    if (P.rank >= 2) U.flags[i] |= FL.KING;
+    if (P.traits & TR.hero) U.flags[i] |= FL.HERO;
+    Ent.deriveStats(i);
+    U.hp[i] = U.mhp[i] * AG.People.health(P);
+    P.body = i;
+    return i;
+  };
+  Ent.spawnVehicle = function (sp, x, y, o) {
+    const i = slot(); if (i < 0) return -1;
+    base(i, sp, x, y, o || {});
+    U.mhp[i] = SPECIES[sp].hp; U.hp[i] = U.mhp[i]; U.dmg[i] = SPECIES[sp].dmg; U.spd[i] = SPECIES[sp].spd; U.life[i] = 1e9; U.age[i] = 0;
+    return i;
+  };
+  // Generic spawn used by god tools: a body kind near (x, y), drawn from the nearest living
+  // species of that kind (a new founder lineage if there is none).
+  Ent.spawn = function (sp, x, y, o) {
+    o = o || {};
+    if (SPECIES[sp].kind === 'vehicle') return Ent.spawnVehicle(sp, x, y, o);
+    const arch = sp === SP.GRAZER ? Life.ARCH.GRAZER : sp === SP.PREDATOR ? Life.ARCH.PREDATOR : sp === SP.BIRD ? Life.ARCH.BIRD : sp === SP.APE ? Life.ARCH.PRIMATE : -1;
+    if (arch < 0) return -1;
+    const r = Life.regionOf(x, y);
+    let best = null, bd = 1e18;
+    for (const s of Life.byArch(arch)) {
+      if (s.sapient || s.domestic) continue;
+      for (const [q] of s.regions) { const d = AG.dist2(q % Life.RW, (q / Life.RW) | 0, r % Life.RW, (r / Life.RW) | 0); if (d < bd) { bd = d; best = s; } }
     }
+    if (!best) {
+      const m = new Float32Array(Life.NL).fill(128); m[L.HUE] = 110;
+      best = Life.newSpecies(arch, m, null, Life.when());
+    }
+    if (o.species) best = o.species;
+    const R = best.regions.get(r) || [...best.regions.values()][0] || null;
+    return Ent.spawnCreature(best, x, y, R, o);
   };
 
-  // Damage with attribution, kill credit and retaliation.
+  // ------------------------------------------------------------ removal and death
+  // Free the slot. `dead` is set when the record has already been told (People.die).
+  Ent.remove = function (i, dead) {
+    if (!U.alive[i]) return;
+    const pid = U.pid[i];
+    if (pid >= 0 && !dead) Ent.writeBack(i);
+    if (pid >= 0) { const P = AG.People.get(pid); if (P && P.body === i) P.body = -1; }
+    if (AG.God.possessed === i) AG.God.release();
+    U.alive[i] = 0; free[freeTop++] = i; U.count--; Ent.count[U.sp[i]]--;
+  };
+  // Copy what the body lived through back into the person record.
+  Ent.writeBack = function (i) {
+    const P = AG.People.get(U.pid[i]); if (!P) return;
+    P.x = U.x[i]; P.y = U.y[i]; P.lastSeen = AG.Geo.year;
+    P.hp = AG.clamp(U.hp[i] / Math.max(1, U.mhp[i]), 0.05, 1);
+    P.dis = U.dis[i]; P.dtm = U.dtm[i]; P.imm |= U.imm[i]; P.kills = U.kills[i]; P.needs.food = U.energy[i];
+  };
+  Ent.kill = function (i, cause, killer) {
+    if (!U.alive[i]) return;
+    const sp = U.sp[i], d = SPECIES[sp], x = U.x[i], y = U.y[i], layer = U.layer[i];
+    killer = killer === undefined ? -1 : killer;
+    Ent.deaths++;
+    if (cause !== 'retired' && cause !== 'eaten') AG.FX.burst(x, y, d.kind === 'vehicle' ? 'debris' : 'blood', d.kind === 'vehicle' ? 10 : 4, layer);
+    const pid = U.pid[i];
+    if (pid >= 0) {
+      const P = AG.People.get(pid);
+      Ent.writeBack(i);
+      const kp = killer >= 0 && U.alive[killer] && U.pid[killer] >= 0 ? U.pid[killer] : 0;
+      if (P) AG.People.die(P, cause, kp); // People.die removes the body
+      if (U.alive[i]) Ent.remove(i, true);
+      return;
+    }
+    if (U.sid[i] >= 0 && AG.Civ.onAnimalDeath) AG.Civ.onAnimalDeath(i, cause, killer);
+    Ent.remove(i, true);
+  };
+
+  // Damage with attribution. People take wounds to a body part; killers are remembered.
   Ent.damage = function (t, dmg, attacker, cause) {
     if (!U.alive[t]) return;
     U.hp[t] -= dmg;
+    const pid = U.pid[t];
+    if (pid >= 0) {
+      const P = AG.People.get(pid), by = attacker >= 0 && U.alive[attacker] && U.pid[attacker] >= 0 ? U.pid[attacker] : 0;
+      if (P && dmg > U.mhp[t] * 0.12 && rnd() < 0.6) AG.People.injure(P, -1, Math.min(1, dmg / Math.max(1, U.mhp[t]) * 1.5), cause || (attacker >= 0 ? Ent.name(attacker) : ''), by);
+    }
     if (U.hp[t] <= 0) {
       let c = cause || 'wounds';
       if (attacker >= 0 && U.alive[attacker]) {
-        const asp = U.sp[attacker];
-        if (asp === SP.HOLLOW) c = 'the Hollow';
-        else if (SPECIES[asp].kind === 'civ') c = 'the blade of ' + Ent.name(attacker);
-        else c = 'a ' + SPECIES[asp].name.toLowerCase();
+        if (U.pid[attacker] >= 0) c = 'the spear of ' + Ent.name(attacker);
+        else if (U.sid[attacker] >= 0) c = 'a ' + Ent.common(attacker);
         onKill(attacker, t);
       }
       Ent.kill(t, c, attacker);
@@ -187,63 +217,53 @@
     }
     if (attacker >= 0 && U.alive[attacker] && U.st[t] !== ST.FIGHT && !(U.flags[t] & FL.POSSESSED)) AG.AI.react(t, attacker);
   };
-
   function onKill(a, v) {
     U.kills[a]++;
-    const asp = U.sp[a], vsp = U.sp[v];
-    if (SPECIES[asp].kind === 'animal' || asp === SP.HOLLOW || asp === SP.CRAWLER) { U.food[a] = 1; return; }
-    if (SPECIES[asp].kind !== 'civ') return;
-    Ent.gainSkill(a, AG.SK.COMBAT, 3);
-    if (vsp === SP.DEER) { U.carry[a] = 1; U.camt[a] = 4; return; }
-    Ent.memory(a, `Slew ${SPECIES[vsp].kind === 'civ' ? Ent.name(v) + ' of ' + (U.kd[v] >= 0 ? AG.Civ.kingdoms[U.kd[v]].name : 'no realm') : 'a ' + SPECIES[vsp].name.toLowerCase()}`);
-    if (U.kills[a] === 3 && Ent.addTrait(a, 'veteran')) Ent.memory(a, 'Became a veteran of many battles');
-    if (U.kills[a] === 8 && Ent.addTrait(a, 'hero')) {
-      U.flags[a] |= FL.HERO;
-      Ent.memory(a, 'Hailed as a hero of the realm');
-      const k = U.kd[a] >= 0 ? AG.Civ.kingdoms[U.kd[a]] : null;
-      AG.Chronicle.add(`${Ent.name(a)} is hailed as a hero${k ? ' of the ' + k.name : ''}`, 'hero', U.x[a], U.y[a]);
+    if (U.pid[a] < 0) { U.energy[a] = Math.min(1, U.energy[a] + 0.8); U.food[a] = 1; return; }
+    const P = AG.People.get(U.pid[a]); if (!P) return;
+    if (U.pid[v] < 0 && U.sid[v] >= 0) { // a hunt
+      U.carry[a] = 1; U.camt[a] = Math.max(3, Math.round(4 * U.scale[v] * U.scale[v]));
+      Ent.gainSkill(a, AG.SK.HUNT, 2);
+      if (U.scale[v] > 1.15 && rnd() < 0.5) AG.People.remember(P, AG.People.MK.HUNT, { v: 0.6, s: 0.5, d: `Brought down a great ${Ent.common(v)}` });
+      return;
+    }
+    Ent.gainSkill(a, AG.SK.FIGHT, 3);
+    P.kills++;
+    if (P.kills === 3 && AG.People.addTrait(P, 'veteran')) AG.People.remember(P, AG.People.MK.WAR, { v: 0.2, s: 0.6, d: 'in many fights and lived' });
+    if (P.kills === 7 && AG.People.addTrait(P, 'hero')) {
+      U.flags[a] |= FL.HERO; P.fame += 5;
+      AG.History.event('hero', `${P.name} is hailed as a hero`, { x: U.x[a], y: U.y[a], person: P.id });
     }
   }
 
-  Ent.memory = function (i, text) {
-    const r = People.rec(i); if (!r) return;
-    r.log.push({ t: AG.tick, s: text });
-    if (r.log.length > 14) r.log.shift();
-  };
-  Ent.name = (i) => { const r = People.rec(i); return r ? r.name : SPECIES[U.sp[i]].name; };
-  Ent.title = function (i) {
-    const f = U.flags[i], t = U.traits[i];
-    if (f & FL.KING) return U.sex[i] ? 'King' : 'Queen';
-    if (t & TR.hero) return 'Hero';
-    if (f & FL.POSSESSED) return 'Vessel';
-    if (U.job[i] === J.PRIEST && AG.Civ.kingdoms[U.kd[i]] && AG.Civ.kingdoms[U.kd[i]].culture.mystic >= 4 && U.faith[i] > 8) return 'Saint';
-    return '';
-  };
+  // ------------------------------------------------------------ helpers
+  Ent.person = (i) => (U.pid[i] >= 0 ? AG.People.get(U.pid[i]) : null);
+  Ent.common = (i) => { const s = U.sid[i] >= 0 ? Life.species[U.sid[i]] : null; return s ? s.common : SPECIES[U.sp[i]].name.toLowerCase(); };
+  Ent.memory = function (i, text) { const P = Ent.person(i); if (P) AG.People.remember(P, -1, { d: text, v: 0, s: 0.4 }); };
+  Ent.name = (i) => { const P = Ent.person(i); if (P) return P.name; const s = U.sid[i] >= 0 ? Life.species[U.sid[i]] : null; return s ? AG.Lang.cap(s.common) : SPECIES[U.sp[i]].name; };
+  Ent.title = function (i) { const P = Ent.person(i); if (!P) return ''; if (U.flags[i] & FL.POSSESSED) return 'Vessel'; return AG.People.title(P); };
   Ent.hasTrait = (i, k) => (U.traits[i] & TR[k]) !== 0;
-  Ent.addTrait = function (i, k) {
-    if (U.traits[i] & TR[k]) return false;
-    U.traits[i] |= TR[k]; Ent.deriveStats(i);
-    return true;
-  };
+  Ent.addTrait = function (i, k) { const P = Ent.person(i); if (!P || !AG.People.addTrait(P, k)) return false; U.traits[i] = P.traits; Ent.deriveStats(i); return true; };
   Ent.gainSkill = function (i, s, amt) {
-    const j = i * NS + s;
-    const rate = amt * (U.traits[i] & TR.genius ? 2 : 1) * (0.5 + U.genes[i * NG + G.INT] / 255);
-    let v = U.skills[j] + Math.floor(rate) + (rnd() < rate % 1 ? 1 : 0);
-    U.skills[j] = v > 255 ? 255 : v;
+    const P = Ent.person(i); if (!P) return;
+    const rate = amt * (P.traits & TR.genius ? 2 : 1) * (0.5 + AG.People.ph(P, L.COGN) / 255) * 0.25;
+    const v = P.skills[s] + Math.floor(rate) + (rnd() < rate % 1 ? 1 : 0);
+    P.skills[s] = v > 100 ? 100 : v;
   };
-  Ent.skill = (i, s) => U.skills[i * NS + s];
+  Ent.skill = (i, s) => { const P = Ent.person(i); return P ? P.skills[s] : 0; };
   Ent.gene = (i, g) => U.genes[i * NG + g];
-
+  Ent.phen = (i, k) => Life.express(U.gen, i * GL, k);
   Ent.infect = function (i, d) {
     if (!U.alive[i] || U.dis[i] || (U.imm[i] & (1 << d))) return false;
     const D = AG.DISEASES[d];
-    if (!D || !(D.targets & (1 << U.sp[i]))) return false;
+    if (!D || !(D.targets & (1 << (U.sp[i] === SP.PERSON ? 0 : 1)))) return false;
     U.dis[i] = d + 1; U.dtm[i] = 0;
+    const P = Ent.person(i); if (P) { P.dis = d + 1; P.dtm = 0; AG.People.remember(P, AG.People.MK.ILL, { v: -0.4, s: 0.5, d: D.name }); }
     return true;
   };
 
   // ------------------------------------------------------------ spatial hash
-  const SC = 8, SGW = W / SC, SGH = H / SC, SCELLS = SGW * SGH;
+  const SC = 8, SGW = Math.ceil(W / SC), SGH = Math.ceil(H / SC), SCELLS = SGW * SGH;
   const head = new Int32Array(SCELLS * 3), next = new Int32Array(MAXU);
   Ent.buf = new Int32Array(1024);
   Ent.rebuildGrid = function () {
@@ -258,15 +278,14 @@
       next[i] = head[c]; head[c] = i;
     }
   };
-  // Fills Ent.buf with alive units within r of (x, y) on a layer; returns count.
   Ent.near = function (x, y, r, layer, max) {
     max = max || 1024;
-    const buf = Ent.buf, r2 = r * r, base = layer * SCELLS;
+    const buf = Ent.buf, r2 = r * r, base0 = layer * SCELLS;
     const x0 = Math.max(0, ((x - r) / SC) | 0), x1 = Math.min(SGW - 1, ((x + r) / SC) | 0);
     const y0 = Math.max(0, ((y - r) / SC) | 0), y1 = Math.min(SGH - 1, ((y + r) / SC) | 0);
     let n = 0;
     for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
-      for (let j = head[base + cy * SGW + cx]; j >= 0; j = next[j]) {
+      for (let j = head[base0 + cy * SGW + cx]; j >= 0; j = next[j]) {
         if (!U.alive[j]) continue;
         const dx = U.x[j] - x, dy = U.y[j] - y;
         if (dx * dx + dy * dy <= r2) { buf[n++] = j; if (n >= max) return n; }

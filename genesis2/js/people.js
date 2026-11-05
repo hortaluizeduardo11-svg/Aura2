@@ -23,6 +23,7 @@
   const year = () => AG.Geo.year;
   People.year = year;
 
+  People.budget = Math.round(9000 * Math.min(1.6, Math.max(0.5, AG.SCALE / 2.4)));
   People.reset = function () { People.map.clear(); People.alive = 0; People.nextId = 1; People.births = 0; People.deaths = 0; People.dead.length = 0; People.famous.length = 0; };
   People.get = (id) => People.map.get(id);
   People.age = (P) => (P.died !== null ? P.died : year()) - P.born;
@@ -140,6 +141,8 @@
   }
   People.feel = function (P, Q, aff, trust) { // P's view of Q changes
     if (!P || !Q || P === Q) return null;
+    // a full circle of acquaintance only admits someone who made a real impression
+    if (P.ties.size >= 24 && !P.ties.has(Q.id) && Math.abs(aff) < 0.15 && Math.abs(trust || 0) < 0.15) return null;
     const t = People.tie(P, Q.id);
     t.aff = AG.clamp(t.aff + aff, -1, 1); t.trust = AG.clamp(t.trust + (trust || 0), -1, 1); t.n++;
     if (t.aff > 0.55 && !(t.k & TIE.FAMILY)) { if (!(t.k & TIE.FRIEND)) { t.k |= TIE.FRIEND; t.k &= ~TIE.RIVAL; People.remember(P, MK.FRIEND, { who: Q.id, v: 0.5, s: 0.4 }); } }
@@ -151,12 +154,10 @@
     if (a.mom && (a.mom === b.mom || a.mom === b.id)) return true;
     if (a.dad && (a.dad === b.dad || a.dad === b.id)) return true;
     if (b.mom === a.id || b.dad === a.id) return true;
-    const ga = [a.mom, a.dad].map(People.get).filter(Boolean), gb = [b.mom, b.dad].map(People.get).filter(Boolean);
-    for (const x of ga) for (const y of gb) if ((x.mom && x.mom === y.mom) || (x.dad && x.dad === y.dad)) return true; // first cousins
-    return false;
+    return false; // cousins may marry (most early peoples allowed it; tiny bands depend on it)
   };
   People.marry = function (A, B) {
-    if (!A || !B || A.spouse || B.spouse) return false;
+    if (!A || !B || A.spouse || B.spouse || A.died !== null || B.died !== null || A === B) return false;
     A.spouse = B.id; B.spouse = A.id; A.spouses.push(B.id); B.spouses.push(A.id);
     for (const [P, Q] of [[A, B], [B, A]]) { const t = People.tie(P, Q.id); t.k |= TIE.SPOUSE; t.aff = Math.max(t.aff, 0.5); t.trust = Math.max(t.trust, 0.4); P.emo.love = 1; P.emo.joy = Math.min(1, P.emo.joy + 0.5); }
     People.remember(A, MK.MARRIED, { who: B.id, v: 0.8, s: 1, core: true }); People.remember(B, MK.MARRIED, { who: A.id, v: 0.8, s: 1, core: true });
@@ -276,8 +277,13 @@
     if (P.body >= 0 && AG.Ent) { const b = P.body; P.body = -1; AG.Ent.remove(b, true); }
     if (P.fame > 6 || P.rank >= 2) People.famous.push(P.id);
     People.dead.push(P.id);
-    if (People.dead.length > 60000) prune2();
+    if (People.dead.length > 14000) prune2();
     P.story.push({ t: year(), k: -1, d: `Died at ${age}${cause ? ', ' + cause : ''}` });
+    // the dead keep their family and their defining memories; the rest is forgotten with them
+    for (const [id, t] of P.ties) if (!(t.k & (TIE.FAMILY | TIE.SPOUSE))) P.ties.delete(id);
+    if (P.mem.length > 6) P.mem = P.mem.filter((m) => m.core).slice(-6);
+    if (P.story.length > 16) P.story = P.story.slice(0, 2).concat(P.story.slice(-14));
+    P.needs = null; P.emo = null; P.preg = null;
   };
   // keep the family tree but forget distant, unremarkable dead
   function prune2() {
@@ -324,21 +330,26 @@
   People.yearStep = function (c, dy, nutr) {
     const y = year(), mem = c.members;
     const medicine = AG.Tech.knows(c, 'medicine') ? 0.6 : AG.Tech.knows(c, 'herbal') ? 0.8 : 1;
+    // factors that depend only on dy, computed once per community
+    const heal = Math.pow(0.25, dy * (AG.Tech.knows(c, 'herbal') ? 1.4 : 1)), f = Math.pow(0.45, dy), fl = Math.pow(0.8, dy), ft = Math.pow(0.9, dy);
+    const dec = [], DEC = 11; for (let k = 0; k < DEC; k++) dec.push(Math.pow(0.9, dy * (1 - (k / (DEC - 1)) * 0.6)));
+    const brewing = AG.Tech.knows(c, 'brewing'), nutrK = Math.min(1, dy * 2), adultAge = AG.SPECIES[0].adult;
     for (let q = mem.length - 1; q >= 0; q--) {
       const P = People.get(mem[q]);
       if (!P || P.died !== null) { mem.splice(q, 1); continue; }
       const age = y - P.born;
-      P.nutr += (nutr - P.nutr) * Math.min(1, dy * 2);
+      P.nutr += (nutr - P.nutr) * nutrK;
       // pregnancy runs its course (nine months)
       if (P.preg) { P.preg.t += dy; if (P.preg.t >= 0.75) { People.birth(P); if (P.died !== null) continue; } }
       // mortality: infancy, accidents and senescence; hunger, frailty, injury and illness add to it
       const life = 0.85 + People.ph(P, L.LIFE) / 255 * 0.3 + (P.traits & TR.longlived ? 0.15 : 0);
       const infant = 0.11 * Math.exp(-age * 1.1) * medicine;
       const sen = 0.00022 * Math.exp((0.085 / life) * age);
-      const hunger = Math.pow(Math.max(0, 0.75 - P.nutr) / 0.75, 2) * 0.35;
+      const hunger = Math.pow(Math.max(0, 0.6 - P.nutr) / 0.6, 2) * 0.4;
       let injury = 0; for (let k = 0; k < 2; k++) injury += P.parts[k] > 0.7 ? 0.15 * medicine : 0;
       const sick = P.dis ? diseaseHazard(P) * medicine : 0;
-      const h = infant + 0.004 + sen * (1 + P.frail) + hunger + injury + sick + (P.traits & TR.sickly ? 0.006 : 0);
+      const h = infant + 0.003 + sen * (1 + P.frail) + hunger + injury + sick + (P.traits & TR.sickly ? 0.006 : 0);
+      // (hunger only kills when people are really starving; mild want lowers fertility instead)
       if (rnd() < 1 - Math.exp(-h * dy)) {
         const parts = [[infant, 'a fever in infancy'], [sen + 0.004, age > 55 ? 'old age' : 'an accident'], [hunger, 'hunger'], [injury, 'wounds'], [sick, P.dis ? AG.DISEASES[P.dis - 1].name : 'illness']];
         parts.sort((a, b) => b[0] - a[0]);
@@ -346,33 +357,36 @@
       }
       if (P.dis) { P.dtm += dy * 40; const D = AG.DISEASES[P.dis - 1]; if (!D || P.dtm > (D.incubation + D.duration)) { if (D) { P.imm |= 1 << (P.dis - 1); People.remember(P, MK.RECOVERED, { v: 0.3, s: 0.4, d: D.name }); } P.dis = 0; } }
       // bodies heal, age and wear
-      const heal = Math.pow(0.25, dy * (AG.Tech.knows(c, 'herbal') ? 1.4 : 1));
       for (let k = 0; k < 6; k++) P.parts[k] *= heal;
       P.hp = Math.min(1, P.hp + dy * 0.8);
       if (age > 42) P.frail = Math.min(1, P.frail + dy * 0.012 / life);
       if (age > 50 && rnd() < dy * 0.01 && !P.chronic.includes('aching joints')) P.chronic.push('aching joints');
       if (c.sedentary && age > 30 && rnd() < dy * 0.004 && !P.chronic.includes('smoke cough')) P.chronic.push('smoke cough');
-      if (AG.Tech.knows(c, 'brewing') && P.tastes[4] > 30 && P.pers.neuro > 0.6 && rnd() < dy * 0.01) { P.addict = Math.min(1, P.addict + 0.3); if (P.addict > 0.5 && !P.chronic.includes('drink')) P.chronic.push('drink'); }
+      if (brewing && P.tastes[4] > 30 && P.pers.neuro > 0.6 && rnd() < dy * 0.01) { P.addict = Math.min(1, P.addict + 0.3); if (P.addict > 0.5 && !P.chronic.includes('drink')) P.chronic.push('drink'); }
       // feelings return to baseline
-      const e = P.emo, f = Math.pow(0.45, dy);
-      e.joy = 0.3 + (e.joy - 0.3) * f; e.grief *= f; e.fear *= f; e.anger *= f; e.love *= Math.pow(0.8, dy);
+      const e = P.emo;
+      e.joy = 0.3 + (e.joy - 0.3) * f; e.grief *= f; e.fear *= f; e.anger *= f; e.love *= fl;
       e.stress = AG.clamp(e.stress * f + (1 - P.nutr) * 0.2 * Math.min(1, dy) + P.mental.trauma * 0.05, 0, 1);
-      P.mental.trauma *= Math.pow(0.9, dy);
+      P.mental.trauma *= ft;
       if (e.stress > 0.65 && e.joy < 0.3) P.mental.depressed = Math.min(1, P.mental.depressed + dy * 0.3); else P.mental.depressed = Math.max(0, P.mental.depressed - dy * 0.4);
-      // memories fade unless they were strong; old ones drift
-      for (let k = P.mem.length - 1; k >= 0; k--) {
-        const m = P.mem[k];
-        if (!m.core) m.s *= Math.pow(0.9, dy * (1 - Math.abs(m.v) * 0.6));
-        if (m.s < 0.05 && !m.core) { P.mem.splice(k, 1); continue; }
-        if (y - m.t > 5 && rnd() < dy * 0.03) misremember(P, m);
+      // memories fade unless they were strong; old ones drift (a staggered pass every few years)
+      P._acc = (P._acc || 0) + dy;
+      const slow = P._acc >= 3 || dy >= 3;
+      if (slow) {
+        const k4 = Math.max(1, Math.round(P._acc / dy));
+        for (let k = P.mem.length - 1; k >= 0; k--) {
+          const m = P.mem[k];
+          if (!m.core) m.s *= Math.pow(dec[Math.min(DEC - 1, (Math.abs(m.v) * (DEC - 1)) | 0)], k4);
+          if (m.s < 0.05 && !m.core) { P.mem.splice(k, 1); continue; }
+          if (y - m.t > 5 && rnd() < P._acc * 0.03) misremember(P, m);
+        }
       }
       // growing up
-      if (P.job === J.CHILD && age >= AG.SPECIES[0].adult) {
+      if (P.job === J.CHILD && age >= adultAge) {
         P.job = J.GATHER; pickGoal(P);
         People.remember(P, MK.CAME_OF_AGE, { v: 0.4, s: 0.5 });
       }
-      if (age < AG.SPECIES[0].adult) learnFromParents(P, dy);
-      else learnByDoing(P, dy, c);
+      if (slow) { if (age < adultAge) learnFromParents(P, P._acc); else learnByDoing(P, P._acc, c); P._acc = 0; }
     }
     social(c, dy);
     couples(c, dy);
@@ -410,7 +424,7 @@
   function social(c, dy) {
     const mem = c.members, n = mem.length;
     if (n < 2) return;
-    const rounds = Math.min(n * 6, Math.ceil(n * Math.min(4, dy * 3)));
+    const rounds = Math.min(n * 3, Math.ceil(n * Math.min(2, dy * 0.7)));
     for (let r = 0; r < rounds; r++) {
       const A = People.get(mem[(rnd() * n) | 0]), B = People.get(mem[(rnd() * n) | 0]);
       if (!A || !B || A === B || A.died !== null || B.died !== null) continue;
@@ -468,16 +482,27 @@
         if (best && bv > 0.2) People.marry(P, best);
       }
     }
-    // conception: married women, spaced births (longer for nomads who carry their children)
-    const space = c.sedentary ? 1.6 : 3;
+    // conception: married women, spaced births (longer for nomads who carry their children).
+    // Above the world's budget of simulated individuals, fertility eases off (a performance cap).
+    const space = c.sedentary ? 1.8 : 3.0;
+    const budget = People.budget || 14000, over = People.alive > budget * 0.8 ? AG.clamp(1 - (People.alive - budget * 0.8) / (budget * 0.4), 0.05, 1) : 1;
     for (const id of c.members) {
       const M = People.get(id);
       if (!M || M.sex !== 0 || !M.spouse || M.preg || M.died !== null) continue;
       const a = y - M.born; if (a < 16 || a > 44 || y - M.lastBirth < space) continue;
       const F = People.get(M.spouse); if (!F || F.died !== null || F.comm !== M.comm) continue;
       const fert = (People.ph(M, L.FERT) + People.ph(F, L.FERT)) / 510 + (M.traits & TR.fertile ? 0.25 : 0) - (M.traits & TR.cursed ? 0.5 : 0);
-      const p = 0.55 * (0.5 + fert) * Math.max(0, M.nutr - 0.25) * (c.crowded ? 0.5 : 1);
-      if (rnd() < Math.min(1, p * dy)) People.conceive(M, F);
+      const p = 0.85 * (0.5 + fert) * AG.clamp((M.nutr - 0.6) / 0.35, 0, 1) * (c.crowded ? 0.35 : 1) * over;
+      if (dy < 1.5) { if (rnd() < Math.min(1, p * dy)) People.conceive(M, F); continue; }
+      // a long stride: as many pregnancies as the years allow, each born before the next begins
+      let t = Math.max(0, M.lastBirth + space - (y - dy)), born = 0;
+      while (t < dy && M.died === null && born < 4) {
+        const wait = -Math.log(1 - rnd()) / Math.max(1e-6, p);
+        t += wait; if (t + 0.75 > dy) break;
+        if (!People.conceive(M, F)) break;
+        People.birth(M); born++;
+        M.lastBirth = y - dy + t + 0.75; t += 0.75 + space;
+      }
     }
   }
 

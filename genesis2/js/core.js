@@ -68,6 +68,20 @@
   let rs = 0x9e3779b9;
   AG.seedRnd = (s) => { rs = (s >>> 0) || 0x9e3779b9; };
   AG.rnd = function () { rs ^= rs << 13; rs ^= rs >>> 17; rs ^= rs << 5; return (rs >>> 0) / 4294967296; };
+  AG.rndState = () => rs >>> 0;
+  AG.setRndState = (v) => { rs = v >>> 0 || 0x9e3779b9; };
+  // A seeded stream whose state can be saved and restored (geology and evolution each own one).
+  AG.makeRng = function (seed) {
+    let a = seed | 0;
+    const f = function () {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    f.get = () => a; f.set = (v) => { a = v | 0; };
+    return f;
+  };
   AG.ri = (n) => (AG.rnd() * n) | 0;
   AG.pick = (a) => a[(AG.rnd() * a.length) | 0];
   AG.mulberry32 = function (a) {
@@ -138,6 +152,11 @@
     none,
     { key: 'ape', name: 'Ape', kind: 'animal', diet: 'forage', hp: 26, dmg: 4, spd: 0.07, life: [25, 40], adult: 8, fur: [116, 82, 58] },
   ];
+
+  // A small per-body cache of expressed genes, read by the renderers (derived from the genome).
+  AG.GENES = ['Strength', 'Agility', 'Intellect', 'Fertility', 'Longevity', 'Stature', 'Hue', 'Resilience', 'Devotion'];
+  AG.NG = AG.GENES.length;
+  AG.G = { STR: 0, AGI: 1, INT: 2, FERT: 3, LONG: 4, STAT: 5, HUE: 6, RES: 7, DEV: 8 };
 
   // ------------------------------------------------------------ minds
   AG.TRAITS = [
@@ -232,10 +251,10 @@
   // ------------------------------------------------------------ diseases (editable)
   // Times are in days, lethality = share of max HP lost per symptomatic day.
   AG.DISEASES = [
-    { name: 'Grey Rot', color: '#a1a1a1', contagion: 0.1, radius: 1.5, lethality: 0.22, incubation: 1, duration: 3, slow: 0.2, sterile: 0, madness: 0, hollow: 0, targets: 0b1111, builtin: 1 },
-    { name: 'Ember Fever', color: '#ff7043', contagion: 0.16, radius: 2, lethality: 0.5, incubation: 0.5, duration: 2, slow: 0.3, sterile: 0, madness: 0, hollow: 0, targets: 0b1111, builtin: 1 },
-    { name: 'The Hollowing', color: '#8bc34a', contagion: 0.12, radius: 1.5, lethality: 0.6, incubation: 1, duration: 3, slow: 0.1, sterile: 0, madness: 0, hollow: 1, targets: 0b1111, builtin: 1 },
-    { name: 'Moon Madness', color: '#7e57c2', contagion: 0.08, radius: 1.5, lethality: 0.08, incubation: 1, duration: 4, slow: 0, sterile: 0, madness: 1, hollow: 0, targets: 0b1111, builtin: 1 },
+    { name: 'Grey Cough', color: '#a1a1a1', contagion: 0.1, radius: 1.5, lethality: 0.18, incubation: 1, duration: 3, slow: 0.2, sterile: 0, madness: 0, hollow: 0, targets: 1, builtin: 1 },
+    { name: 'Marsh Fever', color: '#ff7043', contagion: 0.12, radius: 2, lethality: 0.35, incubation: 0.5, duration: 2, slow: 0.3, sterile: 0, madness: 0, hollow: 0, targets: 1, builtin: 1 },
+    { name: 'Wasting Sickness', color: '#8bc34a', contagion: 0.08, radius: 1.5, lethality: 0.45, incubation: 1, duration: 3, slow: 0.1, sterile: 0, madness: 0, hollow: 0, targets: 3, builtin: 1 },
+    { name: 'Falling Sickness', color: '#7e57c2', contagion: 0.06, radius: 1.5, lethality: 0.08, incubation: 1, duration: 4, slow: 0, sterile: 0, madness: 1, hollow: 0, targets: 1, builtin: 1 },
   ];
   AG.MAX_DISEASES = 16;
 

@@ -72,14 +72,16 @@
 
   const oceanDepth = (age) => 0.315 - 0.19 * Math.sqrt(Math.min(age, 180) / 180);
   const seaLine = () => SEA + Geo.seaLevel;
+  Geo.rebuildTiles = (seed) => { buildTiles(seed); Geo.tilesFor = seed; };
+  Geo.setRng = (v) => { if (!rng.set) rng = AG.makeRng(0); rng.set(v); Geo.rng = rng; };
   Geo.isLandC = (c) => Geo.crust[c] > seaLine();
   Geo.cellOf = (x, y) => AG.clamp((y / CS) | 0, 0, GH - 1) * GW + AG.clamp((x / CS) | 0, 0, GW - 1);
 
   // ------------------------------------------------------------ deep-time setup
   Geo.init = function (seed) {
     Geo.seed = seed; Geo.scripted = false;
-    rng = AG.mulberry32((Math.imul(seed, 2654435761) ^ 0x51ed270b) >>> 0);
-    buildTiles(seed);
+    rng = AG.makeRng((Math.imul(seed, 2654435761) ^ 0x51ed270b) >>> 0); Geo.rng = rng;
+    buildTiles(seed); Geo.tilesFor = seed;
     const n1 = AG.makeNoise(seed + 101), n2 = AG.makeNoise(seed + 102), n3 = AG.makeNoise(seed + 103);
     Geo.phase = 'deep'; Geo.mya = 250; Geo.year = 0; Geo.stepN = 0;
     Geo.quakes = Geo.eruptions = Geo.splits = Geo.sutures = 0;
@@ -396,11 +398,12 @@
       let m = 0.6, prev = sl;
       for (let k = 0; k < GW; k++) {
         const x = east ? k : GW - 1 - k, c = y * GW + x, e = crust[c];
-        if (e <= sl) { m = Math.min(1, m + 0.12); precip[c] = 0.7 * m * belt; prev = sl; continue; }
+        if (e <= sl) { m = Math.min(1, m + 0.08); precip[c] = 0.7 * m * belt; prev = sl; continue; }
+        // moist air rains out slowly over the plains and fast where it is forced up a mountain
         const lift = Math.max(0, e - prev);
-        const rain = m * (0.07 + lift * 6);
-        precip[c] = Math.min(1, rain * 3.2 * belt + 0.04);
-        m = Math.max(0.05, m - rain * 0.9 - 0.012);
+        const rain = m * (0.016 + lift * 4);
+        precip[c] = Math.min(1, (m * 0.8 + lift * 2.5 * m) * belt + 0.03);
+        m = Math.max(0.05, m - rain - 0.002);
         prev = e;
       }
     }

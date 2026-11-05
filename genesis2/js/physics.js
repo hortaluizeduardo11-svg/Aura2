@@ -338,6 +338,9 @@
     return busy;
   }
 
+  P.normalize = function () { wet.fill(1); hot.fill(1); gassy.fill(1); };
+  P.state = () => ({ slowCursor, wet: wet.slice(), hot: hot.slice(), gassy: gassy.slice() });
+  P.setState = function (s) { slowCursor = s.slowCursor; wet.set(s.wet); hot.set(s.hot); gassy.set(s.gassy); };
   // ------------------------------------------------------------ main tick
   P.tick = function () {
     const t = AG.tick, Sky = AG.Sky;

@@ -163,7 +163,14 @@
         const t = B.growth;
         return [126 + 104 * t, 160 + 38 * t, 62 + 22 * t];
       }
-      case BT.WINDMILL: return [226, 220, 206];
+      case BT.GRANARY: return [214, 196, 160];
+      case BT.TENT: return [176, 140, 98];
+      case BT.HEARTH: return [120, 96, 80];
+      case BT.HUT: return [168, 140, 90];
+      case BT.PEN: return [126, 100, 70];
+      case BT.MEGALITH: return [140, 138, 132];
+      case BT.SHRINE: return [170, 160, 140];
+      case BT.HALL: return [kc[0] * 0.5 + 60, kc[1] * 0.5 + 40, kc[2] * 0.5 + 28];
       case BT.TEMPLE: return [238, 232, 216];
       case BT.MARKET: return (x + y) & 1 ? kc : [236, 230, 214];
       case BT.MINE: return [72, 58, 50];
@@ -242,7 +249,12 @@
         if (s === SO.HOLY) { r = r * 0.45 + 132; g = g * 0.45 + 118; b = b * 0.45 + 52; if (((x + y * 2) % 7) === 0) { r += 30; g += 26; } }
       }
     }
-    const snowy = Wd.snow[i] > 20;
+    if (Wd.ice[i]) { // glacier: blue-white with crevasses
+      const t = Math.min(1, Wd.ice[i] / 120);
+      r = 214 + d * 2 - t * 10; g = 230 + d * 2 - t * 4; b = 246;
+      if (((x * 7 + y * 3) % 23) === 0 || ((x * 2 + y * 9) % 31) === 0) { r -= 40; g -= 26; b -= 10; }
+    }
+    const snowy = Wd.snow[i] > 20 && !Wd.ice[i];
     if (snowy) { const t = Math.min(1, Wd.snow[i] / 190); r += (C.snow[0] - r) * t; g += (C.snow[1] - g) * t; b += (C.snow[2] - b) * t; }
     const bg = Wd.bgrid[i];
     if (bg) {
@@ -518,11 +530,15 @@
   }
 
   // ------------------------------------------------------------ overlays
+  // Map overlays. Per-cell ones read the land (plates, rock, resources, temperature, strain);
+  // per-community ones colour territories (realms, faiths, languages, eras, genetics).
+  const ROCK_C = [[214, 160, 150], [70, 70, 90], [214, 196, 140], [150, 110, 160], [200, 80, 60], [120, 170, 110]];
+  const ERA_C = [[170, 150, 120], [140, 190, 120], [230, 200, 90], [210, 130, 70], [220, 170, 60], [140, 150, 170], [240, 240, 255]];
   function updateBorders() {
     bpix.fill(0);
     const mode = R.overlay;
     if (mode === 'none') { bctx.putImageData(bimg, 0, 0); return; }
-    const owner = Wd.owner;
+    const owner = Wd.owner, Geo = AG.Geo;
     if (mode === 'heat') {
       for (let i = 0; i < W * H; i += 1) {
         const T = Wd.T(i), t = AG.clamp((T + 0.1) / 1.1, 0, 1);
@@ -530,18 +546,42 @@
       }
       bctx.putImageData(bimg, 0, 0); return;
     }
+    if (mode === 'plates' || mode === 'strain') {
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = y * W + x, c = Geo.cellOf(x, y), p = Geo.plates[Geo.plate[c]];
+        const bd = Geo.bound[c];
+        if (mode === 'strain') { const s2 = AG.clamp(Geo.strain[c] * 3, 0, 1), m = AG.clamp(Geo.magma[c], 0, 1); if (s2 > 0.02 || m > 0.05) bpix[i] = pack(255, (200 - s2 * 160) | 0, (60 + m * 160) | 0, (s2 * 200 + m * 120) | 0); continue; }
+        if (bd && ((x & 3) === 0 || (y & 3) === 0)) { bpix[i] = bd === 1 ? pack(255, 70, 50, 230) : bd === 2 ? pack(80, 170, 255, 230) : pack(255, 220, 60, 230); continue; }
+        const hc = p ? AG.hsl(p.hue, 0.55, 0.55) : [128, 128, 128];
+        bpix[i] = pack(hc[0], hc[1], hc[2], 60);
+      }
+      bctx.putImageData(bimg, 0, 0); return;
+    }
+    if (mode === 'rock' || mode === 'resources') {
+      for (let i = 0; i < W * H; i++) {
+        if (Wd.elev[i] < SEA) continue;
+        if (mode === 'rock') { const c = ROCK_C[Wd.rock[i]] || ROCK_C[0]; bpix[i] = pack(c[0], c[1], c[2], 120); continue; }
+        if (Wd.cereal[i] > 60) bpix[i] = pack(240, 200, 70, Math.min(150, Wd.cereal[i] >> 1));
+        const r = Wd.res[i];
+        if (r) { const hex = AG.RES_COLORS[r], v = parseInt(hex.slice(1), 16); bpix[i] = pack(v >> 16, (v >> 8) & 255, v & 255, 255); }
+      }
+      // make deposits visible at a distance: grow each one into a small diamond
+      if (mode === 'resources') { const copy = bpix.slice(); for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) { const i = y * W + x; if (!Wd.res[i]) continue; for (const o of [-1, 1, -W, W]) if (!Wd.res[i + o]) bpix[i + o] = copy[i]; } }
+      bctx.putImageData(bimg, 0, 0); return;
+    }
     const nc = Civ.cities.length, key = new Int32Array(nc), col = new Uint32Array(nc), fill = new Uint32Array(nc);
     for (let k = 0; k < nc; k++) {
       const c = Civ.cities[k];
-      if (mode === 'faith') {
-        key[k] = c.religion;
-        const rc = c.religion >= 0 ? Civ.religions[c.religion].color : null;
-        col[k] = rc ? pack(rc[0], rc[1], rc[2], 230) : 0; fill[k] = rc ? pack(rc[0], rc[1], rc[2], 80) : 0;
-      } else {
-        key[k] = c.kd;
-        const kc = Civ.kingdoms[c.kd].color;
-        col[k] = pack(kc[0], kc[1], kc[2], 235); fill[k] = pack(kc[0], kc[1], kc[2], 40);
-      }
+      let rc = null, kk = -1;
+      if (mode === 'faith') { kk = c.religion; rc = c.religion >= 0 ? Civ.religions[c.religion].color : null; }
+      else if (mode === 'language') { const L = AG.Lang.get(c.lang); kk = c.lang; if (L) { const fam = AG.Lang.get(L.family); rc = AG.hsl((L.family * 97 + 30) % 360 + (L.id - L.family) * 9, 0.6, 0.45 + ((L.id * 37) % 5) * 0.06); } }
+      else if (mode === 'era') { kk = c.era; rc = ERA_C[c.era]; }
+      else if (mode === 'genes') { // the people's mean skin tone (pigment gene)
+        let h = 0, n = 0; for (const id of c.members) { const P = AG.People.get(id); if (P) { h += AG.Life.express(P.gen, 0, AG.Life.L.HUE); n++; } }
+        h = n ? h / n : 128; kk = (h / 12) | 0; rc = skinOf(h);
+      } else { kk = c.kd; rc = Civ.kingdoms[c.kd] ? Civ.kingdoms[c.kd].color : [150, 150, 150]; }
+      key[k] = kk;
+      col[k] = rc ? pack(rc[0], rc[1], rc[2], 235) : 0; fill[k] = rc ? pack(rc[0], rc[1], rc[2], mode === 'realms' ? 40 : 90) : 0;
     }
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
       const i = y * W + x, o = owner[i];
@@ -649,9 +689,7 @@
       let c;
       if (d.kind === 'civ' || d.kind === 'vehicle') { const k = U.kd[i] >= 0 ? Civ.kingdoms[U.kd[i]].color : [200, 200, 200]; c = pack(Math.min(255, k[0] + 40), Math.min(255, k[1] + 40), Math.min(255, k[2] + 40)); }
       else if (d.kind === 'ambient') c = pack(30, 30, 36);
-      else if (d.kind === 'monster') c = U.sp[i] === SP.HOLLOW ? pack(170, 255, 120) : pack(255, 40, 40);
-      else if (d.kind === 'avatar') c = pack(255, 240, 150);
-      else c = pack(d.fur[0], d.fur[1], d.fur[2]);
+      else { const spc = U.sid[i] >= 0 ? AG.Life.species[U.sid[i]] : null, fc = spc ? spc.color : d.fur || [150, 150, 150]; c = pack(fc[0], fc[1], fc[2]); }
       dpix[y * W + x] = c;
     }
     dctx.putImageData(dimg, 0, 0);
@@ -672,7 +710,9 @@
     herald: [['.y.y.', '..y..', '.sss.', 'eeeee', '.eye.', '.eee.', '.e.e.'], ['.y.y.', '..y..', '.sss.', 'eeeee', '.eye.', 'eeeee', 'e...e']],
     deer: [['.....W', '....fW', 'ffffff', 'fffff.', '.f..f.'], ['.....W', '....fW', 'ffffff', 'fffff.', 'f....f']],
     wolf: [['....f.f', 'f.fffff', '.fffff.', '.f...f.'], ['....f.f', 'f.fffff', '.fffff.', 'f.....f']],
-    crawler: [['b.b.b', '.ofo.', 'fffff', 'b.b.b'], ['.b.b.', '.ofo.', 'fffff', '.b.b.']],
+    mammoth: [['..FFFF...', '.FfffffF.', 'Ffffffffm', 'Ffffffff.', '.fffffffm', '.ff..ff..', '.ff..ff..'], ['..FFFF...', '.FfffffF.', 'Ffffffffm', 'Ffffffff.', '.fffffffm', '.ff...ff.', 'ff....ff.']],
+    bear: [['.ff.....', 'ffffffF.', 'fffffffF', '.ffffff.', '.f.f..f.'], ['.ff.....', 'ffffffF.', 'fffffffF', '.ffffff.', 'f..f.f..']],
+    ape: [['.FF.', 'Fsf.', 'ffff', 'f.ff', 'f..f'], ['.FF.', 'Fsf.', 'ffff', 'ff.f', '.ff.']],
     bird: [['f.f', '.f.'], ['.f.', 'f.f']],
     wyrm: [['..f......f..', '.ff......ff.', 'fff.ffff.fff', '.fffFFFFfff.', '....FFFF..oo', '...fFFFFfff.', '..ff....f...', '.f..........'],
       ['............', '............', '....ffff....', '.ffFFFFFfff.', 'fff.FFFF.ffo', 'ff.fFFFFff..', '..ff....f...', '.f..........']],
@@ -684,7 +724,14 @@
   const B_SPR = {
     [BT.HOUSE]: ['...KK...', '..KkkK..', '.KkkkkK.', 'KkkkkkkK', 'KKKKKKKK', '.wwwwww.', '.wywwyw.', '.wwwwww.', '.wwwbww.', '.wwwbww.'],
     [BT.KEEP]: ['.......kkk......', '.......kkK......', '.......W........', 'r.r.r.rrrr.r.r.r', 'rrrrr.rRRr.rrrrr', 'rRRRr.rRRr.rRRRr', 'rRyRrrrrrrrrRyRr', 'rRRRrrRyyRrrRRRr', 'rrrrrrRRRRrrrrrr', 'rRRRRRRRRRRRRRRr', 'rRrRrRrRrRrRrRrr', 'rrrrrrrrrrrrrrrr', 'rRRRRRRbbRRRRRRr', 'rRRRRRbbbbRRRRRr', 'rrrrrrbbbbrrrrrr', 'rRRRRRbbbbRRRRRr', 'rrrrrrbbbbrrrrrr'],
-    [BT.WINDMILL]: ['...KK...', '..KKKK..', '.KKKKKK.', '..eeee..', '..eyee..', '..eeee..', '..eeee..', '..eeee..', '.eeeeee.', '.eeyeee.', '.eeeeee.', '.eeeeee.', 'eeebbeee', 'eeebbeee'],
+    [BT.GRANARY]: ['...cc...', '..cccc..', '.cccccc.', 'cccccccc', '.eeeeee.', '.eeeeee.', '.eeyeee.', '.eeeeee.', '..eeee..'],
+    [BT.TENT]: ['...W...', '..cWc..', '..ccc..', '.ccccc.', '.cc.cc.', 'ccc.ccc', 'cc...cc'],
+    [BT.HEARTH]: ['..o..', '.oyo.', 'roooR', '.r.r.'],
+    [BT.HUT]: ['...cc...', '..cccc..', '.cccccc.', 'cccccccc', '.wwwwww.', '.wwbbww.', '.wwbbww.'],
+    [BT.PEN]: ['W.W.W.W.W.W.', 'wwwwwwwwwwww', 'W..........W', 'w..........w', 'W..........W', 'wwwwwwwwwwww', 'W.W.W.W.W.W.'],
+    [BT.MEGALITH]: ['rrrrr..rrrrr', 'rR.Rr..rR.Rr', 'rR.Rr..rR.Rr', 'rR.Rr..rR.Rr', '..rrrrrrr...', '..rR.r.Rr...', '..rR.r.Rr...', '..rR.r.Rr...'],
+    [BT.SHRINE]: ['..y..', '.yyy.', '.rrr.', '.rRr.', '.rRr.', 'rrrrr'],
+    [BT.HALL]: ['.....WW.....', '...KKKKKK...', '.KKKKKKKKKK.', 'KKKKKKKKKKKK', '.wwwwwwwwww.', '.wyw.ww.wyw.', '.www.bb.www.', '.www.bb.www.'],
     [BT.TEMPLE]: ['.....yy.....', '....yyyy....', '...yyyyyy...', '..yyyyyyyy..', '.eeeeeeeeee.', 'eeeeeeeeeeee', '.e.eR.Re.e..', '.e.eR.Re.e..', '.e.eR.Re.e..', '.e.eRbRe.e..', '.e.eRbRe.e..', 'eeeeeeeeeeee', 'rrrrrrrrrrrr', 'RRRRRRRRRRRR'],
     [BT.MARKET]: ['kekekekekeke', 'kekekekekeke', '.w..w..w..w.', '.w..w..w..w.', 'kekeke.kekek', 'kekeke.kekek', 'wgow.w.wyvw.', 'wwww.w.wwww.', 'w..w...w..w.', 'w..w...w..w.'],
     [BT.MINE]: ['..rrrr..', '.rrrrrr.', 'rrwwwwrr', 'rwbbbbwr', 'rwbbbbwr', 'rwbbbbwr', '.mmmmmm.', 'm.m..m.m'],
@@ -720,6 +767,12 @@
   }
   const dark = (c, f) => [c[0] * (f || 0.6), c[1] * (f || 0.6), c[2] * (f || 0.6)];
   const CARGO = [[0, 0, 0], [120, 190, 70], [150, 104, 60], [160, 160, 160], [180, 100, 70], [250, 210, 70], [110, 220, 255]];
+  // skin from the pigment gene: pale (albino) to deep brown
+  function skinOf(hue) {
+    if (hue < 12) return [240, 220, 206];
+    const t = AG.clamp((hue - 40) / 190, 0, 1);
+    return [232 - t * 128, 192 - t * 122, 160 - t * 110];
+  }
   function unitSprite(i, frame) {
     const sp = U.sp[i], d = SPECIES[sp], kd = U.kd[i], flip = U.fx[i] < 0;
     if (d.kind === 'civ') {
@@ -729,27 +782,26 @@
       else if (job === J.SOLDIER || U.sq[i] >= 0) role = 'soldier';
       else if (job === J.PRIEST) role = 'priest';
       else if (job === J.CHILD) role = 'child';
-      else if (sp === SP.SYLVAN) role = 'sylvan'; else if (sp === SP.STONE) role = 'stone'; else if (sp === SP.ASHEN) role = 'ashen';
-      const hue = U.genes[i * NG + G.HUE] >> 6, elder = job === J.ELDER ? 1 : 0;
-      const key = `c${sp}|${role}|${kd}|${hue}|${elder}|${frame}|${flip ? 1 : 0}`;
+      const hue = U.hue[i] >> 4, elder = job === J.ELDER ? 1 : 0, c = Civ.cities[U.city[i]], era = c ? Math.min(c.era, 4) : 0;
+      const key = `c|${role}|${kd}|${hue}|${elder}|${era}|${frame}|${flip ? 1 : 0}`;
       return getSprite(key, () => {
-        const kc = kd >= 0 ? Civ.kingdoms[kd].color : [150, 150, 150], m = [0.8, 0.9, 1, 1.1][hue];
-        const pal = Object.assign({}, BASEPAL, { s: d.skin.map((v) => v * m), h: elder ? [214, 214, 220] : d.hair, k: kc, K: dark(kc) });
-        if (sp === SP.ASHEN) pal.o = [255, 120, 40];
+        const kc = kd >= 0 && Civ.kingdoms[kd] ? Civ.kingdoms[kd].color : [150, 150, 150];
+        const cloth = era <= 1 ? [150, 112, 74] : era === 2 ? AG.mixc([196, 180, 150], kc, 0.4) : kc; // hides, then linen, then dyed cloth
+        const skin = skinOf(hue * 16 + 8), hair = hue < 1 ? [236, 230, 220] : AG.mixc([176, 134, 72], [34, 24, 18], AG.clamp(hue / 9, 0, 1));
+        const pal = Object.assign({}, BASEPAL, { s: skin, h: elder ? [214, 214, 220] : hair, k: cloth, K: dark(cloth), m: era >= 4 ? [200, 160, 90] : era >= 3 ? [200, 120, 70] : [150, 140, 130] });
         return makeSprite(S[role][frame], pal, flip);
       });
     }
-    let name = d.key;
+    const sid = U.sid[i], spc = sid >= 0 ? AG.Life.species[sid] : null;
+    let name = d.key === 'grazer' ? 'deer' : d.key === 'predator' ? 'wolf' : d.key;
+    if (spc && sp === SP.GRAZER && spc.mean[0] > 200 && spc.mean[10] > 150) name = 'mammoth';
+    if (spc && sp === SP.PREDATOR && spc.mean[0] > 185) name = 'bear';
     const extra = sp === SP.CART ? U.carry[i] : 0;
-    const key = `a${sp}|${kd}|${extra}|${frame}|${flip ? 1 : 0}`;
+    const key = `a${sp}|${sid}|${name}|${kd}|${extra}|${frame}|${flip ? 1 : 0}`;
     return getSprite(key, () => {
-      const kc = kd >= 0 ? Civ.kingdoms[kd].color : [170, 170, 170];
-      const fur = d.fur || [150, 150, 150];
-      const pal = Object.assign({}, BASEPAL, { f: fur, F: dark(fur), k: kc, K: dark(kc), c: CARGO[extra] || CARGO[2] });
-      if (sp === SP.HOLLOW) Object.assign(pal, { s: [170, 200, 160], h: [60, 80, 60], k: [110, 110, 104], o: [255, 60, 40] });
-      if (sp === SP.HERALD) pal.s = [255, 236, 190];
-      if (sp === SP.CRAWLER) pal.o = [255, 90, 90];
-      if (sp === SP.WYRM) pal.o = [255, 230, 80];
+      const kc = kd >= 0 && Civ.kingdoms[kd] ? Civ.kingdoms[kd].color : [170, 170, 170];
+      const fur = spc ? spc.color : d.fur || [150, 150, 150];
+      const pal = Object.assign({}, BASEPAL, { f: fur, F: dark(fur), k: kc, K: dark(kc), c: CARGO[extra] || CARGO[2], s: [200, 160, 130], m: [240, 232, 210] });
       return makeSprite(S[name][frame], pal, flip);
     });
   }
@@ -763,8 +815,13 @@
   }
   function buildingSprite(b) {
     if (b.type === BT.FARM) return farmSprite(Math.min(3, (b.growth * 4) | 0));
-    const k = Civ.kingdoms[b.kd], kc = k ? k.color : [150, 150, 150];
-    return getSprite(`b${b.type}|${b.kd}`, () => makeSprite(B_SPR[b.type], Object.assign({}, BASEPAL, { k: kc, K: dark(kc) }), false));
+    const k = Civ.kingdoms[b.kd], kc = k ? k.color : [150, 150, 150], early = (b.era || 0) < 4 ? 1 : 0;
+    return getSprite(`b${b.type}|${b.kd}|${early}`, () => {
+      const pal = Object.assign({}, BASEPAL, { k: kc, K: dark(kc), c: [196, 162, 108] });
+      if (early && b.type === BT.HOUSE) Object.assign(pal, { w: [188, 150, 104], W: [140, 108, 72], k: [196, 170, 96], K: [150, 124, 70] }); // mud brick and thatch
+      if (b.type === BT.HUT || b.type === BT.TENT) pal.c = b.type === BT.TENT ? [184, 146, 102] : [196, 170, 96];
+      return makeSprite(B_SPR[b.type], pal, false);
+    });
   }
   // dark silhouette of a sprite, skewed onto the ground as a sun-cast shadow
   const silCache = new Map();
@@ -857,7 +914,7 @@
     const tp = performance.now();
     updateTerrain();
     R.stats.terrainMs = performance.now() - tp;
-    if (R.bordersDirty || (R.overlay === 'heat' && frameN % 20 === 0)) { updateBorders(); R.bordersDirty = false; }
+    if (R.bordersDirty || ((R.overlay === 'heat' || R.overlay === 'plates' || R.overlay === 'strain') && frameN % 20 === 0) || (AG.mode === 'deep' && frameN % 10 === 0)) { updateBorders(); R.bordersDirty = false; }
     if (frameN % 2 === 0) updateLight();
     if (frameN % 3 === 0 && !under) updateGas();
     if (frameN % 4 === 0) updateClouds();
@@ -984,7 +1041,7 @@
         ctx.strokeRect(dx + 2 * bs, by - sh * bs, sw * bs - 4 * bs, sh * bs);
         ctx.beginPath(); ctx.moveTo(dx + 2 * bs, by - sh * bs); ctx.lineTo(dx + sw * bs - 2 * bs, by); ctx.stroke();
       }
-      if (b.type === BT.WINDMILL && b.prog >= 1) {
+      if (false) {
         const hx = dx + 5 * bs, hy = by - 12 * bs, a0 = tm * 1.4 + b.id, L = 6 * bs;
         ctx.strokeStyle = '#4e342e'; ctx.lineWidth = Math.max(1.5, bs * 1.2);
         ctx.beginPath();
@@ -1048,12 +1105,13 @@
     const moving = U.st[i] === 1 || U.st[i] === 3 || (U.flags[i] & FL.POSSESSED);
     const frame = moving ? (U.anim[i] | 0) & 1 : 0;
     const spr = unitSprite(i, frame);
-    const sw = spr.width * s, sh = spr.height * s;
+    const sc = U.pid[i] < 0 && U.sid[i] >= 0 ? AG.clamp(U.scale[i], 0.6, 1.7) : U.pid[i] >= 0 ? AG.clamp(U.scale[i], 0.75, 1.25) : 1;
+    const sw = spr.width * s * sc, sh = spr.height * s * sc;
     const sx = Math.round(ox + x * z - sw / 2), sy = Math.round(oy + y * z - sh - lift * z);
     const f = U.flags[i];
-    if (f & (FL.BLESSED | FL.CURSED | FL.POSSESSED) || U.sp[i] === SP.HERALD) {
+    if (f & (FL.BLESSED | FL.CURSED | FL.POSSESSED)) {
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = f & FL.POSSESSED || U.sp[i] === SP.HERALD ? `rgba(255,230,140,${0.35 + 0.15 * Math.sin(tm * 6)})` : f & FL.BLESSED ? 'rgba(255,220,120,0.25)' : 'rgba(170,80,220,0.3)';
+      ctx.fillStyle = f & FL.POSSESSED ? `rgba(255,230,140,${0.35 + 0.15 * Math.sin(tm * 6)})` : f & FL.BLESSED ? 'rgba(255,220,120,0.25)' : 'rgba(170,80,220,0.3)';
       ctx.beginPath(); ctx.arc(ox + x * z, oy + y * z - sh / 2 - lift * z, Math.max(3, sh * 0.7), 0, Math.PI * 2); ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
     }
