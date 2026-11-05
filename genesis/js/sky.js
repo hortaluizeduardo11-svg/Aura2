@@ -6,7 +6,7 @@
   const AG = window.AG;
   const { W, H, CW, CH, NC, FT, DAY_TICKS, YEAR_TICKS } = AG;
   const rnd = AG.rnd;
-  const CLW = 96, CLH = 64; // one cloud cell = 4x4 world cells
+  const CLW = W / 4, CLH = H / 4; // one cloud cell = 4x4 world cells
 
   const Sky = (AG.Sky = {
     CLW, CLH, cloud: new Float32Array(CLW * CLH), dark: new Float32Array(CLW * CLH),

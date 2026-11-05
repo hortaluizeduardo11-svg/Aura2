@@ -5,7 +5,9 @@ lava and weather, and watch kingdoms of individually simulated people grow, trad
 religions, breed new generations and go to war.
 
 There's no build step and no dependencies. Open `index.html` in a browser, or serve the
-folder:
+folder. The world takes the shape of your screen when the page loads, so the map always fills
+it edge to edge. A 1920×1080 screen gets a 640×368 world (about 235,000 cells, 2.4× the
+original 384×256).
 
 ```bash
 cd genesis
@@ -16,6 +18,9 @@ The full system design and performance plan is in [DESIGN.md](DESIGN.md).
 
 ## What's in it
 
+- **16-bit HD look:** terraced hills, depth-banded water with shoreline foam and sun glints,
+  hand-drawn trees, rocks, flowers and cacti that change with the seasons, outlined sprites with
+  sun-cast shadows, golden-hour colour grading and glowing nights.
 - **Three layers:** Surface, Deep (caverns, ore, magma, aquifers, mines) and Sky (storms,
   clouds, birds, wyrms, skyships). Press `Tab` to switch between them.
 - **Living physics:** water, lava and acid flow downhill and react with each other (lava plus

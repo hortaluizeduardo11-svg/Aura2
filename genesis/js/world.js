@@ -147,7 +147,8 @@
     // Rivers: trace steepest descent from wet highlands, carve a strictly
     // descending bed and leave a spring at the source to keep it flowing.
     const sources = [];
-    for (let tries = 0; tries < 900 && sources.length < 8; tries++) {
+    const nRivers = Math.round(8 * AG.SCALE);
+    for (let tries = 0; tries < 900 * AG.SCALE && sources.length < nRivers; tries++) {
       const x = 20 + ((r() * (W - 40)) | 0), y = 20 + ((r() * (H - 40)) | 0), i = y * W + x;
       if (elev[i] < 0.58 || elev[i] > 0.86 || moist[i] < 0.38) continue;
       if (sources.some((s2) => AG.dist2(s2.x, s2.y, x, y) < 34 * 34)) continue;

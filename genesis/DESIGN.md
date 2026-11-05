@@ -32,8 +32,12 @@ system described here at prototype depth; each section ends with **In the protot
 | **Surface** (layer 1) | Height map, fluids, soil, vegetation, snow, fire, heat, gas, roads, borders, buildings | Citizens, animals, hollows, carts, ships, catapults |
 | **Deep** (layer 0) | Rock, soft earth, caverns, mine tunnels, iron/gold veins, mana crystal, glowcap groves, magma pockets, aquifers | Miners, cave crawlers |
 
-The world is 384×256 cells (98,304), stored as flat typed arrays indexed `i = y·W + x`
-(structure of arrays). One cell is one pixel of the base image.
+The world takes the shape of the player's screen. At load it picks the largest integer zoom
+(2–5 px per cell) at which a world of roughly 140k–280k cells exactly covers the viewport. For
+example, 1920×1080 gives 640×368 at 3 px per cell, and 1366×768 gives 688×384 at 2 px. The camera
+can never zoom out past "fills the screen", so there are no empty margins. River counts, starting
+realms and wildlife scale with area. Fields are flat typed arrays indexed `i = y·W + x`
+(structure of arrays), and one cell is one pixel of the base image.
 
 **Surface fields:** `elev` f32, `fl` f32 (fluid depth), `ft` u8 (water/lava/acid), `frozen`
 u8, `veg` u8, `snow` u8, `soil` u8 (dirt, sand, rock, basalt, ash, blight, hallowed, road,
@@ -308,8 +312,20 @@ The visual target, translated from the concept prompt (*"16-bit HD pixel art, gl
 bubbling magma, spreading acid, day–night, god-rays through pixel clouds, rainstorms and
 blizzards"*), and how the renderer meets it:
 
-- **One cell = one pixel** in the world buffer, scaled with nearest-neighbour sampling. Sprites
-  run at **4 sprite pixels per cell**, which gives HD pixel-art detail on top of the map.
+- **One cell = one pixel** in the world buffer, scaled with nearest-neighbour sampling, in a
+  16-bit palette. Hills are cut into **terraces**, with lit lips and shaded cliff faces. Water
+  is **depth-banded** with dithered edges, lapping **foam** on every shoreline, moving sun glints,
+  wet sand on beaches and brighter inland rivers. Snow takes blue shadows, ice shows cracks, and
+  cave walls are lit from below.
+- **Decoration layer:** pines, broadleaf, jungle and dead trees, bushes, grass tufts, flowers,
+  rocks, cacti, reeds and blight thorns are placed by a per-cell hash. Each has an outline and
+  a contact shadow, and they change with the season (spring blossom, autumn reds, snowy pines,
+  bare winter woods). They are baked per 16×16 chunk at 3 or 4 sprite pixels per cell, so they
+  stay crisp at integer zooms, and rebuilt only when a chunk's contents signature changes.
+- **Sprites** for people, animals and buildings are outlined and drawn at integer scales.
+  Buildings cast skewed, sun-following ground shadows from a cached silhouette. City names sit
+  on name plates in their realm's colour.
+- **Grading:** dawn and dusk get a soft-light golden wash, and a vignette frames the view.
 - **Living fluids:** water shades by depth with animated shimmer and see-through fords; lava
   flickers and crusts as it thins; acid bubbles; ice is pale and opaque.
 - **Moving sun:** hillshading follows the sun from east to west through the day, so mountain
@@ -338,8 +354,8 @@ Measured in headless Chromium (software rendering, so expect better on a desktop
 
 | Scenario | Sim per tick | Render per frame |
 |---|---|---|
-| New world, ~900 entities | ~2.5–3 ms (physics-dominated) | ~4 ms |
-| Stress test, ~20,000 entities | ~7.7 ms (AI 5.2, physics 2.8) | ~4 ms (LOD) |
+| 1920×1080 → 640×368 world, ~2,000 entities | ~2.6–3.7 ms | ~6–8 ms |
+| Same world, ~21,000 entities (stress test) | ~6.5 ms (AI 4.4, physics 1.9) | ~9 ms (LOD) |
 
 What makes that possible:
 
@@ -356,16 +372,18 @@ What makes that possible:
    there. Units read the next downhill cell four steps ahead. Fields are cached (LRU of 40,
    about 8 MB), rebuilt when stale or after terraforming, and capped at **two rebuilds per
    tick** so pathfinding never spikes.
-5. **Chunk sleeping for physics.** 16×16 chunks carry an awake timer. Only awake chunks (plus a
+5. **Chunk sleeping for physics.** 16×16 chunks carry an awake timer. Per-chunk wet, hot and
+   gassy flags let the fluid, heat and gas passes skip chunks that hold nothing to move. Only awake chunks (plus a
    one-chunk halo) run fluids, fire, heat and gas. Anything that changes the world wakes its
    chunk. Quiet land, ice and the open ocean (pinned as a reservoir) cost nothing. Heat
    diffusion is skipped entirely in chunks with no anomaly nearby. Slow processes run
    round-robin, 1/16 of the map per tick.
 6. **Two-pass, delta-buffered fluids.** These are branch-light inner loops over contiguous
    memory, with flow conservation guaranteed by construction.
-7. **Rendering LOD.** Close up, each creature is a cached, tinted sprite. When more than 2,500
-   creatures are on screen, they are written as single pixels into a world-sized buffer and
-   scaled up. Rendering 20,000 creatures dropped from 87 ms to 4 ms.
+7. **Rendering LOD.** People, monsters and vehicles are cached, tinted sprites from zoom 3, and
+   wildlife from zoom 4. Below that, or when more than 2,500 creatures are on screen, creatures
+   are written as single pixels into a world-sized buffer and scaled up. On the largest world
+   this took a frame from 54 ms to 8 ms in software rendering.
 8. **Incremental terrain painting.** Only dirty chunks, awake chunks (alternating frames),
    visible chunks (every fourth frame) and a rolling 12 chunks per frame are repainted. Light,
    gas and clouds are low-resolution buffers scaled with smoothing.

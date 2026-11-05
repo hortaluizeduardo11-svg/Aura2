@@ -15,7 +15,7 @@
   const { elev, fl, ft, frozen, veg, snow, soil, fire, heat, gas, gt, moist, tbase, traffic, bgrid, ug, ugF, ugT } = Wd;
 
   const dfl = new Float32Array(N), inT = new Uint8Array(N), dgas = new Float32Array(N);
-  const act = new Uint8Array(NC), list = new Int32Array(NC), hot = new Uint8Array(NC).fill(1);
+  const act = new Uint8Array(NC), list = new Int32Array(NC), hot = new Uint8Array(NC).fill(1), wet = new Uint8Array(NC).fill(1), gassy = new Uint8Array(NC).fill(1);
   const RATE = new Float32Array([0, 0.5, 0.1, 0.42]); // per-fluid flow rate (viscosity)
   const DEEP = SEA - 0.03;                             // below this, water is open ocean
   const GAS_DECAY = new Float32Array([0, 0.97, 0.988, 0.995]);
@@ -52,7 +52,9 @@
   }
   P.react = react;
 
+  P.markWet = (i) => { wet[(((i / W) | 0) >> 4) * CW + ((i % W) >> 4)] = 1; };
   P.addFluid = function (i, type, amt) {
+    P.markWet(i);
     if (fl[i] > 0.002 && ft[i] !== type) react(i, ft[i], type, amt);
     else { fl[i] += amt; ft[i] = type; if (type !== FT.WATER) frozen[i] = 0; }
     Wd.wake1(i % W, (i / W) | 0);
@@ -82,6 +84,8 @@
   function flux(c) {
     const cx = c % CW, cy = (c / CW) | 0, x0 = cx << 4, y0 = cy << 4;
     const rightAct = cx + 1 < CW && act[c + 1], downAct = cy + 1 < CH && act[c + CW];
+    // this chunk owns its internal, right and bottom edges: nothing can flow if all three are dry
+    if (!wet[c] && !(rightAct && wet[c + 1]) && !(downAct && wet[c + CW])) return;
     for (let y = y0; y < y0 + 16; y++) {
       let i = y * W + x0;
       for (let x = x0; x < x0 + 16; x++, i++) {
@@ -148,7 +152,7 @@
 
   function applyChunk(c, wx, wy) {
     const cx = c % CW, cy = (c / CW) | 0, x0 = cx << 4, y0 = cy << 4;
-    let busy = false, warm = false;
+    let busy = false, warm = false, damp = false, fumes = false;
     // heat only needs diffusing where this chunk or a neighbour holds an anomaly
     const doHeat = hot[c] || (cx > 0 && hot[c - 1]) || (cx < CW - 1 && hot[c + 1]) || (cy > 0 && hot[c - CW]) || (cy < CH - 1 && hot[c + CW]);
     const sT = AG.Sky.seasonT + AG.Sky.chunkT[c], raining = AG.Sky.chunkRain[c];
@@ -181,6 +185,7 @@
         const f = fl[i];
         const T = tbase[i] + sT + h;
         if (f > 0) {
+          damp = true;
           const typ = ft[i];
           if (typ === FT.LAVA) { lavaCell(i, x, y); busy = true; }
           else if (typ === FT.ACID) { acidCell(i); busy = true; }
@@ -198,15 +203,19 @@
         if (fire[i]) { fireCell(i, x, y, wx, wy, raining); busy = true; warm = true; }
         else if (T > 1.05 && veg[i] > 60 && rnd() < 0.01) fire[i] = 200; // spontaneous combustion in extreme heat
         if (heat[i] !== 0) warm = true;
+        if (gas[i] > 0) fumes = true;
       }
     }
     hot[c] = warm ? 1 : 0;
+    wet[c] = damp ? 1 : 0;
+    gassy[c] = fumes ? 1 : 0;
     return busy;
   }
 
   // ------------------------------------------------------------ gas
   function gasSpread(c, wx, wy) {
     const cx = c % CW, cy = (c / CW) | 0, x0 = cx << 4, y0 = cy << 4;
+    if (!gassy[c]) return false; // flags are refreshed by applyChunk earlier in the same tick
     const L = cx > 0 && act[c - 1], R = cx < CW - 1 && act[c + 1], U = cy > 0 && act[c - CW], D = cy < CH - 1 && act[c + CW];
     const wR = 0.25 + wx * 0.18, wL = 0.25 - wx * 0.18, wD = 0.25 + wy * 0.18, wU = 0.25 - wy * 0.18;
     let busy = false;
@@ -230,6 +239,7 @@
   }
   function gasApply(c) {
     const cx = c % CW, cy = (c / CW) | 0, x0 = cx << 4, y0 = cy << 4;
+    if (!gassy[c] && !(cx > 0 && gassy[c - 1]) && !(cx < CW - 1 && gassy[c + 1]) && !(cy > 0 && gassy[c - CW]) && !(cy < CH - 1 && gassy[c + CW])) return;
     for (let y = y0; y < y0 + 16; y++) {
       let i = y * W + x0;
       for (let x = 0; x < 16; x++, i++) {
@@ -252,7 +262,7 @@
         if (f > 0.002 && ft[i] === FT.WATER) {
           if (!frozen[i]) {
             if (T < 0.09 && (f < 0.3 || T < -0.05) && rnd() < 0.2) { frozen[i] = 1; wet = true; }
-            else if (!rain && T > 0.15 && elev[i] >= DEEP) {
+            else if (!rain && T > 0.15 && elev[i] >= SEA) {
               // inland water evaporates (faster when shallow and warm) so closed basins settle into lakes
               fl[i] = Math.max(0, f - (f < 0.01 ? 0.0006 : 0.00025) * T);
               if (fl[i] < 1e-4) { fl[i] = 0; ft[i] = FT.NONE; }
@@ -302,7 +312,7 @@
       const y = uFlip ? y0 + yy : y0 + 15 - yy;
       for (let xx = 0; xx < 16; xx++) {
         const x = uFlip ? x0 + xx : x0 + 15 - xx, i = y * W + x;
-        const a = ugF[i]; if (!a) continue;
+        const a = ugF[i]; if (a < 3) continue; // thin films stay put, so cave pools settle
         const typ = ugT[i];
         if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2) continue;
         let j;
@@ -315,7 +325,7 @@
           else { ug[j] = UG.ROCK; ugF[j] = 0; ugT[j] = 0; ugF[i] = a > 40 ? a - 40 : 0; if (!ugF[i]) ugT[i] = 0; }
           busy = true; continue;
         }
-        if (a > b + 1) {
+        if (a > b + 3) { // a real gradient is needed to move, so pools come to rest
           const m = (a - b) >> 1; ugF[i] = a - m; ugF[j] = b + m; ugT[j] = typ; busy = true;
           if (typ === UF.MAGMA && u === UG.FUNGUS) ug[j] = UG.CAVE;
           const cj = (((j / W) | 0) >> 4) * CW + ((j % W) >> 4);
@@ -385,8 +395,8 @@
     for (let k = 0; k < NC / 16; k++) { slowChunk(slowCursor); slowCursor = (slowCursor + 1) % NC; }
     t0 = now(); ema('slow', t0 - t1);
 
-    // underground every other tick
-    if (t & 1) {
+    // underground every third tick: cave fluids move slowly
+    if (t % 3 === 0) {
       let nu = 0;
       for (let c = 0; c < NC; c++) {
         if (!Wd.uawake[c]) continue;

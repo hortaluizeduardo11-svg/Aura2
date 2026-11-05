@@ -10,13 +10,13 @@
   const AG = window.AG, Wd = AG.World, U = AG.U, Civ = AG.Civ, Sky = AG.Sky, FX = AG.FX, Proj = AG.Proj, God = AG.God;
   const { W, H, CW, NC, SEA, FT, GT, SO, UG, UF, SP, SPECIES, BT, BUILD, FL, J, NG, G } = AG;
   const pack = AG.pack;
-  const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16];
+  const STEPS = [2, 3, 4, 6, 8, 12, 16];
   const SPRITE_LIMIT = 2500; // above this many visible creatures, draw them as pixels
   const R = (AG.Render = {
-    view: 1, overlay: 'realms', showTrade: true, cam: { x: W / 2, y: H / 2, z: 3 }, follow: -1, bordersDirty: true,
-    hover: { x: -1, y: -1, on: false }, stats: { ms: 0 }, ZOOMS,
+    view: 1, overlay: 'realms', showTrade: true, cam: { x: W / 2, y: H / 2, z: AG.BASE_ZOOM }, follow: -1, bordersDirty: true,
+    hover: { x: -1, y: -1, on: false }, stats: { ms: 0 }, minZoom: 1,
   });
-  let cv, ctx, cw = 0, ch = 0, mini, mctx;
+  let cv, ctx, cw = 0, ch = 0, mini, mctx, vignette = null;
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   // world-resolution buffers
   const worldC = mk(W, H), wctx = worldC.getContext('2d'), wimg = wctx.createImageData(W, H), wpix = new Uint32Array(wimg.data.buffer);
@@ -35,59 +35,87 @@
   R.init = function (canvas, minimap) {
     cv = canvas; ctx = cv.getContext('2d');
     mini = minimap; mctx = mini.getContext('2d');
+    mini.width = 200; mini.height = Math.round((200 * H) / W);
     R.resize();
   };
   R.resize = function () {
     const r = cv.getBoundingClientRect();
     cw = Math.max(1, Math.round(r.width)); ch = Math.max(1, Math.round(r.height));
     cv.width = cw; cv.height = ch;
+    R.minZoom = Math.max(cw / W, ch / H);
+    if (R.cam.z < R.minZoom) R.cam.z = R.minZoom;
+    // vignette rendered once at quarter resolution, then stretched each frame
+    const vw = Math.max(1, cw >> 2), vh = Math.max(1, ch >> 2);
+    vignette = mk(vw, vh);
+    const vx = vignette.getContext('2d'), g = vx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.35, vw / 2, vh / 2, Math.hypot(vw, vh) * 0.62);
+    g.addColorStop(0, 'rgba(6,8,16,0)'); g.addColorStop(1, 'rgba(6,8,16,0.42)');
+    vx.fillStyle = g; vx.fillRect(0, 0, vw, vh);
+    clampCam();
   };
   R.size = () => ({ w: cw, h: ch });
-  R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; Wd.dirty.fill(1); Wd.udirty.fill(1); R.fit(); };
+  R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
 
   // ------------------------------------------------------------ camera
+  // The world is sized to the screen, so the smallest zoom always fills it edge to edge.
+  R.zoomList = () => [R.minZoom, ...STEPS.filter((s) => s > R.minZoom + 0.05)];
   R.fit = function () {
-    const fz = Math.min(cw / W, ch / H);
-    let z = ZOOMS[0];
-    for (const v of ZOOMS) if (v <= fz * 1.35) z = v;
-    R.cam.z = z; R.cam.x = W / 2; R.cam.y = H / 2;
+    R.minZoom = Math.max(cw / W, ch / H);
+    R.cam.z = Math.max(R.minZoom, AG.BASE_ZOOM); R.cam.x = W / 2; R.cam.y = H / 2;
+    clampCam();
   };
   R.screenToWorld = (sx, sy) => ({ x: (sx - cw / 2) / R.cam.z + R.cam.x, y: (sy - ch / 2) / R.cam.z + R.cam.y });
   R.zoomAt = function (sx, sy, dir) {
-    const c = R.cam, idx = ZOOMS.indexOf(c.z), ni = AG.clamp((idx < 0 ? 3 : idx) + dir, 0, ZOOMS.length - 1);
-    if (ZOOMS[ni] === c.z) return;
+    const c = R.cam, list = R.zoomList();
+    let idx = 0;
+    for (let k = 0; k < list.length; k++) if (list[k] <= c.z + 0.01) idx = k;
+    const ni = AG.clamp(idx + dir, 0, list.length - 1);
+    if (Math.abs(list[ni] - c.z) < 0.001) return;
     const before = R.screenToWorld(sx, sy);
-    c.z = ZOOMS[ni];
+    c.z = list[ni];
     const after = R.screenToWorld(sx, sy);
     c.x += before.x - after.x; c.y += before.y - after.y;
     clampCam();
   };
-  R.setZoom = function (z) { R.cam.z = z; clampCam(); };
+  R.setZoom = function (z) { R.cam.z = Math.max(R.minZoom, z); clampCam(); };
   R.pan = function (dx, dy) { R.cam.x -= dx / R.cam.z; R.cam.y -= dy / R.cam.z; R.follow = God.possessed >= 0 ? R.follow : -1; clampCam(); };
-  R.centerOn = function (x, y, z) { R.cam.x = x; R.cam.y = y; if (z) R.cam.z = z; clampCam(); };
+  R.centerOn = function (x, y, z) { R.cam.x = x; R.cam.y = y; if (z) R.cam.z = Math.max(R.minZoom, z); clampCam(); };
   function clampCam() {
-    const c = R.cam, hw = cw / 2 / c.z, hh = ch / 2 / c.z;
-    c.x = hw * 2 >= W ? W / 2 : AG.clamp(c.x, hw - 8, W - hw + 8);
-    c.y = hh * 2 >= H ? H / 2 : AG.clamp(c.y, hh - 8, H - hh + 8);
+    const c = R.cam;
+    if (c.z < R.minZoom) c.z = R.minZoom;
+    const hw = cw / 2 / c.z, hh = ch / 2 / c.z;
+    c.x = hw * 2 >= W ? W / 2 : AG.clamp(c.x, hw, W - hw);
+    c.y = hh * 2 >= H ? H / 2 : AG.clamp(c.y, hh, H - hh);
   }
 
-  // ------------------------------------------------------------ terrain colours
-  const DIRT = [142, 112, 74], FOREST = [34, 90, 44], FOREST_COLD = [36, 74, 64], JUNGLE = [26, 104, 50];
+  // ------------------------------------------------------------ terrain colours (16-bit palette)
+  const C = {
+    deep: [16, 42, 98], mid: [26, 84, 158], shallow: [44, 134, 198], shoal: [96, 190, 216], foam: [226, 244, 250], river: [58, 162, 214],
+    sand: [236, 214, 154], sandWet: [198, 172, 118], dirt: [152, 116, 74],
+    rock: [148, 140, 132], snow: [244, 248, 255],
+    forest: [40, 102, 50], forestCold: [40, 86, 70], jungle: [28, 116, 58],
+  };
+  const gc = [0, 0, 0], wc = [0, 0, 0];
   function grassColour(T, out) {
-    // cold teal -> temperate green -> hot olive
-    if (T < 0.45) { const t = AG.clamp((T - 0.05) / 0.4, 0, 1); out[0] = 86 + 8 * t; out[1] = 132 + 28 * t; out[2] = 108 - 46 * t; }
-    else { const t = AG.clamp((T - 0.45) / 0.35, 0, 1); out[0] = 94 + 66 * t; out[1] = 160 - 4 * t; out[2] = 62 + 6 * t; }
+    // tundra teal -> meadow green -> savanna gold
+    if (T < 0.45) { const t = AG.clamp((T - 0.05) / 0.4, 0, 1); out[0] = 92 + 10 * t; out[1] = 140 + 36 * t; out[2] = 112 - 50 * t; }
+    else { const t = AG.clamp((T - 0.45) / 0.35, 0, 1); out[0] = 102 + 88 * t; out[1] = 176 - 8 * t; out[2] = 62 + 2 * t; }
   }
-  const gc = [0, 0, 0];
+  function waterColour(t, out) { // 0 = shoal, 1 = abyss
+    let a, b, u;
+    if (t < 0.25) { a = C.shoal; b = C.shallow; u = t / 0.25; }
+    else if (t < 0.6) { a = C.shallow; b = C.mid; u = (t - 0.25) / 0.35; }
+    else { a = C.mid; b = C.deep; u = (t - 0.6) / 0.4; }
+    out[0] = a[0] + (b[0] - a[0]) * u; out[1] = a[1] + (b[1] - a[1]) * u; out[2] = a[2] + (b[2] - a[2]) * u;
+  }
   function buildingColour(B, x, y) {
     const k = Civ.kingdoms[B.kd], kc = k ? k.color : [150, 150, 150];
     switch (B.type) {
       case BT.KEEP: return (x - B.x === 1 || x - B.x === 2) && (y - B.y === 1 || y - B.y === 2) ? kc : [150, 146, 140];
       case BT.HOUSE: return [kc[0] * 0.5 + 60, kc[1] * 0.5 + 34, kc[2] * 0.5 + 24];
       case BT.FARM: {
-        if ((y - B.y) & 1) return [104, 78, 48];
+        if ((y - B.y) & 1) return [110, 80, 48];
         const t = B.growth;
-        return [120 + 100 * t, 150 + 40 * t, 60 + 20 * t];
+        return [126 + 104 * t, 160 + 38 * t, 62 + 22 * t];
       }
       case BT.WINDMILL: return [226, 220, 206];
       case BT.TEMPLE: return [238, 232, 216];
@@ -95,120 +123,349 @@
       case BT.MINE: return [72, 58, 50];
       case BT.TOWER: return [150, 150, 160];
       case BT.WALL: return [126, 126, 134];
-      case BT.DOCK: return [138, 100, 64];
+      case BT.DOCK: return [146, 106, 66];
       case BT.WORKSHOP: return [140, 104, 66];
     }
     return kc;
   }
-  let LX = 0.6, LY = -0.55;
+  const BANDS = 26;  // elevation terraces, drawn as lit lips and shaded cliff faces
+  let LX = 0.6, LY = -0.55, season = 0;
+  const dry = (j) => Wd.fl[j] < 0.002 || Wd.frozen[j] === 1;
+  const clamp255 = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
+  function waterPix(i, x, y, e, f, d, inner) {
+    const ocean = e < SEA - 0.03;
+    const depth = ocean ? SEA - e : f;
+    const q = Math.min(1, Math.floor(AG.clamp(depth / 0.32, 0, 1) * 7 + (d + 7) / 15) / 7); // banded, dithered edges
+    waterColour(q, wc);
+    let r = wc[0], g = wc[1], b = wc[2];
+    if (!ocean) { r = r * 0.6 + C.river[0] * 0.4; g = g * 0.6 + C.river[1] * 0.4; b = b * 0.6 + C.river[2] * 0.4; }
+    const shim = Math.sin(x * 0.8 + tm * 2.1 + d * 0.3) * Math.sin(y * 0.6 - tm * 1.7);
+    if (shim > 0.6) { r += 14; g += 18; b += 16; }
+    if (depth > 0.025 && (x * 7 + y * 13 + ((tm * 3) | 0) * 11) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints
+    if (inner && (dry(i - 1) || dry(i + 1) || dry(i - W) || dry(i + W))) {
+      const fo = 0.42 + 0.3 * Math.sin(tm * 2.4 + (x + y) * 0.7); // lapping shoreline foam
+      r += (C.foam[0] - r) * fo; g += (C.foam[1] - g) * fo; b += (C.foam[2] - b) * fo;
+    }
+    return [r, g, b];
+  }
   function surfPix(i, x, y) {
-    const e = Wd.elev[i], f = Wd.fl[i], d = Wd.dither[i], s = Wd.soil[i], v = Wd.veg[i];
+    const e = Wd.elev[i], f = Wd.fl[i], d = Wd.dither[i];
+    const inner = x > 0 && x < W - 1 && y > 0 && y < H - 1;
+    // open water takes a fast path: no ground to shade underneath
+    if (f > 0.02 && Wd.ft[i] === FT.WATER && !Wd.frozen[i] && !Wd.fire[i]) {
+      const w = waterPix(i, x, y, e, f, d, inner);
+      return pack(clamp255(w[0] + d * 0.4), clamp255(w[1] + d * 0.4), clamp255(w[2] + d * 0.4));
+    }
+    const s = Wd.soil[i], v = Wd.veg[i];
     let r, g, b;
     switch (s) {
-      case SO.SAND: r = 220; g = 200; b = 144; if (v > 20) { r -= 30; g -= 10; b -= 30; } break;
-      case SO.ROCK: { const t = AG.clamp((e - AG.MOUNTAIN) * 3.5, 0, 1); r = 136 - t * 26; g = 128 - t * 24; b = 120 - t * 14; break; }
-      case SO.BASALT: r = 56; g = 50; b = 56; break;
-      case SO.ASH: r = 100; g = 96; b = 92; if (v > 20) { r -= 10; g += 20; b -= 10; } break;
-      case SO.BLIGHT: r = 98; g = 60 + (v >> 3); b = 110; break;
-      case SO.ROAD: r = 168; g = 138; b = 100; break;
-      case SO.FARM: r = 118; g = 88; b = 56; break;
+      case SO.SAND: {
+        const c = inner && (!dry(i - 1) || !dry(i + 1) || !dry(i - W) || !dry(i + W)) ? C.sandWet : C.sand;
+        r = c[0]; g = c[1]; b = c[2];
+        if (v > 20) { r -= 26; g -= 6; b -= 30; }
+        if (((x * 3 + y * 5) & 15) === 0) { r -= 12; g -= 12; b -= 10; } // pebbles
+        break;
+      }
+      case SO.ROCK: {
+        const t = AG.clamp((e - AG.MOUNTAIN) * 3.5, 0, 1);
+        r = C.rock[0] - t * 34; g = C.rock[1] - t * 32; b = C.rock[2] - t * 22;
+        if (((x * 5 + y * 3) & 7) === 0) { r += 16; g += 16; b += 14; }
+        break;
+      }
+      case SO.BASALT: r = 60; g = 54; b = 62; if (((x + y * 3) % 5) === 0) { r += 14; g += 10; b += 14; } break;
+      case SO.ASH: r = 108; g = 102; b = 98; if (v > 20) { r -= 10; g += 22; b -= 10; } break;
+      case SO.BLIGHT: r = 108; g = 62 + (v >> 3); b = 124; if (((x ^ y) & 3) === 0) { r += 18; g -= 8; b += 22; } break;
+      case SO.ROAD: r = 186; g = 154; b = 110; if (((x + y) & 3) === 0) { r -= 14; g -= 14; b -= 12; } break;
+      case SO.FARM: r = 128; g = 94; b = 58; break;
       default: {
         const T = Wd.tbase[i] + Sky.seasonT;
         grassColour(T, gc);
-        if (Sky.season() === 2 && T > 0.25 && T < 0.6) { gc[0] += 50; gc[1] -= 14; gc[2] -= 20; } // autumn
-        if (v < 60) { const t = v / 60; r = DIRT[0] + (gc[0] - DIRT[0]) * t; g = DIRT[1] + (gc[1] - DIRT[1]) * t; b = DIRT[2] + (gc[2] - DIRT[2]) * t; }
-        else if (v < 165) { const t = (v - 60) / 105; r = gc[0] - 14 * t; g = gc[1] - 18 * t; b = gc[2] - 8 * t; }
-        else {
-          const F = T < 0.3 ? FOREST_COLD : T > 0.68 ? JUNGLE : FOREST;
+        if (season === 2 && T > 0.25 && T < 0.6) { gc[0] += 54; gc[1] -= 12; gc[2] -= 22; } // autumn
+        if (v < 60) { const t = v / 60; r = C.dirt[0] + (gc[0] - C.dirt[0]) * t; g = C.dirt[1] + (gc[1] - C.dirt[1]) * t; b = C.dirt[2] + (gc[2] - C.dirt[2]) * t; }
+        else if (v < 165) {
+          const t = (v - 60) / 105; r = gc[0] - 16 * t; g = gc[1] - 20 * t; b = gc[2] - 8 * t;
+          if (((x ^ (y * 3)) & 7) === 0) { r += 16; g += 20; b += 8; } // grass blades
+        } else {
+          const F = T < 0.3 ? C.forestCold : T > 0.68 ? C.jungle : C.forest;
           r = F[0]; g = F[1]; b = F[2];
-          if (d > 2) { r += 14; g += 22; b += 10; } else if (d < -4) { r -= 10; g -= 14; b -= 8; } // canopy texture
+          if (d > 2) { r += 16; g += 24; b += 12; } else if (d < -4) { r -= 12; g -= 16; b -= 10; } // canopy texture
         }
-        if (s === SO.HOLY) { r = r * 0.45 + 130; g = g * 0.45 + 118; b = b * 0.45 + 50; }
+        if (s === SO.HOLY) { r = r * 0.45 + 132; g = g * 0.45 + 118; b = b * 0.45 + 52; if (((x + y * 2) % 7) === 0) { r += 30; g += 26; } }
       }
     }
-    if (Wd.snow[i] > 20) { const t = Math.min(1, Wd.snow[i] / 190); r += (240 - r) * t; g += (244 - g) * t; b += (252 - b) * t; }
+    const snowy = Wd.snow[i] > 20;
+    if (snowy) { const t = Math.min(1, Wd.snow[i] / 190); r += (C.snow[0] - r) * t; g += (C.snow[1] - g) * t; b += (C.snow[2] - b) * t; }
     const bg = Wd.bgrid[i];
     if (bg) {
       const B = Civ.buildings[bg - 1], c = buildingColour(B, x, y), t = B.prog >= 1 ? 1 : 0.35 + B.prog * 0.5;
       r += (c[0] - r) * t; g += (c[1] - g) * t; b += (c[2] - b) * t;
     }
-    // hillshade with the moving sun
+    // hillshade with the moving sun, plus stepped terraces for the 16-bit relief look
     let sh = 1;
-    if (x > 0 && x < W - 1 && y > 0 && y < H - 1) {
-      const ex = Wd.elev[i + 1] - Wd.elev[i - 1], ey = Wd.elev[i + W] - Wd.elev[i - W];
-      sh = 1 - (ex * LX + ey * LY) * 16 + (e - SEA) * 0.22;
+    if (inner) {
+      const en = Wd.elev[i - W], es = Wd.elev[i + W];
+      sh = 1 - ((Wd.elev[i + 1] - Wd.elev[i - 1]) * LX + (es - en) * LY) * 18 + (e - SEA) * 0.16;
+      if (e >= SEA) {
+        const bd = ((e - SEA) * BANDS) | 0;
+        if ((((en - SEA) * BANDS) | 0) > bd) sh *= 0.8; else if (bd > (((es - SEA) * BANDS) | 0)) sh *= 1.1;
+      }
       sh = sh < 0.55 ? 0.55 : sh > 1.4 ? 1.4 : sh;
     }
     r = r * sh + d; g = g * sh + d; b = b * sh + d;
+    if (snowy && sh < 0.97) b += (0.97 - sh) * 90; // blue shadows on snow
     if (f > 0.0015) {
       const ty = Wd.ft[i];
-      if (Wd.frozen[i]) { r = r * 0.15 + 196 + d; g = g * 0.15 + 214 + d; b = b * 0.15 + 220; }
-      else if (ty === FT.WATER) {
-        const depth = AG.smooth(0, 0.26, f);
-        let wr = 60 - 46 * depth, wg = 146 - 104 * depth, wb = 190 - 92 * depth;
-        const shim = Math.sin(x * 0.9 + tm * 2.1 + d) * Math.sin(y * 0.7 - tm * 1.6);
-        if (shim > 0.55) { wr += 26; wg += 30; wb += 26; }
-        if (f < 0.02) { const a = 0.35 + (f / 0.02) * 0.65; r += (wr - r) * a; g += (wg - g) * a; b += (wb - b) * a; }
-        else { r = wr + d * 0.5; g = wg + d * 0.5; b = wb + d * 0.5; }
+      if (Wd.frozen[i]) {
+        r = r * 0.12 + 200 + d; g = g * 0.12 + 218 + d; b = b * 0.12 + 226;
+        if ((x * 3 + y * 5) % 17 === 0) { r -= 30; g -= 20; b -= 10; } // cracks in the ice
+      } else if (ty === FT.WATER) {
+        const w = waterPix(i, x, y, e, f, d, inner);
+        const a = 0.35 + (f / 0.02) * 0.65; // fords and puddles show the ground beneath
+        r += (w[0] - r) * a; g += (w[1] - g) * a; b += (w[2] - b) * a;
       } else if (ty === FT.LAVA) {
         const fl = 0.5 + 0.5 * Math.sin(tm * 3 + d * 0.9 + x * 0.35 + y * 0.2);
-        if (f < 0.005) { r = 140; g = 40 + fl * 30; b = 24; }
-        else { r = 255; g = 70 + fl * 120; b = 20 + fl * 30; }
+        if (f < 0.005 || (d > 4 && f < 0.03)) { r = 128 + fl * 30; g = 36 + fl * 22; b = 24; } // cooling crust
+        else { r = 255; g = 78 + fl * 120; b = 22 + fl * 34; }
       } else {
         const bub = (d + ((tm * 6) | 0)) % 7 === 0;
-        r = bub ? 210 : 112; g = bub ? 255 : 226; b = bub ? 140 : 62;
+        r = bub ? 214 : 118; g = bub ? 255 : 230; b = bub ? 150 : 66;
       }
     }
     if (Wd.fire[i]) { const fl = 0.5 + 0.5 * Math.sin(tm * 11 + d * 2 + x); r = 255; g = 100 + fl * 130; b = 24 + fl * 20; }
-    return pack(r < 0 ? 0 : r > 255 ? 255 : r | 0, g < 0 ? 0 : g > 255 ? 255 : g | 0, b < 0 ? 0 : b > 255 ? 255 : b | 0);
+    return pack(clamp255(r), clamp255(g), clamp255(b));
   }
   function underPix(i, x, y) {
     const u = Wd.ug[i], d = Wd.dither[i];
     let r, g, b;
     switch (u) {
-      case UG.ROCK: r = 64 + d; g = 60 + d; b = 70 + d; break;
-      case UG.DIRT: r = 94 + d; g = 74 + d; b = 56 + d; break;
-      case UG.CAVE: r = 30; g = 26; b = 34; break;
-      case UG.TUNNEL: r = 116 + d; g = 92 + d; b = 66 + d; break;
-      case UG.IRON: if (d > 1) { r = 178; g = 108; b = 78; } else { r = 70 + d; g = 60; b = 64; } break;
-      case UG.GOLD: if (d > 0) { r = 250; g = 206; b = 70; } else { r = 96; g = 82; b = 60; } break;
-      case UG.CRYSTAL: { const p = 0.5 + 0.5 * Math.sin(tm * 2 + d); r = 90 + p * 60; g = 210 + p * 40; b = 255; break; }
-      case UG.FUNGUS: if (d > 3) { r = 90; g = 230; b = 196; } else { r = 32; g = 54; b = 50; } break;
+      case UG.ROCK: r = 66 + d; g = 62 + d; b = 74 + d; break;
+      case UG.DIRT: r = 98 + d; g = 76 + d; b = 58 + d; break;
+      case UG.CAVE: r = 32; g = 27; b = 36; if (((x * 3 + y * 7) & 15) === 0) { r += 10; g += 8; b += 10; } break;
+      case UG.TUNNEL: r = 120 + d; g = 94 + d; b = 66 + d; if ((x + y) % 6 === 0) { r -= 24; g -= 20; b -= 14; } break; // timber props
+      case UG.IRON: if (d > 1) { r = 184; g = 110; b = 78; } else { r = 72 + d; g = 62; b = 66; } break;
+      case UG.GOLD: if (d > 0) { r = 255; g = 212; b = 72; } else { r = 98; g = 84; b = 62; } break;
+      case UG.CRYSTAL: { const p = 0.5 + 0.5 * Math.sin(tm * 2 + d); r = 90 + p * 70; g = 210 + p * 40; b = 255; break; }
+      case UG.FUNGUS: if (d > 3) { r = 96; g = 236; b = 200; } else { r = 34; g = 58; b = 54; } break;
       default: r = 16; g = 14; b = 18;
+    }
+    const open = Wd.ugOpen(i);
+    if (y > 0 && y < H - 1) {
+      if (!open && u !== UG.BEDROCK && Wd.ugOpen(i + W)) { r += 34; g += 30; b += 30; }        // lit wall face above a cavern
+      else if (open && !Wd.ugOpen(i - W)) { r *= 0.6; g *= 0.6; b *= 0.62; }                   // shadow under the overhang
     }
     if (Wd.ugF[i]) {
       const a = Math.min(1, Wd.ugF[i] / 110);
       if (Wd.ugT[i] === UF.MAGMA) { const fl = 0.5 + 0.5 * Math.sin(tm * 3 + d + x * 0.3); r += (255 - r) * a; g += (80 + fl * 100 - g) * a; b += (20 - b) * a; }
-      else { r += (40 - r) * a; g += (100 - g) * a; b += (196 - b) * a; }
+      else { r += (40 - r) * a; g += (104 - g) * a; b += (200 - b) * a; }
     }
     const bg = Wd.bgrid[i];
-    if (bg && Civ.buildings[bg - 1].type === BT.MINE) { r = 230; g = 186; b = 96; }
-    return pack(r < 0 ? 0 : r > 255 ? 255 : r | 0, g < 0 ? 0 : g > 255 ? 255 : g | 0, b < 0 ? 0 : b > 255 ? 255 : b | 0);
+    if (bg && Civ.buildings[bg - 1].type === BT.MINE) { r = 232; g = 188; b = 96; }
+    return pack(clamp255(r), clamp255(g), clamp255(b));
   }
+  const animated = new Uint8Array(NC); // chunks holding water, lava, acid or fire
   function paintChunk(c, under) {
-    const x0 = (c % CW) << 4, y0 = ((c / CW) | 0) << 4, pix = under ? upix : wpix, fn = under ? underPix : surfPix;
-    for (let y = y0; y < y0 + 16; y++) { let i = y * W + x0; for (let x = x0; x < x0 + 16; x++, i++) pix[i] = fn(i, x, y); }
+    const x0 = (c % CW) << 4, y0 = ((c / CW) | 0) << 4;
+    if (under) {
+      for (let y = y0; y < y0 + 16; y++) { let i = y * W + x0; for (let x = x0; x < x0 + 16; x++, i++) upix[i] = underPix(i, x, y); }
+      return;
+    }
+    let sig = season + 1, ani = 0;
+    for (let y = y0; y < y0 + 16; y++) {
+      let i = y * W + x0;
+      for (let x = x0; x < x0 + 16; x++, i++) {
+        wpix[i] = surfPix(i, x, y);
+        const v = Wd.veg[i], wet = Wd.fl[i] > 0.004;
+        if (wet || Wd.fire[i]) ani = 1;
+        sig = (Math.imul(sig, 31) + ((v >= 165 ? 3 : v >= 110 ? 2 : v >= 60 ? 1 : 0) | (Wd.snow[i] > 120 ? 4 : 0) | (Wd.bgrid[i] ? 8 : 0) | (Wd.fire[i] ? 16 : 0) | (wet ? 32 : 0) | (Wd.soil[i] << 6))) | 0;
+      }
+    }
+    animated[c] = ani;
+    if (sig !== decoSig[c]) { decoSig[c] = sig; decoDirty[c] = 1; }
   }
+  let visRoll = 0;
   function updateTerrain() {
     const under = R.view === 0;
     const sun = Sky.sunDir(), day = Sky.daylight();
-    LX = day > 0.05 ? sun.x : -0.5; LY = sun.y;
+    LX = day > 0.05 ? sun.x : -0.5; LY = sun.y; season = Sky.season();
     const dirty = under ? Wd.udirty : Wd.dirty, awake = under ? Wd.uawake : Wd.awake;
     const full = lastView !== (under ? 0 : 1);
     lastView = under ? 0 : 1;
-    // visible chunk window
-    const c = R.cam, hw = cw / 2 / c.z, hh = ch / 2 / c.z;
-    const vx0 = Math.max(0, ((c.x - hw) >> 4) - 0), vx1 = Math.min(CW - 1, (c.x + hw) >> 4);
-    const vy0 = Math.max(0, (c.y - hh) >> 4), vy1 = Math.min(AG.CH - 1, (c.y + hh) >> 4);
     let painted = 0;
-    for (let k = 0; k < NC; k++) {
-      const cx = k % CW, cy = (k / CW) | 0;
-      const vis = cx >= vx0 && cx <= vx1 && cy >= vy0 && cy <= vy1;
-      if (full || dirty[k] || (awake[k] && ((frameN + k) & 1) === 0) || (vis && ((frameN + k) & 3) === 0)) { paintChunk(k, under); dirty[k] = 0; painted++; }
+    if (full) { for (let k = 0; k < NC; k++) paintChunk(k, under); dirty.fill(0); painted = NC; }
+    else {
+      for (let k = 0; k < NC; k++) if (dirty[k] || (awake[k] && (frameN + k) % 3 === 0)) { paintChunk(k, under); dirty[k] = 0; painted++; }
+      // animate visible water and fire: a quarter of those chunks per frame
+      const c = R.cam, hw = cw / 2 / c.z, hh = ch / 2 / c.z;
+      const vx0 = Math.max(0, (c.x - hw) >> 4), vx1 = Math.min(CW - 1, (c.x + hw) >> 4);
+      const vy0 = Math.max(0, (c.y - hh) >> 4), vy1 = Math.min(AG.CH - 1, (c.y + hh) >> 4);
+      const vw = vx1 - vx0 + 1, nv = vw * (vy1 - vy0 + 1);
+      for (let k = 0; k < nv; k++) {
+        const q = (visRoll + k) % nv, cc = (vy0 + ((q / vw) | 0)) * CW + vx0 + (q % vw);
+        if ((k & 3) === (frameN & 3) && (under ? Wd.uawake[cc] || true : animated[cc])) { paintChunk(cc, under); painted++; }
+      }
+      for (let k = 0; k < 10; k++) { paintChunk(roll, under); roll = (roll + 1) % NC; }
     }
-    for (let k = 0; k < 12; k++) { paintChunk(roll, under); roll = (roll + 1) % NC; }
     (under ? uctx : wctx).putImageData(under ? uimg : wimg, 0, 0);
     R.stats.painted = painted;
+  }
+
+  // ------------------------------------------------------------ decoration layer
+  // Trees, bushes, rocks, flowers and cacti, baked per 16x16 chunk at k sprite pixels per cell
+  // (k = 3 or 4 so they stay crisp at integer zooms) and rebuilt only when the chunk changes.
+  const deco = new Array(NC).fill(null), decoSig = new Int32Array(NC), decoDirty = new Uint8Array(NC).fill(1);
+  let decoK = 4, decoWarm = true;
+  const DECO = {
+    4: {
+      broad: ['..LLg..', '.LLgggg', 'LLggggG', 'LgggGGG', '.ggGGG.', '..GGG..', '...t...', '...T...'],
+      pine: ['...g...', '..Lgg..', '..LgG..', '.LggGG.', '..LgG..', '.LggGG.', 'LggggGG', '...T...', '...T...'],
+      jungle: ['.LLggg.', 'LLgggGG', 'LgggGGG', 'ggGgGGG', '.gGGGG.', '..tTt..', '...T...'],
+      dead: ['.t...t.', '..t.t..', 't..t..t', '.t.t.t.', '..tTt..', '...T...', '...T...'],
+      bush: ['.LLg.', 'LgggG', '.gGG.'],
+      tuft: ['L.L', 'gLg'],
+      flower: ['.f.', 'fyf', '.g.'],
+      rock: ['.hh.', 'hrrR', 'rrRR'],
+      cactus: ['.c..', '.c.c', 'cc.c', '.ccc', '.c..'],
+      thorn: ['p.p', '.p.', 'ppp'],
+      reed: ['t.t', 't.t', 'gtg'],
+    },
+    3: {
+      broad: ['.LLg.', 'LLggG', 'LggGG', '.gGG.', '..t..'],
+      pine: ['..g..', '.Lgg.', '.LgG.', 'LggGG', '..T..'],
+      jungle: ['.LLg.', 'LggGG', 'gGgGG', '.GGG.', '..T..'],
+      dead: ['t...t', '.t.t.', '..t..', '..T..'],
+      bush: ['LgG', 'gGG'],
+      tuft: ['L.L'],
+      flower: ['f', 'g'],
+      rock: ['hr', 'rR'],
+      cactus: ['.c', 'cc', '.c'],
+      thorn: ['p.p', '.p.'],
+      reed: ['t.t', 'g.g'],
+    },
+  };
+  const TRUNK = { t: [124, 88, 56], T: [86, 58, 36] };
+  const DPAL = {
+    spring: { L: [160, 216, 106], g: [100, 174, 72], G: [54, 124, 54], ...TRUNK },
+    summer: { L: [126, 200, 84], g: [72, 154, 62], G: [38, 104, 48], ...TRUNK },
+    autumn: { L: [252, 188, 76], g: [226, 126, 50], G: [160, 74, 38], ...TRUNK },
+    pine: { L: [106, 172, 118], g: [56, 124, 86], G: [30, 82, 60], ...TRUNK },
+    snowpine: { L: [242, 248, 255], g: [62, 122, 90], G: [32, 80, 60], ...TRUNK },
+    jungle: { L: [118, 208, 94], g: [42, 154, 74], G: [20, 100, 56], ...TRUNK },
+    dead: { t: [112, 86, 62], T: [80, 60, 44] },
+    tuft: { L: [150, 212, 110], g: [92, 162, 72] },
+    tuftDry: { L: [214, 194, 112], g: [170, 150, 84] },
+    rock: { h: [200, 194, 184], r: [152, 144, 136], R: [106, 100, 98] },
+    snowrock: { h: [244, 248, 255], r: [196, 206, 222], R: [120, 116, 120] },
+    basalt: { h: [110, 104, 114], r: [70, 64, 74], R: [44, 40, 48] },
+    cactus: { c: [96, 176, 96], C: [60, 124, 66] },
+    thorn: { p: [176, 92, 210] },
+    reed: { t: [156, 176, 96], g: [94, 146, 74] },
+  };
+  const PETALS = [[244, 92, 116], [252, 224, 92], [184, 124, 244], [252, 252, 252], [255, 152, 64]];
+  const dsCache = new Map();
+  function decoSprite(k, name, palKey, pal) {
+    const key = k + name + palKey;
+    let sp = dsCache.get(key);
+    if (sp) return sp;
+    const rows = DECO[k][name], w0 = rows.reduce((m, r) => Math.max(m, r.length), 0), h0 = rows.length;
+    const w = w0 + 2, h = h0 + 2, px = new Uint32Array(w * h);
+    let darkest = 255 * 3, oc = [20, 20, 20];
+    for (const ch of Object.keys(pal)) { const c = pal[ch]; if (c[0] + c[1] + c[2] < darkest) { darkest = c[0] + c[1] + c[2]; oc = c; } }
+    const outline = pack((oc[0] * 0.45) | 0, (oc[1] * 0.45) | 0, (oc[2] * 0.5) | 0);
+    for (let y = 0; y < h0; y++) for (let x = 0; x < rows[y].length; x++) { const c = pal[rows[y][x]]; if (c) px[(y + 1) * w + x + 1] = pack(c[0], c[1], c[2]); }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const j = y * w + x;
+      if (px[j] && px[j] !== outline) continue;
+      if ((x > 0 && px[j - 1] && px[j - 1] !== outline) || (x < w - 1 && px[j + 1] && px[j + 1] !== outline) || (y > 0 && px[j - w] && px[j - w] !== outline) || (y < h - 1 && px[j + w] && px[j + w] !== outline)) px[j] = outline;
+    }
+    sp = { w, h, px };
+    dsCache.set(key, sp);
+    return sp;
+  }
+  function hash(x, y) { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return (h ^ (h >>> 16)) >>> 0; }
+  const SHADOW = pack(8, 18, 16, 64);
+  const scratch = {};
+  function buildDeco(c, k) {
+    const cx0 = (c % CW) << 4, cy0 = ((c / CW) | 0) << 4;
+    const bw = 18 * k, bh = 19 * k; // one cell of padding left and right, three on top
+    if (!scratch[k]) scratch[k] = new Uint32Array(bw * bh);
+    const buf = scratch[k];
+    buf.fill(0);
+    let n = 0;
+    const leaf = season === 0 ? 'spring' : season === 2 ? 'autumn' : 'summer';
+    const far = k === 3; // the zoomed-out set is sparser so the land reads as land, not speckle
+    for (let y = cy0; y < cy0 + 16; y++) for (let x = cx0; x < cx0 + 16; x++) {
+      const i = y * W + x;
+      if (Wd.bgrid[i] || Wd.fire[i] || Wd.fl[i] > 0.004) continue;
+      const h = hash(x, y), v = Wd.veg[i], s = Wd.soil[i], T = Wd.tbase[i], snow = Wd.snow[i] > 120;
+      let name = null, pk = null, pal = null;
+      const tree = () => {
+        if (snow || T < 0.3) { name = 'pine'; pk = snow || (season === 3 && T < 0.4) ? 'snowpine' : 'pine'; }
+        else if (T > 0.68) { name = 'jungle'; pk = 'jungle'; }
+        else if (season === 3 && T < 0.48) { name = 'dead'; pk = 'dead'; }
+        else { name = 'broad'; pk = leaf; }
+      };
+      if (s === SO.DIRT || s === SO.HOLY) {
+        if (v >= 165) { if (far ? (h & 3) === 0 : (h & 3) !== 0) tree(); else if (!far && (h & 12) === 0) { name = 'bush'; pk = leaf; } }
+        else if (v >= 110) { if (h % (far ? 17 : 9) === 0) tree(); else if (!far && h % 5 === 0) { name = 'bush'; pk = leaf; } }
+        else if (v >= 60 && !far) {
+          if (h % 6 === 0) { name = 'tuft'; pk = season === 2 || T > 0.62 ? 'tuftDry' : 'tuft'; }
+          else if (season <= 1 && h % 17 === 0) { name = 'flower'; pk = 'f' + (h >>> 8) % PETALS.length; pal = { f: PETALS[(h >>> 8) % PETALS.length], y: [255, 232, 120], g: [72, 150, 60] }; }
+        }
+        if (!name && v > 40 && h % 4 === 0 && x > 0 && x < W - 1 && y > 0 && y < H - 1 && (Wd.fl[i - 1] > 0.01 || Wd.fl[i + 1] > 0.01 || Wd.fl[i - W] > 0.01 || Wd.fl[i + W] > 0.01)) { name = 'reed'; pk = 'reed'; }
+        if (s === SO.HOLY && !name && h % 5 === 0) { name = 'flower'; pk = 'holy'; pal = { f: [255, 236, 140], y: [255, 255, 220], g: [150, 170, 70] }; }
+      } else if (s === SO.ROCK) { if (h % (far ? 41 : 19) === 0) { name = 'rock'; pk = snow ? 'snowrock' : 'rock'; } else if (v > 60 && h % 9 === 0) tree(); }
+      else if (s === SO.SAND) {
+        if (T > 0.55 && Wd.elev[i] > SEA + 0.02 && h % 29 === 0) { name = 'cactus'; pk = 'cactus'; }
+        else if (v > 20 && h % 13 === 0) { name = 'bush'; pk = 'tuftDry'; pal = { L: [196, 182, 104], g: [150, 136, 80], G: [110, 100, 64] }; }
+      } else if (s === SO.ASH) { if (h % 11 === 0) { name = 'dead'; pk = 'dead'; } }
+      else if (s === SO.BASALT) { if (h % 15 === 0) { name = 'rock'; pk = 'basalt'; } }
+      else if (s === SO.BLIGHT) { if (h % 6 === 0) { name = 'thorn'; pk = 'thorn'; } }
+      if (!name) continue;
+      const sp = decoSprite(k, name, pk, pal || DPAL[pk]);
+      const bx = (x - cx0 + 1) * k + (k >> 1) + ((h >>> 4) % 3) - 1, by = (y - cy0 + 3) * k + k - 1 + ((h >>> 6) & 1);
+      const px0 = bx - (sp.w >> 1), py0 = by - sp.h + 1;
+      if (name !== 'tuft' && name !== 'flower' && name !== 'reed') {
+        // soft contact shadow, cast down and to the right
+        const sw = Math.max(2, sp.w - 3);
+        for (let yy = 0; yy < (k >> 1); yy++) for (let xx = 0; xx < sw; xx++) {
+          const tx = px0 + 2 + xx, ty = by + yy;
+          if (tx >= 0 && tx < bw && ty >= 0 && ty < bh && !buf[ty * bw + tx]) buf[ty * bw + tx] = SHADOW;
+        }
+      }
+      for (let yy = 0; yy < sp.h; yy++) {
+        const ty = py0 + yy; if (ty < 0 || ty >= bh) continue;
+        for (let xx = 0; xx < sp.w; xx++) {
+          const tx = px0 + xx; if (tx < 0 || tx >= bw) continue;
+          const val = sp.px[yy * sp.w + xx];
+          if (val) buf[ty * bw + tx] = val;
+        }
+      }
+      n++;
+    }
+    if (!n) { deco[c] = null; return; }
+    let cv2 = deco[c];
+    if (!cv2 || cv2.width !== bw) { cv2 = mk(bw, bh); deco[c] = cv2; }
+    cv2._k = k;
+    const x2 = cv2.getContext('2d'), img = x2.createImageData(bw, bh);
+    new Uint32Array(img.data.buffer).set(buf);
+    x2.putImageData(img, 0, 0);
+  }
+  function drawDeco(ox, oy, z, vx0, vy0, vx1, vy1) {
+    if (z < 2.9 || R.view === 0) return;
+    const k = Math.round(z) % 3 === 0 ? 3 : 4;
+    if (k !== decoK) { decoK = k; decoDirty.fill(1); }
+    const cx0 = Math.max(0, Math.floor(vx0 / 16)), cx1 = Math.min(CW - 1, Math.floor(vx1 / 16));
+    const cy0 = Math.max(0, Math.floor(vy0 / 16)), cy1 = Math.min(AG.CH - 1, Math.floor((vy1 + 3) / 16));
+    let budget = decoWarm ? 1e9 : 28;
+    decoWarm = false;
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const c = cy * CW + cx;
+      if (decoDirty[c] && budget > 0) { buildDeco(c, k); decoDirty[c] = 0; budget--; }
+      const d = deco[c];
+      if (!d) continue;
+      const sc = z / d._k;
+      ctx.drawImage(d, Math.round(ox + (cx * 16 - 1) * z), Math.round(oy + (cy * 16 - 3) * z), Math.round(d.width * sc), Math.round(d.height * sc));
+    }
   }
 
   // ------------------------------------------------------------ overlays
@@ -328,11 +585,13 @@
     }
     cctx.putImageData(cimg, 0, 0); shctx.putImageData(shimg, 0, 0);
   }
-  function updateDots(alpha) {
+  const WILD = SPECIES.map((d) => (d.kind === 'animal' || d.kind === 'ambient' ? 1 : 0));
+  let wildDots = false;
+  function updateDots(alpha, wildOnly) {
     dpix.fill(0);
     const under = R.view === 0;
     for (let i = 0; i < U.hi; i++) {
-      if (!U.alive[i]) continue;
+      if (!U.alive[i] || (wildOnly && !WILD[U.sp[i]])) continue;
       const L = U.layer[i];
       if (under ? L !== 0 : L === 0) continue;
       const x = (U.px[i] + (U.x[i] - U.px[i]) * alpha) | 0, y = (U.py[i] + (U.y[i] - U.py[i]) * alpha) | 0;
@@ -386,13 +645,21 @@
     [BT.WORKSHOP]: ['....KKKK....', '...KKKKKK...', '..KKKKKKKK..', '.KKKKKKKKKK.', 'KKKKKKKKKKKK', '.wwwwwwwwww.', '.w......W.w.', '.w.....W..w.', '.w..wwwwwww.', '.w.wWwwwWww.', '.wwwwwwwwww.'],
   };
   const cache = new Map();
-  function makeSprite(rows, pal, flip) {
-    const w = rows.reduce((m, r) => Math.max(m, r.length), 0), h = rows.length;
+  const OUTLINE = pack(22, 18, 28);
+  function makeSprite(rows, pal, flip, noOutline) {
+    const w0 = rows.reduce((m, r) => Math.max(m, r.length), 0), h0 = rows.length, o = noOutline ? 0 : 1;
+    const w = w0 + 2 * o, h = h0 + 2 * o;
     const c = mk(w, h), x = c.getContext('2d'), img = x.createImageData(w, h), px = new Uint32Array(img.data.buffer);
-    for (let y = 0; y < h; y++) for (let k = 0; k < rows[y].length; k++) {
+    for (let y = 0; y < h0; y++) for (let k = 0; k < rows[y].length; k++) {
       const col = pal[rows[y][k]];
       if (!col) continue;
-      px[y * w + (flip ? w - 1 - k : k)] = pack(AG.clamp(col[0] | 0, 0, 255), AG.clamp(col[1] | 0, 0, 255), AG.clamp(col[2] | 0, 0, 255));
+      px[(y + o) * w + (flip ? w0 - 1 - k : k) + o] = pack(AG.clamp(col[0] | 0, 0, 255), AG.clamp(col[1] | 0, 0, 255), AG.clamp(col[2] | 0, 0, 255));
+    }
+    if (o) for (let y = 0; y < h; y++) for (let k = 0; k < w; k++) {
+      const j = y * w + k;
+      if (px[j]) continue;
+      const n = (k > 0 && px[j - 1] && px[j - 1] !== OUTLINE) || (k < w - 1 && px[j + 1] && px[j + 1] !== OUTLINE) || (y > 0 && px[j - w] && px[j - w] !== OUTLINE) || (y < h - 1 && px[j + w] && px[j + w] !== OUTLINE);
+      if (n) px[j] = OUTLINE;
     }
     x.putImageData(img, 0, 0);
     return c;
@@ -450,6 +717,23 @@
     const k = Civ.kingdoms[b.kd], kc = k ? k.color : [150, 150, 150];
     return getSprite(`b${b.type}|${b.kd}`, () => makeSprite(B_SPR[b.type], Object.assign({}, BASEPAL, { k: kc, K: dark(kc) }), false));
   }
+  // dark silhouette of a sprite, skewed onto the ground as a sun-cast shadow
+  const silCache = new Map();
+  function silhouette(spr) {
+    let c = silCache.get(spr);
+    if (!c) {
+      c = mk(spr.width, spr.height);
+      const x = c.getContext('2d');
+      x.drawImage(spr, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#0a1020'; x.fillRect(0, 0, c.width, c.height);
+      silCache.set(spr, c);
+    }
+    return c;
+  }
+  const unitShadow = (() => {
+    const c = mk(7, 3), x = c.getContext('2d');
+    x.fillStyle = 'rgba(8,12,20,0.38)'; x.fillRect(1, 0, 5, 3); x.fillRect(0, 1, 7, 1);
+    return c;
+  })();
   R.bannerURL = function (k) {
     if (k._banner) return k._banner;
     const c = mk(10, 14), x = c.getContext('2d'), b = k.banner;
@@ -479,7 +763,7 @@
       if (Math.abs(s.x - R.cam.x) > hw + s.r || Math.abs(s.y - R.cam.y) > hh + s.r) continue;
       vis.push(s);
     }
-    const want = Math.min(DROPS, vis.length ? 260 + vis.length * 160 : 0);
+    const want = Math.min(DROPS, vis.length ? Math.round((260 + vis.length * 160) * AG.clamp(z / 6, 0.35, 1)) : 0);
     while (dropN < want) {
       const s = vis[(Math.random() * vis.length) | 0];
       const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * s.r;
@@ -492,7 +776,7 @@
     if (!dropN) return;
     const wx = Sky.wind.x, wy = Sky.wind.y;
     ctx.lineWidth = Math.max(1, z / 6);
-    ctx.strokeStyle = 'rgba(190,215,255,0.55)';
+    ctx.strokeStyle = `rgba(190,215,255,${AG.clamp(0.12 + z * 0.06, 0.2, 0.55).toFixed(2)})`;
     ctx.beginPath();
     for (let k = 0; k < dropN; k++) {
       const snow = dk[k] === 1;
@@ -507,8 +791,8 @@
     for (let k = 0; k < dropN; k++) {
       if (dk[k] === 0) continue;
       ctx.fillStyle = dk[k] === 1 ? 'rgba(255,255,255,0.9)' : 'rgba(190,255,90,0.7)';
-      const s = Math.max(1, z / 5);
-      ctx.fillRect(ox + dx[k] * z, oy + (dy[k] - dh[k] * 0.8) * z, s, dk[k] === 1 ? s : s * 2);
+      const s = Math.max(1, Math.round(z / 8));
+      ctx.fillRect(Math.round(ox + dx[k] * z), Math.round(oy + (dy[k] - dh[k] * 0.8) * z), s, dk[k] === 1 ? s : s * 2);
     }
   }
 
@@ -522,7 +806,9 @@
       if (U.alive[f]) { c.x += (U.x[f] - c.x) * 0.15; c.y += (U.y[f] - c.y) * 0.15; clampCam(); } else R.follow = -1;
     }
     const z = c.z, under = R.view === 0;
+    const tp = performance.now();
     updateTerrain();
+    R.stats.terrainMs = performance.now() - tp;
     if (R.bordersDirty || (R.overlay === 'heat' && frameN % 20 === 0)) { updateBorders(); R.bordersDirty = false; }
     if (frameN % 2 === 0) updateLight();
     if (frameN % 3 === 0 && !under) updateGas();
@@ -538,29 +824,35 @@
 
     // viewport in world cells
     const vx0 = -ox / z - 2, vy0 = -oy / z - 2, vx1 = vx0 + cw / z + 4, vy1 = vy0 + ch / z + 6;
-    const s = z / 4;
+    const s = Math.max(1, Math.round(z / 4)); // integer sprite scale keeps pixels crisp
+    const td = performance.now();
+    if (!under) drawDeco(ox, oy, z, vx0, vy0, vx1, vy1);
+    R.stats.decoMs = performance.now() - td;
     if (!under && z >= 3) drawBuildings(ox, oy, z, s, vx0, vy0, vx1, vy1);
     if (!under && R.showTrade) drawRoutes(ox, oy, z);
     if (!under) drawArmies(ox, oy, z);
-    // level of detail: individual sprites when close, one pixel per creature for crowds
+    // level of detail: people, monsters and vehicles get sprites from zoom 3, wildlife from
+    // zoom 4; anything else (or any crowd past SPRITE_LIMIT) is one pixel per creature
+    wildDots = z < 4;
     let sprites = z >= 3;
     if (sprites) {
       let n = 0;
       for (let i = 0; i < U.hi && sprites; i++) {
-        if (!U.alive[i] || (U.layer[i] === 0) !== under) continue;
+        if (!U.alive[i] || (U.layer[i] === 0) !== under || (wildDots && WILD[U.sp[i]])) continue;
         const x = U.x[i], y = U.y[i];
         if (x >= vx0 && x <= vx1 && y >= vy0 && y <= vy1 && ++n > SPRITE_LIMIT) sprites = false;
       }
     }
     R.stats.sprites = sprites;
+    if (!sprites || wildDots) { updateDots(alpha, sprites); ctx.drawImage(dotsC, ox, oy, W * z, H * z); }
     if (sprites) drawUnits(ox, oy, z, s, alpha, vx0, vy0, vx1, vy1, under);
-    else { R._sky = []; updateDots(alpha); ctx.drawImage(dotsC, ox, oy, W * z, H * z); }
+    else R._sky = [];
     drawProjectiles(ox, oy, z, under);
     drawParticles(ox, oy, z, under, false);
     if (!under) {
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(gasC, ox, oy, W * z, H * z);
-      const cvis = R.view === 2 ? 1 : AG.clamp(1.15 - z / 7, 0.12, 0.85);
+      const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
       const sun = Sky.sunDir();
       ctx.globalAlpha = cvis * Sky.daylight();
       ctx.drawImage(shadC, ox - sun.x * 7 * z, oy + 5 * z, W * z, H * z);
@@ -572,7 +864,7 @@
     ctx.drawImage(glowC, ox, oy, W * z, H * z);
     ctx.globalCompositeOperation = 'source-over';
     if (!under) {
-      const cvis = R.view === 2 ? 1 : AG.clamp(1.15 - z / 7, 0.12, 0.85);
+      const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
       ctx.globalAlpha = cvis;
       ctx.drawImage(cloudC, ox, oy, W * z, H * z);
       ctx.globalAlpha = 1;
@@ -582,6 +874,9 @@
     drawParticles(ox, oy, z, under, true);
     if (!under) { drawDisasters(ox, oy, z); drawLightning(ox, oy, z); godRays(); }
     if (!under && Sky.flash > 0) { ctx.fillStyle = `rgba(230,236,255,${Sky.flash * 0.35})`; ctx.fillRect(0, 0, cw, ch); }
+    const tg = performance.now();
+    grade(under);
+    R.stats.gradeMs = performance.now() - tg;
     drawLabels(ox, oy, z, under);
     drawSelection(ox, oy, z, alpha);
     drawCursor(ox, oy, z);
@@ -589,34 +884,71 @@
     R.stats.ms = performance.now() - t0;
   };
 
+  function grade(under) {
+    if (!under) {
+      const f = Sky.dayFrac();
+      const warm = Math.max(0, 1 - Math.abs(f - 0.28) / 0.09) + Math.max(0, 1 - Math.abs(f - 0.72) / 0.09);
+      if (warm > 0.02) {
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.fillStyle = `rgba(255,128,64,${(0.5 * warm).toFixed(3)})`;
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+    if (vignette) { ctx.imageSmoothingEnabled = true; ctx.drawImage(vignette, 0, 0, cw, ch); ctx.imageSmoothingEnabled = false; }
+  }
   function drawBuildings(ox, oy, z, s, vx0, vy0, vx1, vy1) {
+    const bs = Math.max(1, z / 4), list = [];
     for (const c of Civ.cities) {
       if (!c.alive || c.x < vx0 - 30 || c.x > vx1 + 30 || c.y < vy0 - 30 || c.y > vy1 + 30) continue;
       for (const bid of c.buildings) {
         const b = Civ.buildings[bid];
         if (b.x + b.w < vx0 || b.x > vx1 || b.y + b.h < vy0 || b.y > vy1 + 4) continue;
-        const spr = buildingSprite(b);
-        const sw = spr.width, sh = spr.height, dx = ox + b.x * z, by = oy + (b.y + b.h) * z;
-        if (b.prog >= 1) ctx.drawImage(spr, dx, by - sh * s, sw * s, sh * s);
-        else {
-          const vis = Math.max(1, Math.ceil(sh * b.prog));
-          ctx.globalAlpha = 0.85;
-          ctx.drawImage(spr, 0, sh - vis, sw, vis, dx, by - vis * s, sw * s, vis * s);
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = 'rgba(150,110,60,0.9)'; ctx.lineWidth = Math.max(1, s * 0.6);
-          ctx.strokeRect(dx + s, by - sh * s, sw * s - 2 * s, sh * s);
-        }
-        if (b.type === BT.WINDMILL && b.prog >= 1) {
-          const hx = dx + 4 * s, hy = by - 11 * s, a0 = tm * 1.4 + b.id, L = 6 * s;
-          ctx.strokeStyle = '#5d4037'; ctx.lineWidth = Math.max(1, s);
-          ctx.beginPath();
-          for (let k = 0; k < 4; k++) { const a = a0 + (k * Math.PI) / 2; ctx.moveTo(hx, hy); ctx.lineTo(hx + Math.cos(a) * L, hy + Math.sin(a) * L); }
-          ctx.stroke();
-        }
-        if (b.hp < b.mhp * 0.98 && z >= 4) {
-          ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(dx, by + 1, b.w * z, 2);
-          ctx.fillStyle = '#ef5350'; ctx.fillRect(dx, by + 1, (b.w * z * b.hp) / b.mhp, 2);
-        }
+        list.push(b);
+      }
+    }
+    list.sort((a, b) => a.y + a.h - (b.y + b.h));
+    const day = Sky.daylight();
+    if (day > 0.08) {
+      const len = 1.25 - Math.max(0, Sky.sunHeight()) * 0.75, kx = -LX * 0.75 * len, ky = 0.42 * len;
+      ctx.globalAlpha = 0.32 * day;
+      for (const b of list) {
+        if (b.prog < 1 || b.type === BT.FARM || b.type === BT.DOCK) continue;
+        const spr = buildingSprite(b), sw = spr.width * bs, sh = spr.height * bs;
+        const sx = ox + b.cx * z - sw / 2, by = oy + (b.y + b.h) * z + bs;
+        ctx.setTransform(1, 0, -kx, -ky, sx + sh * kx, by + sh * ky);
+        ctx.drawImage(silhouette(spr), 0, 0, sw, sh);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+    }
+    for (const b of list) {
+      const spr = buildingSprite(b);
+      const sw = spr.width, sh = spr.height;
+      const dx = Math.round(ox + b.cx * z - (sw * bs) / 2), by = Math.round(oy + (b.y + b.h) * z + bs);
+      if (b.prog >= 1) ctx.drawImage(spr, dx, by - sh * bs, sw * bs, sh * bs);
+      else {
+        const vis = Math.max(1, Math.ceil(sh * b.prog));
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(spr, 0, sh - vis, sw, vis, dx, by - vis * bs, sw * bs, vis * bs);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(176,128,70,0.95)'; ctx.lineWidth = Math.max(1, bs * 0.6);
+        ctx.strokeRect(dx + 2 * bs, by - sh * bs, sw * bs - 4 * bs, sh * bs);
+        ctx.beginPath(); ctx.moveTo(dx + 2 * bs, by - sh * bs); ctx.lineTo(dx + sw * bs - 2 * bs, by); ctx.stroke();
+      }
+      if (b.type === BT.WINDMILL && b.prog >= 1) {
+        const hx = dx + 5 * bs, hy = by - 12 * bs, a0 = tm * 1.4 + b.id, L = 6 * bs;
+        ctx.strokeStyle = '#4e342e'; ctx.lineWidth = Math.max(1.5, bs * 1.2);
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) { const a = a0 + (k * Math.PI) / 2; ctx.moveTo(hx, hy); ctx.lineTo(hx + Math.cos(a) * L, hy + Math.sin(a) * L); }
+        ctx.stroke();
+        ctx.fillStyle = '#efe6d2';
+        for (let k = 0; k < 4; k++) { const a = a0 + (k * Math.PI) / 2; ctx.fillRect(hx + Math.cos(a) * L * 0.6 - bs, hy + Math.sin(a) * L * 0.6 - bs, 2 * bs, 2 * bs); }
+      }
+      if (b.hp < b.mhp * 0.98 && z >= 4) {
+        const w = b.w * z;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(ox + b.x * z, by + 1, w, 3);
+        ctx.fillStyle = '#ef5350'; ctx.fillRect(ox + b.x * z, by + 1, (w * b.hp) / b.mhp, 3);
       }
     }
   }
@@ -658,6 +990,7 @@
       if (under ? L !== 0 : L === 0) continue;
       const x = U.px[i] + (U.x[i] - U.px[i]) * alpha, y = U.py[i] + (U.y[i] - U.py[i]) * alpha;
       if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
+      if (wildDots && WILD[U.sp[i]]) continue;
       if (L === 2) { sky.push(i); continue; }
       drawUnit(i, x, y, ox, oy, z, s, 0);
     }
@@ -668,7 +1001,7 @@
     const frame = moving ? (U.anim[i] | 0) & 1 : 0;
     const spr = unitSprite(i, frame);
     const sw = spr.width * s, sh = spr.height * s;
-    const sx = ox + x * z - sw / 2, sy = oy + y * z - sh - lift * z;
+    const sx = Math.round(ox + x * z - sw / 2), sy = Math.round(oy + y * z - sh - lift * z);
     const f = U.flags[i];
     if (f & (FL.BLESSED | FL.CURSED | FL.POSSESSED) || U.sp[i] === SP.HERALD) {
       ctx.globalCompositeOperation = 'lighter';
@@ -676,6 +1009,7 @@
       ctx.beginPath(); ctx.arc(ox + x * z, oy + y * z - sh / 2 - lift * z, Math.max(3, sh * 0.7), 0, Math.PI * 2); ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
     }
+    if (!lift && z >= 4) ctx.drawImage(unitShadow, ox + x * z - 3.5 * s, oy + y * z - 2 * s, 7 * s, 3 * s);
     ctx.drawImage(spr, sx, sy, sw, sh);
     if (z >= 6) {
       if (U.carry[i] && SPECIES[U.sp[i]].kind === 'civ') { const c = CARGO[U.carry[i]]; ctx.fillStyle = AG.css(c); ctx.fillRect(sx + sw - s, sy + sh * 0.45, s * 1.5, s * 1.5); }
@@ -685,7 +1019,7 @@
   }
   function drawSkyUnitsOver(ox, oy, z, alpha) {
     if (z < 3) return;
-    const s = z / 4;
+    const s = Math.max(1, Math.round(z / 4));
     for (const i of R._sky || []) {
       if (!U.alive[i]) continue;
       const x = U.px[i] + (U.x[i] - U.px[i]) * alpha, y = U.py[i] + (U.y[i] - U.py[i]) * alpha;
@@ -784,22 +1118,30 @@
   }
   function drawLabels(ox, oy, z, under) {
     if (under) return;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.lineJoin = 'round';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const big = z >= 6;
+    ctx.font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`;
     for (const c of Civ.cities) {
       if (!c.alive) continue;
       const k = Civ.kingdoms[c.kd], cap = k.capital === c.id;
       if (z < 2 && !cap) continue;
-      const sx = ox + c.x * z, sy = oy + (c.y - 2.5) * z - (z >= 3 ? 4 * z / 4 * 1.2 : 2);
-      if (sx < -80 || sx > cw + 80 || sy < -20 || sy > ch + 20) continue;
-      const label = z < 2 ? k.name : `${cap ? '♛ ' : ''}${c.name} · ${c.members.length}`;
-      ctx.font = `${z < 2 ? 600 : 600} ${z >= 6 ? 12 : 11}px system-ui, sans-serif`;
-      ctx.strokeStyle = 'rgba(8,8,14,0.85)'; ctx.lineWidth = 3;
-      ctx.strokeText(label, sx, sy);
-      ctx.fillStyle = cap ? '#fff4d6' : '#f2f2f2';
-      ctx.fillText(label, sx, sy);
-      ctx.fillStyle = k.css; ctx.fillRect(sx - ctx.measureText(label).width / 2 - 8, sy - 10, 5, 8);
-      if (c.captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(sx - 15, sy + 2, (30 * c.captureT) / 100, 3); }
+      const sx = Math.round(ox + c.x * z), sy = Math.round(oy + (c.y - 2.2) * z - Math.max(14, 16 * Math.max(1, z / 4)));
+      if (sx < -120 || sx > cw + 120 || sy < -20 || sy > ch + 20) continue;
+      const name = z < 2 ? k.name : c.name, pop = String(c.members.length);
+      const nw = ctx.measureText(name).width, pw = ctx.measureText(pop).width;
+      const ph = big ? 22 : 20, crest = 7, pad = 7, w = crest + pad + nw + 8 + pw + pad;
+      const x0 = sx - w / 2, y0 = sy - ph / 2;
+      ctx.fillStyle = 'rgba(12,16,27,0.82)';
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, ph, 5); else ctx.rect(x0, y0, w, ph); ctx.fill();
+      ctx.strokeStyle = cap ? 'rgba(232,182,76,0.85)' : 'rgba(222,202,150,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = k.css; ctx.fillRect(x0 + 5, y0 + 4, crest - 2, ph - 8);
+      ctx.fillStyle = cap ? '#fff1cf' : '#efe8d6';
+      ctx.fillText(name, x0 + crest + pad, sy + 1);
+      ctx.fillStyle = 'rgba(232,182,76,0.95)';
+      ctx.fillText(pop, x0 + crest + pad + nw + 8, sy + 1);
+      ctx.beginPath(); ctx.moveTo(sx - 4, y0 + ph); ctx.lineTo(sx + 4, y0 + ph); ctx.lineTo(sx, y0 + ph + 5); ctx.closePath();
+      ctx.fillStyle = 'rgba(12,16,27,0.82)'; ctx.fill();
+      if (c.captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(x0 + 4, y0 + ph + 2, ((w - 8) * c.captureT) / 100, 3); }
     }
   }
   function drawSelection(ox, oy, z, alpha) {

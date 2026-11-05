@@ -7,7 +7,21 @@
   const AG = (window.AG = window.AG || {});
 
   // ------------------------------------------------------------ world & time
-  AG.W = 384; AG.H = 256; AG.N = AG.W * AG.H;
+  // The world takes the shape of the screen: pick the largest integer zoom at which a world of
+  // ~140k-280k cells exactly covers the viewport, so the map always fills it edge to edge.
+  (function sizeWorld() {
+    const vw = Math.max(360, window.innerWidth || 1280), vh = Math.max(360, window.innerHeight || 800);
+    let best = null, bestErr = Infinity;
+    for (const z of [5, 4, 3, 2]) {
+      const w = Math.min(1024, Math.ceil(vw / z / 16) * 16), h = Math.min(1024, Math.ceil(vh / z / 16) * 16), n = w * h;
+      const err = n < 140000 ? 140000 - n : n > 280000 ? n - 280000 : 0;
+      if (err < bestErr) { bestErr = err; best = { z, w, h }; }
+      if (!err) break;
+    }
+    AG.W = best.w; AG.H = best.h; AG.BASE_ZOOM = best.z;
+  })();
+  AG.N = AG.W * AG.H;
+  AG.SCALE = AG.N / 98304; // relative to the original 384x256 world, for populations and feature counts
   AG.CHUNK = 16; AG.CW = AG.W / 16; AG.CH = AG.H / 16; AG.NC = AG.CW * AG.CH;
   AG.TPS = 20;                        // simulation ticks per second at 1x
   AG.SEASON_TICKS = 240;

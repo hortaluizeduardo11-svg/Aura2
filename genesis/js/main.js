@@ -17,7 +17,7 @@
 
   AG.newWorld = function (seed) {
     seed = seed >>> 0 || ((Math.random() * 1e9) | 0) + 1;
-    AG.seed = seed; AG.tick = 0;
+    AG.seed = seed; AG.tick = 0; AG.creating = true;
     AG.seedRnd(Math.imul(seed, 2654435761) >>> 0);
     AG.DISEASES.splice(0, AG.DISEASES.length, ...AG.DISEASES.filter((d) => d.builtin));
     AG.Chronicle.reset(); AG.Ent.reset(); AG.Civ.reset(); AG.God.reset(); AG.FX.reset(); AG.Proj.reset();
@@ -28,6 +28,7 @@
     AG.Civ.seedWorld();
     AG.Render.reset(); AG.UI.reset();
     AG.Chronicle.add(`A new world stirs (seed ${seed})`, 'info');
+    AG.creating = false;
   };
 
   // Spawn a large mixed population to exercise the engine at scale.

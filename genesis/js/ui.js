@@ -49,7 +49,12 @@
     window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => keys.clear());
     window.addEventListener('resize', () => R.resize());
-    if (window.innerWidth < 760) setPanel(false);
+    setPanel(false); // the map gets the whole screen until the chronicle is asked for
+    $('#ticker').addEventListener('click', (e) => {
+      const li = e.target.closest('li'); if (!li) return;
+      setPanel(true); setTab('chronicle');
+      if (li.dataset.x !== undefined) { R.follow = -1; R.centerOn(+li.dataset.x, +li.dataset.y, Math.max(R.cam.z, 4)); }
+    });
     setTab('chronicle');
   };
   UI.reset = function () {
@@ -58,15 +63,41 @@
     if (UI.tab === 'inspect' || UI.tab === 'world') setTab(UI.tab);
   };
 
+  // 9x9 pixel glyphs, one per tool family, tinted per tool and outlined like the world's sprites
+  const GLYPHS = {
+    look: ['.........', '...xxx...', '.xx...xx.', 'x..xxx..x', 'x..x.x..x', 'x..xxx..x', '.xx...xx.', '...xxx...', '.........'],
+    land: ['.........', '....x....', '...xxx...', '..xx.xx..', '..x...x.x', '.x....xxx', 'xx.....xx', 'x.......x', 'xxxxxxxxx'],
+    elem: ['....x....', '....x....', '...xxx...', '..xx.xx..', '.xx...xx.', '.x.....x.', '.x.....x.', '..xx.xx..', '...xxx...'],
+    sky: ['...xxx...', '.xxx.xxx.', 'x.......x', 'xxxxxxxxx', '....x....', '...x.....', '..xxx....', '....x....', '...x.....'],
+    life: ['.........', '.xx...xx.', 'x..x.x..x', 'x...x...x', '.xx.x.xx.', '....x....', '....x....', '..xxxxx..', '.........'],
+    divine: ['....x....', '....x....', '...xxx...', 'xxxxxxxxx', '.xxxxxxx.', '..xxxxx..', '..xx.xx..', '.xx...xx.', '.x.....x.'],
+    ruin: ['....x....', '...xx....', '...xxx...', '..xx.xx..', '..x..xx..', '.xx...xx.', '.x..x..x.', '.x.xxx.x.', '..xxxxx..'],
+    deep: ['..xxxxx..', '.x..x..x.', 'x...x...x', '....x....', '....x....', '....x....', '....x....', '....x....', '....x....'],
+  };
+  const glyphCache = new Map();
+  function glyph(cat, color) {
+    const key = cat + color;
+    if (glyphCache.has(key)) return glyphCache.get(key);
+    const c = document.createElement('canvas'); c.width = 11; c.height = 11;
+    const x = c.getContext('2d'), rows = GLYPHS[cat] || GLYPHS.look;
+    x.fillStyle = 'rgba(10,12,20,0.9)';
+    for (let y = 0; y < 9; y++) for (let k = 0; k < 9; k++) if (rows[y][k] === 'x') x.fillRect(k, y, 3, 3);
+    x.fillStyle = color;
+    for (let y = 0; y < 9; y++) for (let k = 0; k < 9; k++) if (rows[y][k] === 'x') x.fillRect(k + 1, y + 1, 1, 1);
+    const url = c.toDataURL();
+    glyphCache.set(key, url);
+    return url;
+  }
+  const CAT_TINT = { look: '#f1ead8', land: '#c8a27a', elem: '#6fb6ff', sky: '#c9d7ff', life: '#8fd16b', divine: '#ffd56b', ruin: '#ff7a4d', deep: '#d9a066' };
   function buildCats() {
-    $('#cats').innerHTML = God.CATS.map((c) => `<button type="button" class="cat" role="tab" data-cat="${c.id}">${c.name}</button>`).join('');
+    $('#cats').innerHTML = God.CATS.map((c) => `<button type="button" class="cat" role="tab" data-cat="${c.id}"><img src="${glyph(c.id, CAT_TINT[c.id])}" alt=""><span>${c.name}</span></button>`).join('');
     $('#cats').addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) showCat(b.dataset.cat); });
   }
   function showCat(id) {
     UI.cat = id;
     for (const b of document.querySelectorAll('.cat')) { b.classList.toggle('on', b.dataset.cat === id); b.setAttribute('aria-selected', b.dataset.cat === id); }
     $('#toolgrid').innerHTML = God.TOOLS.filter((t) => t.cat === id).map((t) =>
-      `<button type="button" class="tool${t.id === God.tool ? ' on' : ''}" data-tool="${t.id}" title="${esc(t.desc)}"><span class="sw" style="background:${t.color}"></span><span>${esc(t.name)}</span></button>`).join('');
+      `<button type="button" class="tool${t.id === God.tool ? ' on' : ''}" data-tool="${t.id}" title="${esc(t.desc)}"><img src="${glyph(t.cat, t.color)}" alt=""><span>${esc(t.name)}</span></button>`).join('');
   }
   const SIZED = new Set(['meteor', 'quake', 'volcano', 'rain', 'thunder', 'blizzard', 'heat', 'acidrain']);
   function selectTool(id) {
@@ -103,10 +134,21 @@
     el.textContent = msg; el.classList.add('show');
     clearTimeout(UI._tt); UI._tt = setTimeout(() => el.classList.remove('show'), 3400);
   };
+  // Recent history floats over the map for a few seconds; tap an entry to open the chronicle there.
   UI.onChronicle = function (e) {
-    if (AG.tick < 5) return;
-    const big = e.kind === 'war' || e.kind === 'fall' || e.kind === 'faith' || e.kind === 'peace';
-    if (big && performance.now() - lastToast > 5000) { lastToast = performance.now(); UI.toast(e.text); }
+    if (AG.creating || e.kind === 'info') return;
+    if (!$('#panel').hidden && UI.tab === 'chronicle') return;
+    const now = performance.now();
+    if (e.kind === 'culture' && now - lastToast < 2500) return;
+    lastToast = now;
+    const list = $('#ticker');
+    const li = document.createElement('li');
+    li.className = 'glass k-' + e.kind;
+    if (e.x >= 0) { li.dataset.x = e.x | 0; li.dataset.y = e.y | 0; }
+    li.innerHTML = `<i></i><span>${esc(e.text)}</span>`;
+    li.addEventListener('animationend', () => li.remove());
+    list.appendChild(li);
+    while (list.children.length > 3) list.firstChild.remove();
   };
 
   // ============================================================ picking
@@ -179,8 +221,9 @@
         const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
         R.pan(cx - pinch.cx, cy - pinch.cy); pinch.cx = cx; pinch.cy = cy;
         const target = pinch.z * (d / pinch.d);
-        let best = R.ZOOMS[0];
-        for (const z of R.ZOOMS) if (Math.abs(Math.log(z / target)) < Math.abs(Math.log(best / target))) best = z;
+        const list = R.zoomList();
+        let best = list[0];
+        for (const z of list) if (Math.abs(Math.log(z / target)) < Math.abs(Math.log(best / target))) best = z;
         if (best !== R.cam.z) zoomTo(cx, cy, best);
         return;
       }

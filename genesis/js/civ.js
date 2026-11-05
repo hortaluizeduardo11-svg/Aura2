@@ -1143,24 +1143,29 @@
   // ------------------------------------------------------------ ecology & seeding
   function ecology() {
     const cnt = Ent.count;
-    if (cnt[SP.BIRD] < 220) {
+    const S = AG.SCALE;
+    if (cnt[SP.BIRD] < 220 * S) {
       const x = 20 + rnd() * (W - 40), y = 20 + rnd() * (H - 40);
       for (let j = 0; j < 10; j++) Ent.spawn(SP.BIRD, x + rnd() * 4, y + rnd() * 4);
     }
     const land = () => { for (let t = 0; t < 30; t++) { const x = 8 + ri(W - 16), y = 8 + ri(H - 16), i = y * W + x; if (Wd.isLand(i) && Wd.veg[i] > 100 && Wd.owner[i] < 0) return [x + 0.5, y + 0.5]; } return null; };
-    if (cnt[SP.DEER] < 60) { const p = land(); if (p) for (let j = 0; j < 6; j++) Ent.spawn(SP.DEER, p[0] + rnd() * 3, p[1] + rnd() * 3); }
-    if (cnt[SP.WOLF] < 12) { const p = land(); if (p) for (let j = 0; j < 3; j++) Ent.spawn(SP.WOLF, p[0] + rnd() * 3, p[1] + rnd() * 3); }
-    if (cnt[SP.CRAWLER] < 40) {
+    if (cnt[SP.DEER] < 60 * S) { const p = land(); if (p) for (let j = 0; j < 6; j++) Ent.spawn(SP.DEER, p[0] + rnd() * 3, p[1] + rnd() * 3); }
+    if (cnt[SP.WOLF] < 12 * S) { const p = land(); if (p) for (let j = 0; j < 3; j++) Ent.spawn(SP.WOLF, p[0] + rnd() * 3, p[1] + rnd() * 3); }
+    if (cnt[SP.CRAWLER] < 40 * S) {
       for (let t = 0; t < 30; t++) { const x = 4 + ri(W - 8), y = 4 + ri(H - 8), i = y * W + x; if (Wd.ug[i] === UG.CAVE && !Wd.ugF[i]) { Ent.spawn(SP.CRAWLER, x + 0.5, y + 0.5, { layer: 0 }); break; } }
     }
   }
   Civ.seedWorld = function () {
-    for (const race of [SP.KIN, SP.SYLVAN, SP.STONE, SP.ASHEN]) {
+    // bigger worlds start with more realms (a second Kin, Sylvan... realm per ~55k extra cells)
+    const races = [SP.KIN, SP.SYLVAN, SP.STONE, SP.ASHEN];
+    for (let k = 0, extra = Math.max(0, Math.round((N - 98304) / 55000)); k < Math.min(extra, 4); k++) races.push(races[k]);
+    const spacing = 70 * Math.min(1.25, Math.sqrt(AG.SCALE * 4 / races.length));
+    for (const race of races) {
       let best = null, bs = -1e9;
       for (let t = 0; t < 500; t++) {
         const x = 14 + ri(W - 28), y = 14 + ri(H - 28);
         if (!keepFits(x, y)) continue;
-        if (Civ.cities.some((c) => dist2(c.x, c.y, x, y) < 70 * 70)) continue;
+        if (Civ.cities.some((c) => dist2(c.x, c.y, x, y) < spacing * spacing)) continue;
         const s = siteScore(race, x, y);
         if (s > bs) { bs = s; best = { x, y }; }
       }
@@ -1175,10 +1180,11 @@
         for (let k = 0; k < g && made < n; k++) if (Ent.spawn(sp, x + rnd() * 3, y + rnd() * 3, layer === undefined ? undefined : { layer }) >= 0) made++;
       }
     };
-    spawnOn(SP.DEER, 380, (i) => Wd.isLand(i) && Wd.veg[i] > 90);
-    spawnOn(SP.WOLF, 50, (i) => Wd.isLand(i) && Wd.veg[i] > 150);
-    spawnOn(SP.BIRD, 260, () => true);
-    spawnOn(SP.CRAWLER, 70, (i) => Wd.ug[i] === UG.CAVE && !Wd.ugF[i], 0);
+    const S = AG.SCALE;
+    spawnOn(SP.DEER, Math.round(380 * S), (i) => Wd.isLand(i) && Wd.veg[i] > 90);
+    spawnOn(SP.WOLF, Math.round(50 * S), (i) => Wd.isLand(i) && Wd.veg[i] > 150);
+    spawnOn(SP.BIRD, Math.round(260 * S), () => true);
+    spawnOn(SP.CRAWLER, Math.round(70 * S), (i) => Wd.ug[i] === UG.CAVE && !Wd.ugF[i], 0);
     Civ.recomputeBorders();
   };
 
