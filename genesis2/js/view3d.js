@@ -28,7 +28,7 @@
   const target = THREE ? new THREE.Vector3() : null;
 
   function hash(x, y) { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return (h ^ (h >>> 16)) >>> 0; }
-  const colTop = (i) => { const e = Wd.elev[i]; return e >= SEA ? Math.round((e - SEA) * HS * 2) / 2 + 0.25 : (e - SEA) * 16; };
+  const colTop = (i) => { const e = Wd.elev[i]; return e >= SEA ? Math.round((e - SEA) * HS * 2) / 2 + 0.25 : Math.round((e - SEA) * 16 * 2) / 2 - 0.1; }; // (the sea floor in half steps too, so flat stretches read as one)
   const rgbOf = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
   const hexOf = (c) => ((c[0] & 255) << 16) | ((c[1] & 255) << 8) | (c[2] & 255);
   const shade = (hex, k) => hexOf(rgbOf(hex).map((v) => Math.max(0, Math.min(255, v * k))));
@@ -101,6 +101,151 @@
     g.fillStyle = gr; g.fillRect(0, 0, 16, 16);
     return new THREE.CanvasTexture(c);
   }
+  // ------------------------------------------------------------ the sea and the horizon
+  // One continuous sea surface for the whole world: gentle waves, sun glints, shallows you can see
+  // into (turquoise over sand, deepening to blue), and foam where it meets the shore. Its depth
+  // comes from a small texture of the sea floor, refreshed now and then.
+  const SEA_Y = 0.12;
+  let sea = null, seaTex = null, seaData = null, seaClock = 99, far = null, farClock = 99;
+  function makeSea() {
+    seaData = new Uint8Array(W * H * 4);
+    seaTex = new THREE.DataTexture(seaData, W, H, THREE.RGBAFormat);
+    seaTex.magFilter = seaTex.minFilter = THREE.LinearFilter; seaTex.generateMipmaps = false;
+    const geo = new THREE.PlaneGeometry(W, H, Math.max(1, W >> 2), Math.max(1, H >> 2));
+    geo.rotateX(-Math.PI / 2); geo.translate(W / 2, SEA_Y, H / 2);
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, fog: true,
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+        uTime: { value: 0 }, uDepth: { value: null }, uSize: { value: new THREE.Vector2(W, H) },
+        uSun: { value: new THREE.Vector3(0.3, 0.8, 0.4) }, uLight: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
+      }]),
+      vertexShader: `
+        uniform float uTime; varying vec2 vXZ; varying vec3 vView;
+        #include <fog_pars_vertex>
+        void main() {
+          vec3 p = position;
+          p.y += (sin(p.x * 0.55 + uTime * 1.3) + sin(p.z * 0.45 - uTime * 1.05) + sin((p.x + p.z) * 0.9 + uTime * 1.9) * 0.5) * 0.035;
+          vXZ = p.xz;
+          vec4 wp = modelMatrix * vec4(p, 1.0);
+          vView = cameraPosition - wp.xyz;
+          vec4 mvPosition = viewMatrix * wp;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform float uTime; uniform sampler2D uDepth; uniform vec2 uSize; uniform vec3 uSun; uniform float uLight; uniform vec3 uTint;
+        varying vec2 vXZ; varying vec3 vView;
+        #include <fog_pars_fragment>
+        void main() {
+          vec4 d = texture2D(uDepth, vXZ / uSize);
+          float depth = d.r, shore = d.g;
+          if (depth <= 0.002 && shore <= 0.002) discard;            // dry land: the surface is not there
+          // small moving ripples give the surface a normal to catch the sun
+          vec2 q = vXZ * 1.7;
+          float dx = cos(q.x + uTime * 1.6) * 0.5 + cos((q.x + q.y) * 1.3 + uTime * 2.1) * 0.35 + cos(q.x * 2.7 - uTime * 2.6) * 0.15;
+          float dz = cos(q.y * 0.9 - uTime * 1.3) * 0.5 + cos((q.x + q.y) * 1.3 + uTime * 2.1) * 0.35 + cos(q.y * 2.3 + uTime * 2.2) * 0.15;
+          vec3 n = normalize(vec3(-dx * 0.06, 1.0, -dz * 0.06));
+          vec3 v = normalize(vView);
+          float fres = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+          vec3 shallow = vec3(0.17, 0.68, 0.74), mid = vec3(0.07, 0.42, 0.64), deep = vec3(0.03, 0.15, 0.36);
+          float dd = smoothstep(0.0, 1.0, depth);
+          vec3 col = mix(shallow, mid, smoothstep(0.0, 0.35, dd));
+          col = mix(col, deep, smoothstep(0.3, 1.0, dd));
+          col = mix(col, vec3(0.62, 0.80, 0.92), fres * 0.45);      // the sky reflected at grazing angles
+          float spec = pow(max(dot(reflect(-normalize(uSun), n), v), 0.0), 260.0);
+          col *= uLight * uTint;
+          // fine glints that twinkle, not broad white patches
+          float tw = 0.5 + 0.5 * sin(vXZ.x * 3.1 + vXZ.y * 2.3 + uTime * 3.0);
+          col += vec3(1.0, 0.96, 0.86) * spec * 0.55 * tw * uLight;
+          // foam: a bright, breathing line where the sea meets the shore
+          float wob = 0.55 + 0.45 * sin(uTime * 1.6 + (vXZ.x + vXZ.y) * 0.8 + sin(vXZ.x * 0.35) * 2.0);
+          float foam = smoothstep(0.25, 0.85, shore) * wob;
+          col = mix(col, vec3(0.97, 0.99, 1.0) * max(uLight, 0.35), foam * 0.85);
+          float alpha = mix(0.55, 0.95, smoothstep(0.0, 0.45, dd));  // shallows let the sand show through
+          alpha = max(alpha, foam * 0.9);
+          gl_FragColor = vec4(col, alpha);
+          #include <fog_fragment>
+        }`,
+    });
+    mat.uniforms.uDepth.value = seaTex;
+    sea = new THREE.Mesh(geo, mat); sea.frustumCulled = false; sea.renderOrder = 2;
+    scene.add(sea);
+    // open ocean all around the map, so the world never ends in empty sky
+    const om = new THREE.MeshLambertMaterial({ color: 0x0d2f5c });
+    for (const [x, z, w, d] of [[-2 * W, -2 * H, 5 * W, 2 * H], [-2 * W, H, 5 * W, 2 * H], [-2 * W, 0, 2 * W, H], [W, 0, 2 * W, H]]) {
+      const g = new THREE.PlaneGeometry(w, d); g.rotateX(-Math.PI / 2); g.translate(x + w / 2, SEA_Y - 0.02, z + d / 2);
+      const m = new THREE.Mesh(g, om); m.frustumCulled = false; scene.add(m);
+    }
+  }
+  // depth of the sea over each cell (R) and how close the shore is (G)
+  function refreshSea() {
+    const d = seaData, top = SEA_Y + 0.05;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x, o = i * 4, g = colTop(i), wet = Wd.elev[i] < SEA && Wd.fl[i] > 0.004 && !Wd.frozen[i];
+      const depth = wet ? Math.max(0, top - g) : 0;
+      d[o] = Math.min(255, (depth / 3.2) * 255) | 0;
+      // shore: shallow sea next to land
+      let near = 0;
+      if (wet && depth < 0.9) {
+        for (let k = 0; k < 4 && !near; k++) { const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0); if (nx >= 0 && ny >= 0 && nx < W && ny < H && Wd.elev[ny * W + nx] >= SEA) near = 1; }
+      }
+      d[o + 1] = near ? 255 : 0; d[o + 2] = 0; d[o + 3] = 255;
+    }
+    seaTex.needsUpdate = true;
+  }
+  // The world beyond the detailed window: a faceted, low-detail landscape (every 4th cell) so the
+  // land runs on to the horizon instead of ending at a cliff. Inside the window it sinks out of sight.
+  const FS = 4;
+  function makeFarLand() {
+    const nx = Math.ceil(W / FS) + 1, nz = Math.ceil(H / FS) + 1, n = nx * nz;
+    const pos = new Float32Array(n * 3), colr = new Float32Array(n * 3), idx = [];
+    for (let z = 0; z < nz; z++) for (let x = 0; x < nx; x++) { const k = z * nx + x; pos[k * 3] = Math.min(W, x * FS); pos[k * 3 + 2] = Math.min(H, z * FS); }
+    for (let z = 0; z < nz - 1; z++) for (let x = 0; x < nx - 1; x++) { const a = z * nx + x, b = a + 1, c = a + nx, e = c + 1; idx.push(a, c, b, b, c, e); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(colr, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setIndex(idx);
+    far = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); // lit from computed normals (set in refreshFar)
+    far.frustumCulled = false; far.receiveShadow = false;
+    far.userData = { nx, nz };
+    scene.add(far);
+  }
+  function refreshFar(colours) {
+    const { nx, nz } = far.userData, pos = far.geometry.attributes.position.array, cl = far.geometry.attributes.color.array;
+    const x0 = wx0 + FS, x1 = wx0 + ws - FS, z0 = wy0 + FS, z1 = wy0 + ws - FS; // sink only well inside the window (no trench at its edge)
+    for (let z = 0; z < nz; z++) for (let x = 0; x < nx; x++) {
+      const k = z * nx + x, cx = Math.min(W - 1, x * FS), cz = Math.min(H - 1, z * FS), i = cz * W + cx;
+      const inside = cx > x0 && cx < x1 && cz > z0 && cz < z1;
+      // the highest ground around the vertex, so distant hills are not shaved off (and the detailed
+      // window's edge columns stay tucked under the far landscape)
+      let hmax = -1e9, land = false;
+      for (let dz = -2; dz <= 2; dz += 2) for (let dx = -2; dx <= 2; dx += 2) {
+        const xx = cx + dx, zz = cz + dz; if (xx < 0 || zz < 0 || xx >= W || zz >= H) continue;
+        const j = zz * W + xx; if (Wd.elev[j] >= SEA) { land = true; hmax = Math.max(hmax, colTop(j)); }
+      }
+      pos[k * 3 + 1] = inside ? BOTTOM - 2 : land ? hmax - 0.05 : Math.max(BOTTOM, colTop(i));
+      if (colours) {
+        if (land) { const c = R.flatColor(i); cl[k * 3] = (c & 255) / 255; cl[k * 3 + 1] = ((c >>> 8) & 255) / 255; cl[k * 3 + 2] = ((c >>> 16) & 255) / 255; }
+        else { const dk = AG.clamp(-colTop(i) / 3, 0, 1); cl[k * 3] = (168 - dk * 90) / 255; cl[k * 3 + 1] = (152 - dk * 70) / 255; cl[k * 3 + 2] = (108 - dk * 30) / 255; } // sea floor: sand to deep
+      }
+    }
+    far.geometry.attributes.position.needsUpdate = true;
+    if (colours) far.geometry.attributes.color.needsUpdate = true;
+    far.geometry.computeVertexNormals(); // (without normals the land lights as black)
+    far.geometry.computeBoundingSphere();
+  }
+  V.parts = () => ({ sea, far, scene }); // (for debugging and screenshots)
+  function updateSea(t, dt) {
+    if (!sea) return;
+    const u = sea.material.uniforms, sd = Sky.sunDir(), day = Sky.daylight();
+    u.uTime.value = t;
+    u.uSun.value.set(sd.x, Math.max(0.25, Sky.sunHeight()), sd.y);
+    u.uLight.value = 0.25 + 0.75 * day;
+    u.uTint.value.copy(sun.color).lerp(new THREE.Color(1, 1, 1), 0.6);
+    if ((seaClock += dt) > 2) { refreshSea(); seaClock = 0; }
+    if ((farClock += dt) > 5) { refreshFar(true); farClock = 0; }
+  }
+
   V.init = function (host, overlay) {
     if (!THREE) return false;
     try {
@@ -138,9 +283,8 @@
     const s = 16, data = new Uint8Array(s * s * 4), r = AG.mulberry32(11);
     for (let i = 0; i < s * s; i++) {
       const x = i % s, y = (i / s) | 0;
-      let v = 226 + r() * 29;
-      if (r() < 0.07) v = 196;
-      if (x === 0 || y === 0) v *= 0.9; // faint seams between cells
+      let v = 238 + r() * 17;           // a faint grain, no seams: neighbouring cells read as one surface
+      if (r() < 0.04) v = 222;
       data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = v; data[i * 4 + 3] = 255;
     }
     const detail = new THREE.DataTexture(data, s, s, THREE.RGBAFormat);
@@ -160,6 +304,8 @@
     land = inst(col, new THREE.MeshLambertMaterial({ map: detail }), MAXS * MAXS, false, true);
     water = inst(col, new THREE.MeshPhongMaterial({ map: detail, transparent: true, opacity: 0.9, shininess: 70, specular: 0x3a5068 }), MAXS * MAXS, false, true);
     hot = inst(col, new THREE.MeshBasicMaterial({ map: detail }), MAXS * MAXS, false, false);
+    makeSea();
+    makeFarLand();
 
     // flora: layered pines, puffy broadleaf clusters, jungle canopies, cacti with arms
     const pineGeo = merge([
@@ -298,9 +444,14 @@
         const n = ly * ws + lx, x = wx0 + lx, y = wy0 + ly, i = y * W + x;
         const e = Wd.elev[i], f = Wd.fl[i], typ = Wd.ft[i];
         const c = R.flatColor(i), cr = c & 255, cg = (c >>> 8) & 255, cb = (c >>> 16) & 255;
-        const gTop = colTop(i), wet = f > 0.004 && !Wd.frozen[i];
+        const gTop = e < SEA && Wd.frozen[i] && sea ? SEA_Y + 0.06 : colTop(i), wet = f > 0.004 && !Wd.frozen[i]; // a frozen sea is ice on the surface
         setBox(land, n, x, y, BOTTOM, gTop);
-        if (wet && typ === FT.WATER) {
+        if (wet && typ === FT.WATER && e < SEA && sea) {
+          // the sea itself is the one continuous surface (makeSea); here only its floor
+          const deepK = AG.clamp(-gTop / 3, 0, 1);
+          paint(land, n, 168 - deepK * 90 + cr * 0.1, 152 - deepK * 70 + cg * 0.1, 108 - deepK * 30 + cb * 0.1);
+          liq[n] = LIQ_NONE; top[n] = SEA_Y;
+        } else if (wet && typ === FT.WATER) {
           const surf = e < SEA - 0.03 ? 0 : Math.max(gTop + 0.08, Math.round((e + f - SEA) * HS * 4) / 4 + 0.25);
           paint(land, n, 120 + cr * 0.2, 112 + cg * 0.15, 84 + cb * 0.1); // sandy bed under the water
           liq[n] = LIQ_WATER; liqLo[n] = gTop; liqHi[n] = surf; liqCol[n] = c; top[n] = surf;
@@ -348,6 +499,8 @@
     land.count = ws * ws;
     refreshRows(0, ws);
     packLiquids();
+    if (sea) { refreshSea(); seaClock = 0; }
+    if (far) { refreshFar(farClock > 4); }
     buildFlora();
     syncBuildings();
     needBuild = false; roll = 0;
@@ -361,7 +514,7 @@
   };
 
   // ------------------------------------------------------------ flora
-  const LEAF = [[118, 192, 80], [80, 160, 64], [232, 132, 52]]; // spring, summer, autumn
+  const LEAF = [[106, 172, 76], [74, 146, 64], [222, 128, 54]]; // spring, summer, autumn (a little less neon)
   const PETALS = [[244, 92, 116], [252, 224, 92], [184, 124, 244], [252, 252, 252], [255, 152, 64]];
   const dummy = THREE ? new THREE.Object3D() : null, tint = THREE ? new THREE.Color() : null;
   function place(mesh, n, x, y, z, sx, sy, sz, ry, rgb, vary, roll) {
@@ -1046,6 +1199,7 @@
   }
   function adaptQuality(t) {
     const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
+    if (Q.lock) return; // (screenshots and benchmarks pin a level)
     if (t - Q.since < 1.5 || real <= 0) return; // the first moments after entering include building the scene
     Q.ema = Q.ema * 0.7 + Math.min(120, 1 / real) * 0.3;
     if (Q.level < (V.minQuality || 0)) { Q.level = V.minQuality; Q.last = t; applyQuality(); }
@@ -1076,6 +1230,7 @@
     updatePrecip(Math.min(dt, 0.1), dist);
     updateBolts(t);
     lighting(dist);
+    updateSea(t, dt);
     renderer.render(scene, camera);
     V.stats.window = ws; V.stats.triangles = renderer.info.render.triangles; V.stats.calls = renderer.info.render.calls; V.stats.quality = Q.level;
     V.stats.clouds = clouds.visible ? clouds.count : 0; V.stats.drops = dropN;
