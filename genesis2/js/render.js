@@ -1025,7 +1025,7 @@
       // boundary ribbons: glowing lines whose light flows along them, in four brightness steps
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      const wide = Math.max(5, cz * 0.95), core = Math.max(1.6, cz * 0.2);
+      const wide = AG.clamp(cz * 0.95, 5, 16), core = AG.clamp(cz * 0.2, 1.6, 3.5); // capped: at high zoom wide glows are costly and add nothing
       for (const g of [2, 1, 4, 3]) {
         const [outer, inner, speed] = LINE[g];
         if (g === 3) { ctx.setLineDash([Math.max(4, cz * 0.7), Math.max(3, cz * 0.45)]); ctx.lineDashOffset = -tm * 14; } // the two sides slide past
@@ -1048,7 +1048,7 @@
         ctx.setLineDash([]);
       }
       // a soft bloom here and there along the hottest boundaries
-      const r = Math.max(8, cz * 1.3);
+      const r = AG.clamp(cz * 1.3, 8, 24);
       for (let k = 0; k < bead.n; k += 5) {
         const t = bead.t[k]; if (t === 3) continue;
         const sx = ox + bead.x[k] * z, sy = oy + bead.y[k] * z;

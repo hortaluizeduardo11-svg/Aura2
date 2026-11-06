@@ -270,7 +270,7 @@
     if (act !== V.active) {
       V.active = act;
       el.style.visibility = act ? 'visible' : 'hidden';
-      if (act) needBuild = true;
+      if (act) { needBuild = true; Q.since = performance.now() / 1000; Q.ema = 60; Q.prev = 0; }
     }
   };
 
@@ -334,7 +334,13 @@
     flag(water); flag(hot);
     liqDirty = false;
   }
-  function flag(m) { m.instanceMatrix.updateRange.count = -1; m.instanceColor.updateRange.count = -1; m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
+  // Upload only the instances in use: a full-capacity upload re-sends megabytes every frame
+  // (three.js resets the range after each upload, so it is set every time).
+  function flag(m) {
+    const n = Math.max(1, m.count);
+    m.instanceMatrix.updateRange.offset = 0; m.instanceMatrix.updateRange.count = n * 16; m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) { m.instanceColor.updateRange.offset = 0; m.instanceColor.updateRange.count = n * 3; m.instanceColor.needsUpdate = true; }
+  }
   function build() {
     ws = windowSize();
     wx0 = AG.clamp(Math.round(R.cam.x - ws / 2), 0, W - ws);
@@ -976,7 +982,7 @@
       }
     }
     dummy.quaternion.identity();
-    bolts.count = n; bolts.instanceMatrix.needsUpdate = true; bolts.instanceColor.needsUpdate = true;
+    bolts.count = n; flag(bolts);
   }
 
   // ------------------------------------------------------------ sky, light, camera
@@ -1025,9 +1031,31 @@
   }
 
   // ------------------------------------------------------------ frame
+  // Adaptive quality: when the 3D view runs slowly (a weak or busy graphics card), render fewer
+  // pixels and lighter shadows; step back up when there is headroom again.
+  const Q = { level: 0, ema: 60, last: 0, since: 0 };
+  V.quality = Q;
+  function applyQuality() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), ratio = [dpr, Math.min(dpr, 1), 0.75, 0.55][Q.level];
+    renderer.setPixelRatio(ratio);
+    const r = el.getBoundingClientRect(); renderer.setSize(Math.max(1, r.width), Math.max(1, r.height), false);
+    const ms = Q.level >= 1 ? 1024 : 2048;
+    if (sun.shadow.mapSize.x !== ms) { sun.shadow.mapSize.set(ms, ms); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+    sun.castShadow = Q.level < 2;                          // level 2+: no shadow pass at all
+    bushes.visible = flowers.visible = Q.level < 3;        // level 3: the smallest plants go
+  }
+  function adaptQuality(t) {
+    const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
+    if (t - Q.since < 1.5 || real <= 0) return; // the first moments after entering include building the scene
+    Q.ema = Q.ema * 0.7 + Math.min(120, 1 / real) * 0.3;
+    if (Q.ema < 22 && Q.level < 3 && t - Q.last > 0.8) { Q.level++; Q.last = t; applyQuality(); }
+    else if (Q.ema > 52 && Q.level > 0 && t - Q.last > 8) { Q.level--; Q.last = t; applyQuality(); }
+  }
+  V.setQuality = function (level) { Q.level = AG.clamp(level | 0, 0, 3); Q.last = performance.now() / 1000; applyQuality(); };
   V.render = function (dt, alpha) {
     const t = performance.now() / 1000;
     frameN++;
+    adaptQuality(t);
     const ns = windowSize();
     const off = Math.max(Math.abs(R.cam.x - (wx0 + ws / 2)), Math.abs(R.cam.y - (wy0 + ws / 2)));
     if (needBuild || ns > ws || ns < ws * 0.6 || off > ws * 0.18) build();
@@ -1048,7 +1076,7 @@
     updateBolts(t);
     lighting(dist);
     renderer.render(scene, camera);
-    V.stats.window = ws; V.stats.triangles = renderer.info.render.triangles;
+    V.stats.window = ws; V.stats.triangles = renderer.info.render.triangles; V.stats.calls = renderer.info.render.calls; V.stats.quality = Q.level;
     V.stats.clouds = clouds.visible ? clouds.count : 0; V.stats.drops = dropN;
   };
 
