@@ -7,7 +7,8 @@
 'use strict';
 (function () {
   const AG = window.AG, Sim = AG.Sim, R = AG.Render, Civ = AG.Civ, Geo = AG.Geo;
-  const STEP = 1000 / AG.TPS, BUDGET_MS = 14;
+  const STEP = 1000 / AG.TPS;
+  let BUDGET_MS = 14; // simulation time allowed per frame (AG.Perf lowers it so slow machines stay smooth)
   // speed buttons: watch speeds are tick multipliers; history speeds are years per second
   const HIST = { c: { rate: 20, dy: 1 }, m: { rate: 400, dy: 8 } };
   const DEEP_MYPS = 6; // million years per second in deep time
@@ -15,6 +16,48 @@
   AG.speed = 1; AG.paused = false; AG.throttled = false; AG.histRate = 20; AG.histDy = 1; AG.fastDawn = false;
   AG.stats = { fps: 60, simMs: 0, renderMs: 0, tps: 0, yps: 0, myps: 0 };
   let lastSpeed = '1';
+
+  // ------------------------------------------------------------ performance
+  // A governor keeps the picture smooth on any machine. It watches the real frame rate and steps
+  // through four levels; each gives up things the eye misses least: first cosmetic weather and
+  // far trees, then canvas resolution and simulation time per frame, finally the 3D close-up.
+  // 'auto' adapts (starting from what the device reports); a fixed level can be chosen in World.
+  const LEVELS = [
+    { name: 'Full', scale: 1, budget: 14, cosmetics: true, farEvery: 4, bodyK: 1, lod: 6000, allow3D: true, minQ: 0, minimap: 12, repaint: 250 },
+    { name: 'Light', scale: 1, budget: 10, cosmetics: false, farEvery: 4, bodyK: 0.8, lod: 4000, allow3D: true, minQ: 1, minimap: 24, repaint: 300 },
+    { name: 'Lean', scale: 0.75, budget: 8, cosmetics: false, farEvery: 8, bodyK: 0.55, lod: 2500, allow3D: true, minQ: 2, minimap: 40, repaint: 400 },
+    { name: 'Potato', scale: 0.5, budget: 6, cosmetics: false, farEvery: 8, bodyK: 0.35, lod: 1200, allow3D: false, minQ: 3, minimap: 60, repaint: 500 },
+  ];
+  const Perf = (AG.Perf = { mode: 'auto', level: 0, LEVELS, slow: 0, fast: 0, lastChange: 0, ceiling: 3 });
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } } };
+  function applyPerf() {
+    const L = LEVELS[Perf.level];
+    BUDGET_MS = L.budget;
+    R.perf.cosmetics = L.cosmetics; R.perf.minimapEvery = L.minimap; R.perf.fade = L.repaint / 1000; R.perf.animate = Perf.level < 2; R.perf.wildZ = Perf.level < 2 ? 4 : 7;
+    R.setScale(L.scale);
+    AG.Physics.farEvery = L.farEvery; AG.Life.bodyK = L.bodyK; Civ.lodBudget = L.lod;
+    if (AG.View3D) { AG.View3D.allowed = L.allow3D; AG.View3D.minQuality = L.minQ; }
+    document.documentElement.classList.toggle('perf-lean', Perf.level >= 2);
+    if (AG.UI && AG.UI.onPerf) AG.UI.onPerf();
+  }
+  Perf.set = function (mode) {
+    Perf.mode = mode; store.set('aura2.perf', mode);
+    if (mode !== 'auto') Perf.level = AG.clamp(+mode, 0, 3);
+    Perf.slow = Perf.fast = 0; Perf.lastChange = performance.now();
+    applyPerf();
+  };
+  // per second: two slow seconds in a row step down; ten smooth ones step back up
+  function governPerf(fps, now) {
+    if (Perf.mode !== 'auto' || AG.fastDawn || AG.creating) return; // racing to the Dawn is slow on purpose
+    if (fps < 30) { Perf.slow++; Perf.fast = 0; } else if (fps > 55) { Perf.fast++; Perf.slow = 0; } else { Perf.slow = 0; Perf.fast = 0; }
+    if (Perf.slow >= 2 && Perf.level < 3) { Perf.level++; Perf.slow = 0; Perf.lastChange = now; applyPerf(); }
+    else if (Perf.fast >= 10 && Perf.level > 0 && now - Perf.lastChange > 15000) { Perf.level--; Perf.fast = 0; Perf.lastChange = now; applyPerf(); }
+  }
+  {
+    const saved = store.get('aura2.perf');
+    if (saved && saved !== 'auto') { Perf.mode = saved; Perf.level = AG.clamp(+saved || 0, 0, 3); }
+    else Perf.level = AG.LOW_END ? 2 : (navigator.hardwareConcurrency || 8) <= 4 ? 1 : 0; // a head start from what the device reports
+  }
 
   AG.setSpeed = function (s) {
     s = String(s);
@@ -41,12 +84,12 @@
     Sim.newWorld(seed);
     AG.fastDawn = false; AG.paused = false;
     R.reset(); AG.View3D.reset(); AG.UI.reset();
-    R.overlay = 'plates'; const o = document.querySelector('#overlay'); if (o) o.value = 'plates';
+    R.overlay = 'none'; const o = document.querySelector('#overlay'); if (o) o.value = 'none';
     R.bordersDirty = true;
     AG.creating = false;
     AG.deepHold = 3; // a moment to see the newborn continent before the plates start to move
     AG.UI.syncSpeed();
-    AG.UI.toast('Year 0: a new world is born, one great continent in a world ocean. The plates begin to move…');
+    AG.UI.toast('Year 0: a new world is born, one great continent in a world ocean.');
   };
 
   // When the Dawn comes: watch the first band at its fire, speed 1.
@@ -67,7 +110,7 @@
   AG.syncAfterLoad = function () {
     R.reset(); AG.View3D.reset();
     if (AG.mode === 'watch') { AG.Life.embody(); setFocus(); Civ.lod(); }
-    R.overlay = AG.mode === 'deep' ? 'plates' : 'realms';
+    R.overlay = AG.mode === 'deep' ? 'none' : 'realms';
     const o = document.querySelector('#overlay'); if (o) o.value = R.overlay;
     R.bordersDirty = true;
     AG.UI.syncSpeed();
@@ -144,7 +187,7 @@
             while (acc >= Sim.DEEP_DT && n < 8) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; n++; if (performance.now() - t0 > BUDGET_MS) break; }
             if (acc > Sim.DEEP_DT * 4) acc = Sim.DEEP_DT * 4;
           }
-          if (AG.mode === 'deep' && now - lastPaint > 250) { R.deepRepaint(); Geo.paintFine(); AG.World.dirty.fill(1); R.bordersDirty = true; lastPaint = now; }
+          if (AG.mode === 'deep' && now - lastPaint > LEVELS[Perf.level].repaint) { R.deepRepaint(); Geo.paintFine(); AG.World.dirty.fill(1); R.bordersDirty = true; lastPaint = now; }
         }
         if (AG.mode !== 'deep') { acc = 0; if (AG.Demos._after) { const f = AG.Demos._after; AG.Demos._after = null; f(); } }
       } else if (AG.mode === 'watch') {
@@ -182,6 +225,7 @@
         const s = 1000 / (now - windowStart);
         AG.stats.fps = frames * s; AG.stats.tps = ticks * s; AG.stats.yps = years * s; AG.stats.myps = myr * s;
         frames = 0; ticks = 0; years = 0; myr = 0; windowStart = now;
+        governPerf(AG.stats.fps, now);
       }
     } catch (e) {
       AG.lastError = e;
@@ -191,6 +235,7 @@
   }
 
   AG.UI.init();
+  applyPerf();
   AG.newWorld(+(new URLSearchParams(location.search).get('seed')) || 0);
   requestAnimationFrame(frame);
 })();

@@ -13,10 +13,15 @@
     const cfg = window.AG_CONFIG || {};
     if (cfg.W && cfg.H) { AG.W = cfg.W; AG.H = cfg.H; AG.BASE_ZOOM = cfg.zoom || 3; return; } // tests pick a size
     const vw = Math.max(360, window.innerWidth || 1280), vh = Math.max(360, window.innerHeight || 800);
+    // a low-end device (or a saved Potato setting) gets a world of about half as many cells
+    let saved = null; try { saved = window.localStorage && localStorage.getItem('aura2.perf'); } catch (e) { /* storage blocked */ }
+    const nav = window.navigator || {}, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
+    AG.LOW_END = saved === '3' || (saved !== '0' && saved !== '1' && (mem <= 4 || cores <= 2));
+    const lo = AG.LOW_END ? 60000 : 140000, hi = AG.LOW_END ? 120000 : 280000;
     let best = null, bestErr = Infinity;
-    for (const z of [5, 4, 3, 2]) {
+    for (const z of [6, 5, 4, 3, 2]) {
       const w = Math.min(1024, Math.ceil(vw / z / 16) * 16), h = Math.min(1024, Math.ceil(vh / z / 16) * 16), n = w * h;
-      const err = n < 140000 ? 140000 - n : n > 280000 ? n - 280000 : 0;
+      const err = n < lo ? lo - n : n > hi ? n - hi : 0;
       if (err < bestErr) { bestErr = err; best = { z, w, h }; }
       if (!err) break;
     }

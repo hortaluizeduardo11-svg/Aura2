@@ -54,8 +54,9 @@
 
   P.markWet = (i) => { wet[(((i / W) | 0) >> 4) * CW + ((i % W) >> 4)] = 1; };
   // is cell i in a chunk that the camera-based level of detail is resting this tick?
+  P.farEvery = 4; // off-screen chunks run together every Nth tick (AG.Perf raises it on slow machines)
   P.resting = function (i) {
-    const f = P.focus; if (!f || AG.tick % 4 === 0) return false;
+    const f = P.focus; if (!f || AG.tick % P.farEvery === 0) return false;
     const c = Wd.chunkOfIdx(i), cx = c % CW, cy = (c / CW) | 0;
     return cx < f.cx0 || cx > f.cx1 || cy < f.cy0 || cy > f.cy1;
   };
@@ -257,7 +258,7 @@
 
   // ------------------------------------------------------------ slow pass
   function slowChunk(c) {
-    const f0 = P.focus, ccx = c % CW, ccy = (c / CW) | 0, meltK = f0 && (ccx < f0.cx0 || ccx > f0.cx1 || ccy < f0.cy0 || ccy > f0.cy1) ? 0.25 : 1; // off-screen meltwater at the slow pace
+    const f0 = P.focus, ccx = c % CW, ccy = (c / CW) | 0, meltK = f0 && (ccx < f0.cx0 || ccx > f0.cx1 || ccy < f0.cy0 || ccy > f0.cy1) ? 1 / P.farEvery : 1; // off-screen meltwater at the slow pace
     const cx = c % CW, cy = (c / CW) | 0, x0 = cx << 4, y0 = cy << 4;
     const sT = AG.Sky.seasonT + AG.Sky.chunkT[c], rain = AG.Sky.chunkRain[c];
     let wet = false;
@@ -363,7 +364,7 @@
     }
     // level of detail: chunks well away from the camera run together every 4th tick (edges are
     // computed only between chunks active on the same tick, so no water is made or lost)
-    const f = P.focus, farTick = t % 4 === 0;
+    const f = P.focus, farTick = t % P.farEvery === 0;
     if (f && !farTick) for (let c = 0; c < NC; c++) {
       if (!act[c]) continue;
       const cx = c % CW, cy = (c / CW) | 0;

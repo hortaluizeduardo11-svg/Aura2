@@ -32,7 +32,7 @@ geology and evolution models, the invention graph, LOD, update order and the per
 
 | Control | Clock | What happens |
 |---|---|---|
-| **Ages** | deep time, ~6 million years a second | Plates drift; species radiate and go extinct. The Plates overlay shows glowing boundaries (rifts, subduction with teeth, collisions, sliding faults), each plate's drift in cm/yr, hotspots, quake rings and named rifts and collisions, and the map morphs smoothly as the plates move. |
+| **Ages** | deep time, ~6 million years a second | Plates drift; species radiate and go extinct. Nothing is drawn on top of the map: the land itself shows the plates at work, morphing smoothly as continents part, collide and raise mountains. |
 | **Skip to the Dawn** | deep time, fast | The rest of deep time runs at once, and the camera lands on the first band at its fire. |
 | **1× · 4× · 16×** | watch | People and animals near the camera act moment to moment: work trips, meals, courtship, fights, hunting. You can possess one of them. |
 | **Centuries · Millennia** | history | Everyone lives on their records in year steps. Bands become villages, chiefdoms rise and fall, the sea creeps up the coast. |
@@ -123,6 +123,22 @@ geology and evolution models, the invention graph, LOD, update order and the per
     in history they live on records alone. Folding back keeps every record, and the food model
     is the same either way.
   - Animals are embodied from their regional gene pool and folded back into it.
+
+## Performance
+
+The game keeps itself smooth on modest machines. A governor watches the real frame rate and
+steps through four levels; World → Performance can fix one instead:
+- **Full:** everything.
+- **Light:** no cosmetic weather, god rays or far trees; a smaller simulation slice per frame.
+- **Lean:** the canvas at 75% resolution (the pixel art is stretched up crisply); no water
+  ripples; wild animals as dots until zoomed in close; off-screen fluids rest longer; fewer
+  bodies near the camera; the 3D close-up at reduced quality.
+- **Potato:** the canvas at 50%; the 3D close-up off (the map zooms in as 2D pixel art); the
+  fewest bodies.
+
+Low-end devices (by reported memory and cores), or a saved Potato choice, also start with a
+world of about a third as many cells. No panel uses backdrop blur, so the moving map is never
+re-blurred under the interface.
 
 ## Tests and demos
 

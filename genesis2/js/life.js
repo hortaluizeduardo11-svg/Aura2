@@ -596,13 +596,14 @@
   // One body stands for this many animals of the regional population.
   const BODY_SCALE = [1, 1, 1, 1];
   const BODY_CAP = [1500, 260, 320, 220]; // bodies on the map at once (the rest stay in the regional record)
+  Life.bodyK = 1; // AG.Perf lowers it on slow machines
   Life.BODY_SP = null; // filled by entities.js: archetype -> body kind
   // Embody every region's population (capped per archetype) with genomes bred from the reservoir.
   Life.embody = function () {
     const Ent = AG.Ent, U = AG.U;
     const tot = [0, 0, 0, 0];
     for (const s of Life.alive()) if (!s.sapient && !s.domestic) for (const R of s.regions.values()) tot[s.arch] += R.n;
-    const k = tot.map((t, a) => (t > BODY_CAP[a] ? BODY_CAP[a] / t : 1));
+    const k = tot.map((t, a) => (t > BODY_CAP[a] * Life.bodyK ? (BODY_CAP[a] * Life.bodyK) / t : 1));
     for (const s of Life.alive()) {
       if (s.sapient || s.domestic) continue;
       for (const [r, R] of s.regions) {

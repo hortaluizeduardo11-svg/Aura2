@@ -59,6 +59,7 @@
     });
     setTab('chronicle');
   };
+  UI.onPerf = function () { if (UI.tab === 'world' && !$('#panel').hidden) { worldBuilt = false; renderPanel(true); } };
   UI.reset = function () { UI.sel = null; worldBuilt = false; fillDiseases(); if (UI.tab !== 'chronicle') setTab(UI.tab); };
 
   // 9x9 pixel glyphs, one per tool family, tinted per tool and outlined like the world's sprites
@@ -298,8 +299,6 @@
     else if (dx || dy) R.pan(-dx * dt * 700, -dy * dt * 700);
     if (frameN % 10 === 0) hud();
     if (frameN % 8 === 0 && R.hover.on) $('#hoverinfo').innerHTML = cellInfo(R.hover.x | 0, R.hover.y | 0);
-    const leg = $('#tlegend'), showLeg = R.overlay === 'plates' && !R.is3D() && R.view !== 0;
-    if (leg.hidden === showLeg) leg.hidden = !showLeg;
     const comp = $('#compass'), in3d = R.is3D();
     if (comp.hidden === in3d) comp.hidden = !in3d;
     if (in3d) comp.firstElementChild.style.transform = `rotate(${(AG.View3D.yaw * 180) / Math.PI}deg)`;
@@ -317,7 +316,7 @@
     const day = Sky.daylight();
     const sun = AG.mode === 'deep' ? '#ff9d4d' : day > 0.6 ? '#ffd166' : day > 0.15 ? '#f08a4b' : '#8aa2d8';
     let label;
-    if (AG.mode === 'deep') label = `${Geo.label()} · ${Geo.plates.filter((p) => p.alive).length} plates`;
+    if (AG.mode === 'deep') label = Geo.label();
     else {
       const season = AG.mode === 'watch' ? ' · ' + Sky.SEASONS[Sky.season()] : '';
       const storm = AG.mode === 'watch' && Sky.storms.find((s) => Math.abs(s.x - R.cam.x) < 80 && Math.abs(s.y - R.cam.y) < 60);
@@ -344,7 +343,7 @@
   function cellInfo(x, y) {
     if (x < 0 || y < 0 || x >= W || y >= H) return '';
     const i = y * W + x;
-    if (AG.mode === 'deep') { const d = Geo.describe(x, y); return `<b>Plate ${d.plate}</b> · ${d.boundary}<br>${esc(d.rock)} · ${x}, ${y}`; }
+    if (AG.mode === 'deep') { const i = y * W + x, e = Wd.elev[i]; return `<b>${e < AG.SEA ? 'Sea' : e > AG.MOUNTAIN ? 'Mountains' : e > AG.HILL ? 'Hills' : 'Lowland'}</b> · ${esc(AG.ROCKS[Wd.rock[i]] || '')}<br>${x}, ${y}`; }
     const c = Civ.cityAt(x, y);
     const owner = c ? `${esc(c.name)}, ${esc(Civ.kingdoms[c.kd].name)}` : 'Unclaimed';
     if (R.view === 0) { let m = UGNAME[Wd.ug[i]] || 'Rock'; if (Wd.ugF[i] > 10) m += Wd.ugT[i] === UF.MAGMA ? ' · magma' : ' · groundwater'; return `<b>${m}</b> · deep below ${owner}<br>${x}, ${y}`; }
@@ -378,6 +377,7 @@
     if (t.dataset.branch) { History.switchBranch(+t.dataset.branch); UI.toast('Switched timelines.'); renderPanel(true); return; }
     if (t.dataset.x !== undefined) { const x = +t.dataset.x, y = +t.dataset.y; if (x >= 0) { R.follow = -1; R.centerOn(x, y, Math.max(R.cam.z, 4)); } return; }
     if (t.dataset.dis !== undefined) { diseaseEditor(+t.dataset.dis); return; }
+    if (t.dataset.perf !== undefined) { AG.Perf.set(t.dataset.perf); worldBuilt = false; renderPanel(true); UI.toast(t.dataset.perf === 'auto' ? 'Performance: automatic.' : `Performance: ${AG.Perf.LEVELS[AG.Perf.level].name}.`); return; }
     const a = t.dataset.act, i = selectedUnit();
     switch (a) {
       case 'follow': if (i >= 0) { R.follow = i; R.view = U.layer[i] === 0 ? 0 : 1; syncLayers(); if (R.cam.z < 4) R.setZoom(6); if (AG.mode !== 'watch') AG.setSpeed('1'); } else { const P = UI.sel && People.get(UI.sel.id); if (P) { const c = Civ.cities[P.comm]; if (c) { AG.setSpeed('1'); R.centerOn(c.x, c.y, 8); UI.toast('Watching their community; tap Follow again once they appear.'); } } } break;
@@ -633,17 +633,19 @@
       <div class="btnrow" style="margin-top:4px"><button type="button" class="btn" data-act="demo-emergence">Emergence: from bands to the first eras</button><button type="button" class="btn" data-act="demo-sea">Rising sea: a land bridge drowns</button></div>
       <h3>Shape the next world</h3>
       <div class="btnrow" style="margin-top:0"><input id="seed" type="number" class="hudbtn" style="width:130px" placeholder="Random seed" aria-label="World seed"><button type="button" class="btn primary" data-act="newworld">New world</button></div>
+      <h3>Performance</h3><p class="muted" style="font-size:13px">Auto keeps the picture smooth by giving up what the eye misses least: weather and far trees first, then canvas sharpness and simulation time per frame, and on the slowest machines the 3D close-up. Potato also uses a smaller world from the next page load.</p>
+      <div class="subtabs" id="perfbtns">${[['auto', 'Auto'], ['0', 'Full'], ['1', 'Light'], ['2', 'Lean'], ['3', 'Potato']].map(([v, n]) => `<button type="button" data-perf="${v}" class="${AG.Perf && AG.Perf.mode === v ? 'on' : ''}">${n}</button>`).join('')}</div>
       <h3>Stress test</h3><div class="btnrow" style="margin-top:4px"><button type="button" class="btn" data-act="stress">Add 4,000 animals</button></div>`;
   }
   function worldStats() {
     const S = AG.stats, ms = AG.Sim.stats.ms;
     let h = `<h3>Life and people</h3><dl class="kv"><dt>People</dt><dd>${fmt(People.alive)} alive · ${fmt(People.births)} born · ${fmt(People.deaths)} died</dd><dt>Embodied now</dt><dd>${fmt(Civ.embodied)} people · ${Civ.cities.filter((c) => c.materialized).length} communities in view</dd><dt>Animals in view</dt><dd>${fmt(Ent.count[SP.GRAZER])} grazers · ${fmt(Ent.count[SP.PREDATOR])} predators · ${fmt(Ent.count[SP.BIRD])} birds · ${fmt(Ent.count[SP.APE])} apes</dd><dt>Species</dt><dd>${Life.alive().length} living of ${Life.species.length}</dd><dt>Languages</dt><dd>${Lang.list.filter((L) => L.speakers).length} spoken · ${Lang.splits} splits · ${Lang.changes} sound changes</dd><dt>Inventions</dt><dd>${Tech.discoveries} discoveries · ${Tech.losses} forgotten${Tech.banned.size ? ` · banned in this timeline: ${[...Tech.banned].join(', ')}` : ''}</dd></dl>`;
-    h += `<h3>The land</h3><dl class="kv"><dt>Plates</dt><dd>${Geo.plates.filter((p) => p.alive).length} · ${Geo.splits} rifts · ${Geo.sutures} sutures</dd><dt>Sea level</dt><dd>${Math.round(Geo.seaLevel * 2500)} m · ice ${pct(Geo.iceVol)}</dd><dt>Quakes · eruptions</dt><dd>${fmt(Geo.quakes)} · ${fmt(Geo.eruptions)}</dd><dt>Climate</dt><dd>${Geo.climate.anomaly >= 0 ? '+' : ''}${(Geo.climate.anomaly * 45).toFixed(1)} °C${Geo.climate.aerosol > 0.01 ? ' · volcanic winter' : ''}</dd></dl>`;
+    h += `<h3>The land</h3><dl class="kv"><dt>Sea level</dt><dd>${Math.round(Geo.seaLevel * 2500)} m · ice ${pct(Geo.iceVol)}</dd><dt>Quakes · eruptions</dt><dd>${fmt(Geo.quakes)} · ${fmt(Geo.eruptions)}</dd><dt>Climate</dt><dd>${Geo.climate.anomaly >= 0 ? '+' : ''}${(Geo.climate.anomaly * 45).toFixed(1)} °C${Geo.climate.aerosol > 0.01 ? ' · volcanic winter' : ''}</dd></dl>`;
     const cases = new Int32Array(AG.DISEASES.length);
     for (const P of People.map.values()) if (P.died === null && P.dis) cases[P.dis - 1]++;
     h += `<h3>Diseases</h3><dl class="kv">${AG.DISEASES.map((d, k) => `<dt><button type="button" class="link" data-dis="${k}" style="color:${d.color}">${esc(d.name)}</button></dt><dd>${cases[k] ? cases[k] + ' sick' : 'dormant'}</dd>`).join('')}</dl><div class="btnrow" style="margin-top:6px"><button type="button" class="btn" data-act="newdisease">Design a disease…</button></div>`;
     const T = (k) => (ms[k] || 0).toFixed(2);
-    h += `<h3>Engine</h3><dl class="kv"><dt>Frame rate</dt><dd>${S.fps.toFixed(0)} fps</dd><dt>Clock</dt><dd>${AG.mode === 'watch' ? `${S.tps.toFixed(0)} ticks/s · ${S.simMs.toFixed(2)} ms/tick` : AG.mode === 'history' ? `${S.yps.toFixed(0)} years/s` : `${(S.myps || 0).toFixed(1)} Myr/s`}</dd><dt>Per system (ms)</dt><dd>geology ${T('geo')} · life ${T('life')} · civilisation ${T('civ')} · world ${T('world')} · physics ${T('physics')} · AI ${T('ai')} · weather ${T('sky')}</dd><dt>Rendering</dt><dd>${S.renderMs.toFixed(1)} ms per frame</dd><dt>Snapshots</dt><dd>${History.snaps.length} kept for counterfactuals</dd><dt>3D view</dt><dd>${!AG.View3D.ok ? 'unavailable (no WebGL)' : AG.View3D.active ? `on · ${AG.View3D.stats.window}² cells` : 'zoom past 8× to enter'}</dd></dl>`;
+    h += `<h3>Engine</h3><dl class="kv"><dt>Frame rate</dt><dd>${S.fps.toFixed(0)} fps</dd><dt>Clock</dt><dd>${AG.mode === 'watch' ? `${S.tps.toFixed(0)} ticks/s · ${S.simMs.toFixed(2)} ms/tick` : AG.mode === 'history' ? `${S.yps.toFixed(0)} years/s` : `${(S.myps || 0).toFixed(1)} Myr/s`}</dd><dt>Per system (ms)</dt><dd>geology ${T('geo')} · life ${T('life')} · civilisation ${T('civ')} · world ${T('world')} · physics ${T('physics')} · AI ${T('ai')} · weather ${T('sky')}</dd><dt>Rendering</dt><dd>${S.renderMs.toFixed(1)} ms per frame · ${AG.Perf ? `${AG.Perf.mode === 'auto' ? 'auto: ' : ''}${AG.Perf.LEVELS[AG.Perf.level].name}, canvas at ${Math.round(R.perf.scale * 100)}%` : ''}</dd><dt>Snapshots</dt><dd>${History.snaps.length} kept for counterfactuals</dd><dt>3D view</dt><dd>${!AG.View3D.ok ? 'unavailable (no WebGL)' : AG.View3D.active ? `on · ${AG.View3D.stats.window}² cells` : 'zoom past 8× to enter'}</dd></dl>`;
     return h;
   }
 

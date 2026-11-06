@@ -43,7 +43,8 @@
   #compass { position: absolute; z-index: 4; right: max(12px, env(safe-area-inset-right, 0px)); bottom: 12px; width: 44px; height: 44px; border-radius: 50%; padding: 0; display: grid; place-items: center; }
   #compass span { display: block; width: 18px; height: 26px; transition: transform 0.05s linear;
     background: linear-gradient(180deg, var(--war) 0 50%, var(--ink) 50% 100%); clip-path: polygon(50% 0, 100% 50%, 62% 50%, 62% 100%, 38% 100%, 38% 50%, 0 50%); }
-  .glass { background: linear-gradient(180deg, rgba(26, 34, 52, 0.9), rgba(14, 19, 31, 0.92)); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 244, 214, 0.07); backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2); }
+  /* (no backdrop blur: re-blurring the moving map under every panel each frame is costly on modest machines) */
+  .glass { background: linear-gradient(180deg, rgba(26, 34, 52, 0.95), rgba(14, 19, 31, 0.96)); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 244, 214, 0.07); }
   .muted { color: var(--muted); }
   .num { font-variant-numeric: tabular-nums; }
 
@@ -200,18 +201,10 @@
   #locus { width: 100%; }
   #speed button:disabled { opacity: 0.35; cursor: default; }
 
-  #tlegend { position: absolute; z-index: 3; right: max(12px, env(safe-area-inset-right, 0px)); bottom: 12px; display: grid; gap: 4px; padding: 9px 12px; font-size: 12.5px; color: var(--ink); pointer-events: none; }
-  #panel:not([hidden]) ~ #tlegend { right: calc(max(12px, env(safe-area-inset-right, 0px)) + 364px); }
-  #tlegend span { display: flex; align-items: center; gap: 8px; }
-  #tlegend .lg { width: 18px; height: 6px; border-radius: 3px; flex: none; font-style: normal; }
-  #tlegend .div { background: #ffb347; box-shadow: 0 0 6px #ffb347; }
-  #tlegend .conv { background: #eb285a; box-shadow: 0 0 6px #eb285a; }
-  #tlegend .coll { background: #ff7a33; box-shadow: 0 0 6px #ff7a33; }
-  #tlegend .trans { background: repeating-linear-gradient(90deg, #a6e4ff 0 4px, transparent 4px 7px); }
-  #tlegend .hot { width: 10px; height: 10px; margin: 0 4px; border-radius: 50%; background: #ffcf7a; box-shadow: 0 0 8px #ff8a2c; }
-  #tlegend .arrow { height: auto; font: 700 14px/1 var(--display); color: var(--gold); letter-spacing: -2px; }
-  @media (max-width: 1100px) { #tlegend { display: none; } }
   #vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse at center, rgba(6,8,16,0) 55%, rgba(6,8,16,0.4) 100%); }
+  /* lean and potato performance levels: no full-screen vignette, flat panels */
+  html.perf-lean #vignette { display: none; }
+  html.perf-lean .glass { box-shadow: none; }
   /* ---------- overlays ---------- */
   #toast { position: absolute; z-index: 9; top: 70px; left: 50%; transform: translateX(-50%); max-width: min(520px, calc(100% - 32px)); padding: 9px 14px; font-size: 14px; text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
   #toast.show { opacity: 1; }
@@ -291,8 +284,6 @@
       <option value="language">Languages</option>
       <option value="era">Eras</option>
       <option value="genes">Genes</option>
-      <option value="plates">Plates</option>
-      <option value="strain">Fault strain</option>
       <option value="rock">Rock</option>
       <option value="resources">Resources</option>
       <option value="heat">Climate</option>
@@ -340,14 +331,6 @@
     <button type="button" class="btn primary" id="pad-release">Release<kbd>Esc</kbd></button>
   </div>
 
-  <div id="tlegend" class="glass" hidden aria-label="Plate tectonics legend">
-    <span><i class="lg div"></i>Rift: plates part, magma rises</span>
-    <span><i class="lg conv"></i>Subduction: one plate dives (teeth on the upper plate)</span>
-    <span><i class="lg coll"></i>Collision: continents meet, mountains rise</span>
-    <span><i class="lg trans"></i>Sliding fault: earthquakes</span>
-    <span><i class="lg hot"></i>Hotspot</span>
-    <span><i class="lg arrow">›››</i>Plate motion</span>
-  </div>
   <div id="toast" class="glass" role="status" aria-live="polite"></div>
   <input type="file" id="loadfile" accept=".json,application/json" hidden>
   <div id="modal" hidden><div class="box glass" id="modalbox" role="dialog" aria-modal="true"></div></div>

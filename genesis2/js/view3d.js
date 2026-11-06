@@ -257,7 +257,7 @@
   // ------------------------------------------------------------ tilt animation
   V.update = function (dt) {
     if (!V.ok) return;
-    const z = R.cam.z, want = R.view !== 0 && z > ENTER + 0.001;
+    const z = R.cam.z, want = V.allowed !== false && R.view !== 0 && z > ENTER + 0.001; // (AG.Perf can switch 3D off)
     const goal = want ? AG.clamp(0.72 + (z - ENTER) * 0.009 + V.pitchBias, 0.25, 1.22) : 0; // ~41° rising to ~55°
     V.tilt += (goal - V.tilt) * (1 - Math.exp(-dt * (want ? 2.4 : 5)));
     if (!want && V.tilt < 0.003) V.tilt = 0;
@@ -1048,8 +1048,9 @@
     const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
     if (t - Q.since < 1.5 || real <= 0) return; // the first moments after entering include building the scene
     Q.ema = Q.ema * 0.7 + Math.min(120, 1 / real) * 0.3;
+    if (Q.level < (V.minQuality || 0)) { Q.level = V.minQuality; Q.last = t; applyQuality(); }
     if (Q.ema < 22 && Q.level < 3 && t - Q.last > 0.8) { Q.level++; Q.last = t; applyQuality(); }
-    else if (Q.ema > 52 && Q.level > 0 && t - Q.last > 8) { Q.level--; Q.last = t; applyQuality(); }
+    else if (Q.ema > 52 && Q.level > (V.minQuality || 0) && t - Q.last > 8) { Q.level--; Q.last = t; applyQuality(); }
   }
   V.setQuality = function (level) { Q.level = AG.clamp(level | 0, 0, 3); Q.last = performance.now() / 1000; applyQuality(); };
   V.render = function (dt, alpha) {

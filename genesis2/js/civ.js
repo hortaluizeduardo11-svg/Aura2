@@ -1095,7 +1095,7 @@
     // the budget: nearest first
     const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
     const order = Civ.cities.filter((c) => c.alive).sort((a, b) => dist2(a.x, a.y, cx, cy) - dist2(b.x, b.y, cx, cy));
-    let budget = 6000;
+    let budget = Civ.lodBudget || 6000; // people embodied near the camera (AG.Perf lowers it on slow machines)
     for (const c of order) {
       const pinned = AG.God.possessed >= 0 && U.city[AG.God.possessed] === c.id;
       if (c.materialized) {
