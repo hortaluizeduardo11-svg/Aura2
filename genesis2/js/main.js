@@ -17,16 +17,36 @@
   AG.stats = { fps: 60, simMs: 0, renderMs: 0, tps: 0, yps: 0, myps: 0 };
   let lastSpeed = '1';
 
+  // ------------------------------------------------------------ loading screen and errors
+  const $ = (q) => document.querySelector(q);
+  const Loader = (AG.Loader = {
+    on: true,
+    set(p, text) { const f = $('#ld-fill'); if (f) f.style.width = Math.round(AG.clamp(p, 0, 1) * 100) + '%'; if (text) { const t = $('#ld-step'); if (t) t.textContent = text; } },
+    show(text, tip) { const el = $('#loader'); if (!el) return; el.hidden = false; el.classList.remove('hide'); Loader.on = true; Loader.set(0, text); if (tip !== undefined) { const t = $('#ld-tip'); if (t) t.textContent = tip; } },
+    hide() { const el = $('#loader'); if (!el) return; el.classList.add('hide'); Loader.on = false; setTimeout(() => { if (!Loader.on) el.hidden = true; }, 500); },
+  });
+  const shown = new Set();
+  function showError(e) {
+    const msg = String((e && (e.stack || e.message)) || e).split('\n').slice(0, 6).join('\n');
+    if (shown.has(msg)) return; shown.add(msg);
+    const box = $('#errbox'); if (!box) return;
+    $('#err-msg').textContent = msg + `\n(${navigator.userAgent})`;
+    box.hidden = false;
+  }
+  AG.showError = showError;
+  window.addEventListener('error', (ev) => showError(ev.error || ev.message));
+  window.addEventListener('unhandledrejection', (ev) => showError(ev.reason));
+
   // ------------------------------------------------------------ performance
   // A governor keeps the picture smooth on any machine. It watches the real frame rate and steps
   // through four levels; each gives up things the eye misses least: first cosmetic weather and
   // far trees, then canvas resolution and simulation time per frame, finally the 3D close-up.
   // 'auto' adapts (starting from what the device reports); a fixed level can be chosen in World.
   const LEVELS = [
-    { name: 'Full', scale: 1, budget: 14, cosmetics: true, farEvery: 4, bodyK: 1, lod: 6000, allow3D: true, minQ: 0, minimap: 12, repaint: 250 },
-    { name: 'Light', scale: 1, budget: 10, cosmetics: false, farEvery: 4, bodyK: 0.8, lod: 4000, allow3D: true, minQ: 1, minimap: 24, repaint: 300 },
-    { name: 'Lean', scale: 0.75, budget: 8, cosmetics: false, farEvery: 8, bodyK: 0.55, lod: 2500, allow3D: true, minQ: 2, minimap: 40, repaint: 400 },
-    { name: 'Potato', scale: 0.5, budget: 6, cosmetics: false, farEvery: 8, bodyK: 0.35, lod: 1200, allow3D: false, minQ: 3, minimap: 60, repaint: 500 },
+    { name: 'Full', scale: 1, budget: 9, cosmetics: true, farEvery: 4, bodyK: 1, lod: 6000, allow3D: true, minQ: 0, minimap: 12, repaint: 250 },
+    { name: 'Light', scale: 1, budget: 7, cosmetics: false, farEvery: 4, bodyK: 0.8, lod: 4000, allow3D: true, minQ: 1, minimap: 24, repaint: 300 },
+    { name: 'Lean', scale: 0.75, budget: 6, cosmetics: false, farEvery: 8, bodyK: 0.55, lod: 2500, allow3D: true, minQ: 2, minimap: 40, repaint: 400 },
+    { name: 'Potato', scale: 0.5, budget: 5, cosmetics: false, farEvery: 8, bodyK: 0.35, lod: 1200, allow3D: false, minQ: 3, minimap: 60, repaint: 500 },
   ];
   const Perf = (AG.Perf = { mode: 'auto', level: 0, LEVELS, slow: 0, fast: 0, lastChange: 0, ceiling: 3 });
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } } };
@@ -49,7 +69,7 @@
   // per second: two slow seconds in a row step down; ten smooth ones step back up
   function governPerf(fps, now) {
     if (Perf.mode !== 'auto' || AG.fastDawn || AG.creating) return; // racing to the Dawn is slow on purpose
-    if (fps < 30) { Perf.slow++; Perf.fast = 0; } else if (fps > 55) { Perf.fast++; Perf.slow = 0; } else { Perf.slow = 0; Perf.fast = 0; }
+    if (fps < 45) { Perf.slow++; Perf.fast = 0; } else if (fps > 57) { Perf.fast++; Perf.slow = 0; } else { Perf.slow = 0; Perf.fast = 0; }
     if (Perf.slow >= 2 && Perf.level < 3) { Perf.level++; Perf.slow = 0; Perf.lastChange = now; applyPerf(); }
     else if (Perf.fast >= 10 && Perf.level > 0 && now - Perf.lastChange > 15000) { Perf.level--; Perf.fast = 0; Perf.lastChange = now; applyPerf(); }
   }
@@ -77,7 +97,7 @@
   AG.togglePause = function () { if (AG.paused) AG.setSpeed(AG.mode === 'deep' ? 'a' : lastSpeed); else AG.setSpeed('0'); };
 
   // Run the rest of deep time quickly but without freezing the page: a big slice each frame.
-  AG.skipToDawn = function () { if (AG.mode === 'deep') { AG.fastDawn = true; AG.paused = false; AG.UI.toast('Racing through the ages to the Dawn of people…'); } };
+  AG.skipToDawn = function () { if (AG.mode === 'deep') { AG.fastDawn = true; AG.paused = false; Loader.show('Racing through the ages', 'Plates drift and species evolve until a lineage of primates becomes people.'); } };
 
   AG.newWorld = function (seed) {
     AG.creating = true;
@@ -102,7 +122,9 @@
     lastSpeed = '1'; AG.speed = 1;
     Sim.setMode('watch');
     R.bordersDirty = true; AG.World.dirty.fill(1);
-    AG.UI.toast(`The Dawn: ${p.name} become people. Speed up to Centuries or Millennia to watch history unfold.`);
+    Loader.show('The first people appear', `${p.name}: speed up to Centuries or Millennia to watch history unfold.`);
+    Loader.set(0.6);
+    setTimeout(() => { try { R.prewarm(); Loader.set(0.85, 'Preparing the close-up'); } catch (e) { showError(e); } setTimeout(() => { try { AG.View3D.prewarm(); } catch (e) { /* 3D is optional */ } Loader.set(1, 'Ready'); Loader.hide(); }, 30); }, 30);
     AG.UI.syncSpeed();
   };
 
@@ -170,6 +192,7 @@
   };
 
   // ------------------------------------------------------------ the loop
+  let sweepY = 0, errStreak = 0;
   let last = performance.now(), acc = 0, frames = 0, ticks = 0, years = 0, myr = 0, windowStart = last, errors = 0, lastPaint = 0, lodT = 0;
   function frame(now) {
     try {
@@ -177,17 +200,26 @@
       if (dt > 250) dt = 250;
       const t0 = performance.now();
       AG.throttled = false;
+      let stepped = false;
       if (AG.mode === 'deep') {
         if (!AG.paused || AG.fastDawn) {
-          if (AG.fastDawn) { const y0 = Geo.myr; Sim.skipDeep(60); myr += Geo.myr - y0; }
+          if (AG.fastDawn) { const y0 = Geo.myr; Sim.skipDeep(45); myr += Geo.myr - y0; if (AG.mode === 'deep') Loader.set(Math.min(0.95, Geo.myr / 260), `Racing through the ages · ${Geo.label()}`); }
           else if (AG.deepHold > 0) AG.deepHold -= dt / 1000;
           else {
             acc += (dt / 1000) * DEEP_MYPS;
-            let n = 0;
-            while (acc >= Sim.DEEP_DT && n < 8) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; n++; if (performance.now() - t0 > BUDGET_MS) break; }
-            if (acc > Sim.DEEP_DT * 4) acc = Sim.DEEP_DT * 4;
+            // one geology step at most per frame (a step is the heaviest thing deep time does)
+            if (acc >= Sim.DEEP_DT) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; stepped = true; }
+            if (acc > Sim.DEEP_DT * 2) acc = Sim.DEEP_DT * 2;
           }
-          if (AG.mode === 'deep' && now - lastPaint > LEVELS[Perf.level].repaint) { R.deepRepaint(); Geo.paintFine(); AG.World.dirty.fill(1); R.bordersDirty = true; lastPaint = now; }
+        }
+        // the map follows the moving land as a sweep of a few rows per frame (never all at once),
+        // skipped on frames that already ran a step
+        if (AG.mode === 'deep' && !stepped) {
+          const H = AG.H, rows = Math.max(4, Math.ceil(H * (dt / 1000) / (LEVELS[Perf.level].repaint / 500)));
+          const y1 = Math.min(H, sweepY + rows);
+          Geo.paintRows(sweepY, y1);
+          sweepY = y1 >= H ? 0 : y1;
+          if (sweepY === 0) R.bordersDirty = true;
         }
         if (AG.mode !== 'deep') { acc = 0; if (AG.Demos._after) { const f = AG.Demos._after; AG.Demos._after = null; f(); } }
       } else if (AG.mode === 'watch') {
@@ -227,15 +259,46 @@
         frames = 0; ticks = 0; years = 0; myr = 0; windowStart = now;
         governPerf(AG.stats.fps, now);
       }
+      errStreak = 0;
     } catch (e) {
       AG.lastError = e;
       if (errors++ < 5) console.error(e);
+      if (++errStreak >= 3) showError(e); // something breaks every frame: say what
     }
     requestAnimationFrame(frame);
   }
 
-  AG.UI.init();
-  applyPerf();
-  AG.newWorld(+(new URLSearchParams(location.search).get('seed')) || 0);
-  requestAnimationFrame(frame);
+  // Boot behind the loading screen: every heavy first-time job is done here, with progress, so the
+  // first playable frame has nothing left to build.
+  const nextFrame = () => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+  async function fontsReady() {
+    if (!document.fonts) return;
+    const link = document.querySelector('link[href*="fonts.googleapis"]');
+    if (link && !link.sheet) await Promise.race([new Promise((res) => { link.addEventListener('load', res, { once: true }); link.addEventListener('error', res, { once: true }); }), wait(3500)]);
+    await Promise.race([Promise.all(['700 20px "Pixelify Sans"', '500 14px "Pixelify Sans"', '400 14px "Alegreya Sans"', '600 13px "Alegreya Sans"', '700 14px "Alegreya Sans"', '500 16px "Alegreya"', 'italic 400 15px "Alegreya"'].map((f) => document.fonts.load(f).catch(() => null))), wait(3500)]);
+  }
+  async function boot() {
+    try {
+      Loader.set(0.05, 'Loading fonts');
+      await fontsReady();
+      Loader.set(0.18, 'Starting the renderer'); await nextFrame();
+      AG.UI.init(); applyPerf();
+      Loader.set(0.32, 'Shaping a new world'); await nextFrame();
+      AG.newWorld(+(new URLSearchParams(location.search).get('seed')) || 0);
+      Loader.set(0.6, 'Painting the land'); await nextFrame();
+      R.prewarm();
+      Loader.set(0.78, 'Preparing the 3D close-up'); await nextFrame();
+      AG.View3D.prewarm();
+      Loader.set(0.95, 'Warming up'); await nextFrame();
+      R.frame(0.016, 1); // one full frame behind the curtain: layers, labels, everything cached
+      Loader.set(1, 'Ready'); await wait(120);
+      Loader.hide();
+      last = performance.now(); AG.deepHold = 3;
+      requestAnimationFrame(frame);
+    } catch (e) { showError(e); Loader.set(1, 'Could not start: see the message above'); }
+  }
+  document.getElementById('err-copy').addEventListener('click', () => { const t = document.getElementById('err-msg').textContent; if (navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {}); });
+  document.getElementById('err-close').addEventListener('click', () => { document.getElementById('errbox').hidden = true; });
+  boot();
 })();

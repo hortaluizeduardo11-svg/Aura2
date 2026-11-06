@@ -1021,26 +1021,49 @@
 
   // ============================================================ contacts
   // Communities in reach of each other are in contact: knowledge, goods, spouses and rumours move.
-  function contacts(dy) {
-    const cs = Civ.cities.filter((c) => c.alive);
-    for (const c of cs) { for (const [id, v] of c.contacts) { const v2 = v * Math.pow(0.7, dy); if (v2 < 0.05 || !Civ.cities[id].alive) c.contacts.delete(id); else c.contacts.set(id, v2); } c.tradeRes.fill(0); }
-    for (let a = 0; a < cs.length; a++) for (let b = a + 1; b < cs.length; b++) {
-      const A = cs[a], B = cs[b], ddx = A.x - B.x, ddy = A.y - B.y;
-      if (ddx > 290 || ddx < -290 || ddy > 290 || ddy < -290) continue; // beyond any reach (even by sail)
-      const d = Math.sqrt(ddx * ddx + ddy * ddy);
-      const range = 60 + (Tech.knows(A, 'wheel') || Tech.knows(B, 'wheel') ? 50 : 0) + (Tech.knows(A, 'sailing') && Tech.knows(B, 'sailing') && A.coastal && B.coastal ? 120 : 0) + (A.kd === B.kd ? 50 : 0);
-      if (d > range) continue;
-      const ra = Life.regionOf(A.x, A.y), rb = Life.regionOf(B.x, B.y), m = Life.env.mass;
-      const linked = m[ra] === m[rb] || (Tech.knows(A, 'boats') && Tech.knows(B, 'boats') && d < 50) || (Tech.knows(A, 'sailing') && Tech.knows(B, 'sailing'));
-      if (!linked) continue;
-      const s = AG.clamp(1 - d / range, 0.05, 1) * (A.kd === B.kd ? 1.3 : 1);
-      A.contacts.set(B.id, Math.min(2, (A.contacts.get(B.id) || 0) + s * dy)); B.contacts.set(A.id, Math.min(2, (B.contacts.get(A.id) || 0) + s * dy));
-      for (let r = 1; r < AG.RESOURCES.length; r++) { if (A.survey.res[r]) B.tradeRes[r] = 1; if (B.survey.res[r]) A.tradeRes[r] = 1; }
-      Tech.diffuse(A, B, s, dy);
-      // marriage between bands: spouses move, genes flow
-      if (rnd() < dy * 0.3 * s) exogamy(A, B);
-    }
+  // Yearly contact between communities: decay, then every pair in reach. A job that can stop
+  // between rows and resume where it left off (the browser spreads it over frames); the order of
+  // the pairs, and so every result, is the same however it is sliced.
+  const T_WHEEL = Tech.IDX.wheel, T_SAIL = Tech.IDX.sailing, T_BOATS = Tech.IDX.boats;
+  const reachBits = (c) => (c.tech[T_WHEEL] ? 1 : 0) | (c.tech[T_SAIL] ? 2 : 0) | (c.tech[T_BOATS] ? 4 : 0) | (c.coastal ? 8 : 0);
+  function contactsJob(dy) {
+    let cs = null, X, Y, KD, M, F, a = 0;
+    return function (until) {
+      if (!cs) {
+        cs = Civ.cities.filter((c) => c.alive);
+        const fade = Math.pow(0.7, dy);
+        for (const c of cs) { for (const [id, v] of c.contacts) { const v2 = v * fade; if (v2 < 0.05 || !Civ.cities[id].alive) c.contacts.delete(id); else c.contacts.set(id, v2); } c.tradeRes.fill(0); }
+        // what the pair test reads, packed flat (community records are large and slow to scan);
+        // the reach bits of a pair are refreshed whenever they teach each other something
+        const n = cs.length, m = Life.env.mass;
+        X = new Float64Array(n); Y = new Float64Array(n); KD = new Float64Array(n); M = new Int32Array(n); F = new Uint8Array(n);
+        for (let k = 0; k < n; k++) { const c = cs[k]; X[k] = c.x; Y[k] = c.y; KD[k] = c.kd; M[k] = m[Life.regionOf(c.x, c.y)]; F[k] = reachBits(c); }
+        if (AG.now() > until) return false;
+      }
+      const n = cs.length, X_ = X, Y_ = Y, KD_ = KD, M_ = M, F_ = F; // locals: the hot loop reads them a million times
+      while (a < n) {
+        const A = cs[a], xa = X_[a], ya = Y_[a], ka = KD_[a], ma = M_[a];
+        for (let b = a + 1; b < n; b++) {
+          const ddx = xa - X_[b], ddy = ya - Y_[b];
+          if (ddx > 290 || ddx < -290 || ddy > 290 || ddy < -290) continue; // beyond any reach (even by sail)
+          const d = Math.sqrt(ddx * ddx + ddy * ddy), fa = F_[a], fb = F_[b], same = ka === KD_[b];
+          const range = 60 + ((fa | fb) & 1 ? 50 : 0) + ((fa & fb & 10) === 10 ? 120 : 0) + (same ? 50 : 0); // wheels; sail between coasts; one polity
+          if (d > range) continue;
+          if (!(ma === M_[b] || (fa & fb & 4 && d < 50) || fa & fb & 2)) continue; // the same land, or boats across a strait, or sail
+          const B = cs[b], s = AG.clamp(1 - d / range, 0.05, 1) * (same ? 1.3 : 1);
+          A.contacts.set(B.id, Math.min(2, (A.contacts.get(B.id) || 0) + s * dy)); B.contacts.set(A.id, Math.min(2, (B.contacts.get(A.id) || 0) + s * dy));
+          for (let r = 1; r < AG.RESOURCES.length; r++) { if (A.survey.res[r]) B.tradeRes[r] = 1; if (B.survey.res[r]) A.tradeRes[r] = 1; }
+          Tech.diffuse(A, B, s, dy); F_[a] = reachBits(A); F_[b] = reachBits(B);
+          // marriage between bands: spouses move, genes flow
+          if (rnd() < dy * 0.3 * s) exogamy(A, B);
+        }
+        a++;
+        if ((a & 7) === 0 && AG.now() > until) return false;
+      }
+      return true;
+    };
   }
+  function contacts(dy) { contactsJob(dy)(Infinity); }
   function exogamy(A, B) {
     const pa = persons(A).filter((P) => !P.spouse && People.age(P) >= 16 && People.age(P) < 35);
     const pb = persons(B).filter((P) => !P.spouse && People.age(P) >= 16 && People.age(P) < 35);
@@ -1178,15 +1201,17 @@
   // (sim.js); the order of work is identical either way.
   Civ.yearBegin = function () { Civ._t0 = AG.now(); Civ._ms = 0; return Civ.cities.filter((c) => c.alive); };
   Civ.yearTech = function (c, dy) { if (c.alive) { const ctx = Civ.techContext(c); Tech.yearStep(c, ctx, dy); } };
-  Civ.yearEnd = function (dy) {
-    contacts(dy);
-    for (const k of Civ.kingdoms) if (k.alive) polityYear(k, dy);
-    AG.War.yearStep(dy);
-    if (Math.floor(year() / 25) !== Math.floor((year() - dy) / 25)) AG.Lang.checkSplits(Civ.cities, Civ.speechLink, 25);
-    AG.Lang.yearStep(dy);
-    if (Civ.recomputeBordersSoon || Math.floor(year() / 10) !== Math.floor((year() - dy) / 10)) Civ.recomputeBorders();
-    Civ.stats.ms = Civ.stats.ms * 0.9 + (AG.now() - Civ._t0) * 0.1;
-  };
+  // the end of a step in stages (the browser runs them across frames; the order never changes)
+  // The year's end as parts run in order. A part given a deadline may return false to be
+  // called again (it stopped part-way); Civ.yearEnd runs them all to the end at once.
+  Civ.yearEndParts = (dy) => [
+    contactsJob(dy),
+    () => { for (const k of Civ.kingdoms) if (k.alive) polityYear(k, dy); },
+    () => AG.War.yearStep(dy),
+    () => { if (Math.floor(year() / 25) !== Math.floor((year() - dy) / 25)) AG.Lang.checkSplits(Civ.cities, Civ.speechLink, 25); AG.Lang.yearStep(dy); },
+    () => { if (Civ.recomputeBordersSoon || Math.floor(year() / 10) !== Math.floor((year() - dy) / 10)) Civ.recomputeBorders(); Civ.stats.ms = Civ.stats.ms * 0.9 + (AG.now() - Civ._t0) * 0.1; },
+  ];
+  Civ.yearEnd = function (dy) { for (const f of Civ.yearEndParts(dy)) f(Infinity); };
   // Watch mode: the same yearly processes in slices, plus LOD and the embodied systems.
   Civ.tick = function () {
     const t = AG.tick, Y = AG.YEAR_TICKS;

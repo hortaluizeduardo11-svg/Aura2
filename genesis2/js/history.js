@@ -79,13 +79,16 @@
       if (P.died !== null) { const c = deadCopies.get(id); if (c && c.sig === sigOf(P)) { out.push([id, c.rec]); continue; } }
       out.push([id, todo.length]); todo.push(P);
     }
-    return { out, todo, copies: [], i: 0 };
+    return { out, todo, copies: [], i: 0, n: 100 };
   }
+  // Copied in batches whose size follows their cost (about 3 ms each), so no frame waits long.
   function peopleWork(plan, until) {
     while (plan.i < plan.todo.length) {
-      const n = Math.min(400, plan.todo.length - plan.i), part = clone(plan.todo.slice(plan.i, plan.i + n));
+      const n = Math.min(plan.n, plan.todo.length - plan.i), a = AG.now(), part = clone(plan.todo.slice(plan.i, plan.i + n));
       for (let k = 0; k < part.length; k++) plan.copies.push(part[k]);
       plan.i += n;
+      const t = AG.now() - a;
+      if (t > 4 && plan.n > 25) plan.n >>= 1; else if (t < 1.5 && plan.n < 1600) plan.n <<= 1;
       if (AG.now() > until) break;
     }
     return plan.i >= plan.todo.length;
@@ -105,9 +108,15 @@
   History.pending = null;
   History.snapWork = function (until) {
     const p = History.pending; if (!p) return true;
-    if (!peopleWork(p.plan, until)) return false;
+    if (!p.stages) {
+      if (!peopleWork(p.plan, until)) return false;
+      p.snap = {}; p.stages = captureStages(p.snap, peopleFinish(p.plan)); p.si = 0;
+      if (AG.now() > until) return false;
+    }
+    while (p.si < p.stages.length) { p.stages[p.si++](); if (AG.now() > until) break; }
+    if (p.si < p.stages.length) return false;
     History.pending = null;
-    pushSnap(p.year, p.tick, History.capture(peopleFinish(p.plan)));
+    pushSnap(p.year, p.tick, p.snap);
     return true;
   };
   History.flushSnap = function () { if (History.pending) History.snapWork(Infinity); };
@@ -115,36 +124,64 @@
     History.snaps.push({ year, tick, data });
     if (History.snaps.length > SNAP_KEEP) History.snaps.splice(1, 1); // always keep the Dawn
   }
+  // A snapshot is a list of small stages (each copies a piece of the world), so the browser can
+  // spread one over several frames while the simulation waits; capture() runs them all at once.
+  function captureStages(snap, entries) {
+    const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U, S = AG.Sky, Civ = AG.Civ;
+    const st = [], chunks = (arr, n) => { const out = []; for (let k = 0; k < arr.length; k += n) out.push(arr.slice(k, k + n)); return out; };
+    st.push(() => {
+      normalize();
+      for (const c of Civ.cities) if (c._ps) { c._ps = null; c._psT = -1; } // a per-tick cache of members: never worth copying
+      Object.assign(snap, { v: 2, seed: AG.seed, tick: AG.tick, mode: AG.mode, year: year(), rng: { core: AG.rndState(), geo: Geo.rng ? Geo.rng.get() : 0, life: Life.rng ? Life.rng.get() : 0 } });
+      snap.world = {}; snap.worldMisc = clone({ springs: Wd.springs, vents: Wd.vents, epoch: Wd.epoch });
+    });
+    for (const k of WORLD_FIELDS()) st.push(() => { snap.world[k] = Wd[k].slice(); });
+    st.push(() => {
+      const geo = {}; for (const k of ['plate', 'crust', 'age', 'rock', 'strain', 'magma', 'orog', 'bound', 'precip', 'temp', 'ice', 'acc', 'organic', 'evap', 'wetFloor', 'lith']) geo[k] = Geo[k].slice();
+      const gs = {}; for (const k of ['phase', 'myr', 'dawnMyr', 'year', 'quakes', 'eruptions', 'splits', 'sutures', 'iceVol', 'seaLevel', 'applied', 'dawnSea', 'dawnAnomaly', 'shift', 'seed', 'stepN', 'scripted', 'lostCont', 'seaShifts']) gs[k] = Geo[k];
+      snap.geo = geo; snap.geoScalars = gs;
+      snap.geoObj = clone({ plates: Geo.plates, hotspots: Geo.hotspots, volcanoes: Geo.volcanoes.map((v) => Object.assign({}, v)), climate: Geo.climate, events: Geo.events.slice(-60) });
+    });
+    const spParts = [];
+    for (const part of chunks(Life.species, 3)) st.push(() => { spParts.push(clone(part)); });
+    st.push(() => { snap.life = Object.assign(clone({ extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, env: Life.env }), { species: [].concat(...spParts) }); });
+    st.push(() => {
+      snap.people = Object.assign(clone({ alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }), { entries: entries || peopleEntries() });
+      snap.sim = { stripe: AG.Sim ? AG.Sim.stripe : 0, geoSeen: AG.Sim ? Math.max(0, AG.Sim.geoSeen - Math.max(0, Geo.events.length - 60)) : 0 }; // geo events keep their last 60
+      snap.lang = clone({ list: AG.Lang.list, splits: AG.Lang.splits, changes: AG.Lang.changes });
+      snap.tech = clone({ banned: [...AG.Tech.banned], firsts: AG.Tech.firsts, discoveries: AG.Tech.discoveries, losses: AG.Tech.losses });
+    });
+    const cityParts = [];
+    for (const part of chunks(Civ.cities, 40)) st.push(() => { for (const c of part) if (c._ps) { c._ps = null; c._psT = -1; } cityParts.push(clone(part)); }); // (the UI may refill the cache between frames)
+    const civParts = {}; // records refer to each other by id, so lists can be copied in pieces
+    for (const [k, n] of [['kingdoms', 15], ['buildings', 150], ['religions', 30], ['squads', 60], ['routes', 150], ['expeditions', 60]]) {
+      civParts[k] = [];
+      for (const part of chunks(Civ[k], n)) st.push(() => { civParts[k].push(clone(part)); });
+    }
+    st.push(() => {
+      snap.civ = Object.assign(clone({ contact: Civ.contact, embodied: Civ.embodied }), { cities: [].concat(...cityParts) });
+      for (const k in civParts) snap.civ[k] = [].concat(...civParts[k]);
+      snap.war = clone({ campaigns: AG.War.campaigns, battles: AG.War.battles });
+      snap.ent = {};
+    });
+    for (const k of Object.keys(U)) if (ArrayBuffer.isView(U[k])) st.push(() => { snap.ent[k] = U[k].slice(0, k === 'gen' || k === 'fgen' ? U.hi * Life.GL : k === 'genes' ? U.hi * AG.NG : U.hi); });
+    st.push(() => {
+      normalize(); // again: the interface may have touched the caches while a snapshot was spread over frames
+      snap.entMeta = Object.assign({ hi: U.hi, count: U.count }, AG.Ent.state());
+      snap.sky = clone({ storms: S.storms, strikes: S.strikes, wind: S.wind, windTarget: S.windTarget, offX: S.offX, offY: S.offY, flash: S.flash, seasonT: S.seasonT, cloud: S.cloud, dark: S.dark, chunkT: S.chunkT, chunkRain: S.chunkRain });
+      snap.physics = AG.Physics.state ? AG.Physics.state() : null;
+      snap.diseases = clone(AG.DISEASES);
+      snap.events = History.events.slice(-1500).map((e) => Object.assign({}, e)); snap.nextId = History.nextId;
+      snap.god = AG.God.state ? AG.God.state() : null;
+    });
+    return st;
+  }
   History.capture = function (entries) {
     if (!entries && History.pending) History.flushSnap(); // never mix a half-copied snapshot with a new one
     if (AG.Sim && AG.Sim.h) AG.Sim.finish(); // never capture half a step
-    normalize();
-    for (const c of AG.Civ.cities) if (c._ps) { c._ps = null; c._psT = -1; } // a per-tick cache of members: never worth copying
-    const Wd = AG.World, Geo = AG.Geo, Life = AG.Life, U = AG.U;
-    const world = {}; for (const k of WORLD_FIELDS()) world[k] = Wd[k].slice();
-    const geo = {}; for (const k of ['plate', 'crust', 'age', 'rock', 'strain', 'magma', 'orog', 'bound', 'precip', 'temp', 'ice', 'acc', 'organic', 'evap', 'wetFloor', 'lith']) geo[k] = Geo[k].slice();
-    const gs = {}; for (const k of ['phase', 'myr', 'dawnMyr', 'year', 'quakes', 'eruptions', 'splits', 'sutures', 'iceVol', 'seaLevel', 'applied', 'dawnSea', 'dawnAnomaly', 'shift', 'seed', 'stepN', 'scripted', 'lostCont', 'seaShifts']) gs[k] = Geo[k];
-    const ent = {}; for (const k of Object.keys(U)) if (ArrayBuffer.isView(U[k])) ent[k] = U[k].slice(0, k === 'gen' || k === 'fgen' ? U.hi * Life.GL : k === 'genes' ? U.hi * AG.NG : U.hi);
-    const S = AG.Sky;
-    return {
-      v: 2, seed: AG.seed, tick: AG.tick, mode: AG.mode, year: year(),
-      rng: { core: AG.rndState(), geo: Geo.rng ? Geo.rng.get() : 0, life: Life.rng ? Life.rng.get() : 0 },
-      world, worldMisc: clone({ springs: Wd.springs, vents: Wd.vents, epoch: Wd.epoch }),
-      geo, geoScalars: gs, geoObj: clone({ plates: Geo.plates, hotspots: Geo.hotspots, volcanoes: Geo.volcanoes.map((v) => Object.assign({}, v)), climate: Geo.climate, events: Geo.events.slice(-60) }),
-      life: clone({ species: Life.species, extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, env: Life.env }),
-      people: Object.assign(clone({ alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }), { entries: entries || peopleEntries() }),
-      sim: { stripe: AG.Sim ? AG.Sim.stripe : 0, geoSeen: AG.Sim ? Math.max(0, AG.Sim.geoSeen - Math.max(0, Geo.events.length - 60)) : 0 }, // geo events keep their last 60
-      lang: clone({ list: AG.Lang.list, splits: AG.Lang.splits, changes: AG.Lang.changes }),
-      tech: clone({ banned: [...AG.Tech.banned], firsts: AG.Tech.firsts, discoveries: AG.Tech.discoveries, losses: AG.Tech.losses }),
-      civ: clone({ kingdoms: AG.Civ.kingdoms, cities: AG.Civ.cities, buildings: AG.Civ.buildings, religions: AG.Civ.religions, squads: AG.Civ.squads, routes: AG.Civ.routes, expeditions: AG.Civ.expeditions, contact: AG.Civ.contact, embodied: AG.Civ.embodied }),
-      war: clone({ campaigns: AG.War.campaigns, battles: AG.War.battles }),
-      ent, entMeta: Object.assign({ hi: U.hi, count: U.count }, AG.Ent.state()),
-      sky: clone({ storms: S.storms, strikes: S.strikes, wind: S.wind, windTarget: S.windTarget, offX: S.offX, offY: S.offY, flash: S.flash, seasonT: S.seasonT, cloud: S.cloud, dark: S.dark, chunkT: S.chunkT, chunkRain: S.chunkRain }),
-      physics: AG.Physics.state ? AG.Physics.state() : null,
-      diseases: clone(AG.DISEASES),
-      events: History.events.slice(-1500).map((e) => Object.assign({}, e)), nextId: History.nextId,
-      god: AG.God.state ? AG.God.state() : null,
-    };
+    const snap = {};
+    for (const f of captureStages(snap, entries)) f();
+    return snap;
   };
   History.restore = function (s) {
     if (AG.Sim) AG.Sim.h = null; // a step in progress belongs to the timeline being left

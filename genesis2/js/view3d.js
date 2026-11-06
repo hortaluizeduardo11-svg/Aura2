@@ -235,6 +235,26 @@
     far.geometry.computeBoundingSphere();
   }
   V.parts = () => ({ sea, far, scene }); // (for debugging and screenshots)
+  // Warm-up during the loading screen: build a window, compile every shader program (including the
+  // building and glow materials, through two tiny stand-ins) and draw once off-screen, so the first
+  // zoom into 3D does not stall on compiling and uploading.
+  V.prewarm = function () {
+    if (!V.ok) return false;
+    try {
+      if (!V._standins) {
+        const tri = new THREE.BufferGeometry(); tri.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -50, 0, 0.01, -50, 0, 0, -50, 0.01]), 3));
+        tri.setAttribute('color', new THREE.BufferAttribute(new Float32Array(9).fill(1), 3));
+        for (const m of [toonV, glowV]) { const me = new THREE.Mesh(tri, m); me.frustumCulled = false; me.castShadow = true; scene.add(me); }
+        V._standins = true;
+      }
+      if (!ws) build();
+      placeCamera();
+      renderer.compile(scene, camera);
+      renderer.render(scene, camera);
+      needBuild = true;
+      return true;
+    } catch (e) { needBuild = true; return false; }
+  };
   function updateSea(t, dt) {
     if (!sea) return;
     const u = sea.material.uniforms, sd = Sky.sunDir(), day = Sky.daylight();

@@ -139,6 +139,31 @@ test('determinism: the whole world (deep time, Dawn, history) replays from its s
   return `hash ${a}, ${n} people at year 400`;
 });
 
+test('history: a snapshot copied over many frames restores the same world as one taken at once', () => {
+  const W = 224, H = 144;
+  const run = (async) => {
+    const A = fromSave(dawnSave(7, W, H), W, H);
+    for (let y = 0; y < 40; y += 4) A.Sim.yearStep(4);
+    A.asyncSnaps = async; A.History.lastSnapYear = -1e9;
+    const before = A.History.snaps.length;
+    A.Sim.yearStep(4); // the snapshot falls due at the end of this step
+    let slices = 0;
+    if (async) while (!A.History.snapWork(A.now() - 1)) slices++; // one stage per call, as the browser spreads it over frames
+    assert(A.History.snaps.length === before + 1, 'the snapshot should be taken');
+    const snap = A.History.snaps[A.History.snaps.length - 1];
+    for (let y = 0; y < 40; y += 4) A.Sim.yearStep(4);
+    const ahead = simHash(A);
+    A.History.restore(snap.data);
+    for (let y = 0; y < 40; y += 4) A.Sim.yearStep(4);
+    return [ahead, simHash(A), slices];
+  };
+  const [a1, a2] = run(false), [b1, b2, n] = run(true);
+  assert(n > 10, `the copying should be spread over many slices (${n})`);
+  assert(a1 === a2, `restoring a snapshot taken at once must replay the same future (${a1} vs ${a2})`);
+  assert(b1 === b2 && b1 === a1, `a snapshot spread over ${n} slices must replay the same future (${b1} / ${b2} vs ${a1})`);
+  return `${n} slices, hash ${a1}`;
+});
+
 test('save/load: a loaded world has the same future as the original', () => {
   const W = 224, H = 144, A = fromSave(dawnSave(7, W, H), W, H);
   for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);

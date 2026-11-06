@@ -178,8 +178,9 @@
 
   // Contact: each known tech whose prerequisites the receiver knows spreads with a chance set by
   // contact strength and the receiver's taste for new things.
-  Tech.diffuse = function (a, b, strength, dy) {
-    for (const [g, r] of [[a, b], [b, a]]) {
+  Tech.diffuse = function (a, b, strength, dy) { diffuseTo(a, b, strength, dy); diffuseTo(b, a, strength, dy); };
+  function diffuseTo(g, r, strength, dy) {
+    {
       const novelty = 0.4 + 0.6 * (1 - (r.tradition === undefined ? 0.5 : r.tradition));
       for (const t of LIST) {
         if (!g.tech[t.id] || r.tech[t.id] || !t.diff || Tech.banned.has(t.key) || (r.banned && r.banned.has(t.key))) continue;
@@ -190,7 +191,7 @@
         if (rnd() < 1 - Math.pow(1 - p, dy)) Tech.learn(r, t, 'learned', null, g);
       }
     }
-  };
+  }
 
   // Era transitions recorded for the timeline (first community per era).
   Tech.timeline = () => ERAS.map((e, k) => ({ era: e, first: Tech.firsts['era' + k] || null })).slice(1);

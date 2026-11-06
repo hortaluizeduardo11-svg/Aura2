@@ -137,13 +137,24 @@ steps through four levels; World → Performance can fix one instead:
   fewest bodies.
 
 Low-end devices (by reported memory and cores), or a saved Potato choice, also start with a
-world of about a third as many cells. No panel uses backdrop blur, so the moving map is never
+world of about a third as many cells.
+
+A loading screen covers the start, the Dawn and every new world. Behind it, these are prepared
+before the first playable frame:
+- the fonts and the world
+- every map chunk image, the borders and the minimap
+- the 3D shaders, compiled and drawn once off screen
+
+Nothing heavy waits for a frame in play. A history step, the year's contacts between communities
+and each 500-year snapshot are cut into small stages that run within the frame budget. They run
+in the same order, so the results are identical. If something does fail, an error box shows the
+message instead of a frozen screen. No panel uses backdrop blur, so the moving map is never
 re-blurred under the interface.
 
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 13 headless tests, ~45 s
+node genesis2/tests/run.js            # 14 headless tests, ~50 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -155,6 +166,7 @@ The tests cover:
 - **Determinism:** the whole world from one seed replays identically, including when steps are
   spread over frames.
 - **Save/load:** a loaded world has the same future as the original.
+- **Snapshots:** one copied over many frames restores the same world as one taken at once.
 - **Genetics:** 1:2:1 recessive ratios and mutation rates.
 - **Speciation:** across a newly flooded strait it happens; in a connected control it doesn't.
 - **Selection:** cold tolerance tracks the climate.

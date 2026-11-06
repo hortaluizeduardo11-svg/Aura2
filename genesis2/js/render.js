@@ -59,6 +59,21 @@
     clampCam();
   };
   R.size = () => ({ w: cw, h: ch });
+  // Warm-up (loading screen, and when people first appear): paint every terrain chunk, the overlay
+  // and minimap, and the tree tiles for what is on screen, so the first frames have nothing to build.
+  R.prewarm = function () {
+    lastView = -1; updateTerrain();
+    updateBorders(); R.bordersDirty = false;
+    drawMinimap();
+    const z = R.cam.z;
+    if (z >= 2.9) {
+      const k = Math.round(z) % 3 === 0 ? 3 : 4; decoK = k;
+      const hw = cw / 2 / z + 32, hh = ch / 2 / z + 32;
+      const cx0 = Math.max(0, Math.floor((R.cam.x - hw) / 16)), cx1 = Math.min(CW - 1, Math.floor((R.cam.x + hw) / 16));
+      const cy0 = Math.max(0, Math.floor((R.cam.y - hh) / 16)), cy1 = Math.min(AG.CH - 1, Math.floor((R.cam.y + hh) / 16));
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) { const c = cy * CW + cx; buildDeco(c, k); decoDirty[c] = 0; }
+    }
+  };
   R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
 
   // ------------------------------------------------------------ camera
@@ -190,7 +205,7 @@
   let noShade = false;
   // A cell's colour without sun shading or water sparkle: the 3D view lights it for real.
   R.flatColor = function (i) { noShade = true; const v = surfPix(i, i % W, (i / W) | 0); noShade = false; return v; };
-  let LX = 0.6, LY = -0.55, season = 0;
+  let LX = 0.6, LY = -0.55, season = 0, glints = false; // glints only on water that moves
   const dry = (j) => Wd.fl[j] < 0.002 || Wd.frozen[j] === 1;
   const clamp255 = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
   function waterPix(i, x, y, e, f, d, inner) {
@@ -202,7 +217,7 @@
     if (!ocean) { r = r * 0.6 + C.river[0] * 0.4; g = g * 0.6 + C.river[1] * 0.4; b = b * 0.6 + C.river[2] * 0.4; }
     const shim = noShade ? 0 : Math.sin(x * 0.8 + tm * 2.1 + d * 0.3) * Math.sin(y * 0.6 - tm * 1.7);
     if (shim > 0.6) { r += 14; g += 18; b += 16; }
-    if (!noShade && depth > 0.025 && (x * 7 + y * 13 + ((tm * 3) | 0) * 11) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints
+    if (glints && !noShade && depth > 0.025 && ((hash(x, y) + ((tm * 3) | 0) * 40503) >>> 0) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints, scattered (a still lattice of them read as streaks)
     if (inner && (dry(i - 1) || dry(i + 1) || dry(i - W) || dry(i + W))) {
       const fo = 0.42 + 0.3 * Math.sin(tm * 2.4 + (x + y) * 0.7); // lapping shoreline foam
       r += (C.foam[0] - r) * fo; g += (C.foam[1] - g) * fo; b += (C.foam[2] - b) * fo;
@@ -349,6 +364,21 @@
     if (sig !== decoSig[c]) { decoSig[c] = sig; decoDirty[c] = 1; }
   }
   let visRoll = 0;
+  // Only the repainted parts of the world image are uploaded: one span of chunks per chunk row
+  // (putImageData converts every pixel it is given, and Safari does that on the CPU).
+  const spanLo = new Int32Array(AG.CH).fill(1 << 30), spanHi = new Int32Array(AG.CH).fill(-1);
+  function paintAt(k, under) {
+    paintChunk(k, under);
+    const cy = (k / CW) | 0, cx = k - cy * CW;
+    if (cx < spanLo[cy]) spanLo[cy] = cx;
+    if (cx > spanHi[cy]) spanHi[cy] = cx;
+  }
+  function upload(under, all) {
+    const g = under ? uctx : wctx, img = under ? uimg : wimg;
+    if (all) g.putImageData(img, 0, 0);
+    else for (let cy = 0; cy < AG.CH; cy++) if (spanHi[cy] >= 0) g.putImageData(img, 0, 0, spanLo[cy] << 4, cy << 4, (spanHi[cy] - spanLo[cy] + 1) << 4, 16);
+    spanLo.fill(1 << 30); spanHi.fill(-1);
+  }
   function updateTerrain() {
     const under = R.view === 0;
     const sun = Sky.sunDir(), day = Sky.daylight();
@@ -357,11 +387,12 @@
     const full = lastView !== (under ? 0 : 1);
     lastView = under ? 0 : 1;
     let painted = 0;
-    if (full) { for (let k = 0; k < NC; k++) paintChunk(k, under); dirty.fill(0); painted = NC; }
+    glints = (AG.mode === 'watch' || under) && R.perf.animate;
+    if (full) { for (let k = 0; k < NC; k++) paintChunk(k, under); dirty.fill(0); painted = NC; upload(under, true); R.stats.painted = painted; return; }
     else {
       const live = (AG.mode === 'watch' || under) && R.perf.animate; // in deep time and history (and on slow machines) water does not ripple
-      for (let k = 0; k < NC; k++) if (dirty[k] || (live && awake[k] && (frameN + k) % 3 === 0)) { paintChunk(k, under); dirty[k] = 0; painted++; }
-      if (!live) { if (painted) (under ? uctx : wctx).putImageData(under ? uimg : wimg, 0, 0); R.stats.painted = painted; return; }
+      for (let k = 0; k < NC; k++) if (dirty[k] || (live && awake[k] && (frameN + k) % 3 === 0)) { paintAt(k, under); dirty[k] = 0; painted++; }
+      if (!live) { if (painted) upload(under, painted > NC / 2); R.stats.painted = painted; return; }
       // animate visible water and fire: a quarter of those chunks per frame
       const c = R.cam, hw = cw / 2 / c.z, hh = ch / 2 / c.z;
       const vx0 = Math.max(0, (c.x - hw) >> 4), vx1 = Math.min(CW - 1, (c.x + hw) >> 4);
@@ -369,11 +400,11 @@
       const vw = vx1 - vx0 + 1, nv = vw * (vy1 - vy0 + 1);
       for (let k = 0; k < nv; k++) {
         const q = (visRoll + k) % nv, cc = (vy0 + ((q / vw) | 0)) * CW + vx0 + (q % vw);
-        if ((k & 3) === (frameN & 3) && (under ? Wd.uawake[cc] || true : animated[cc])) { paintChunk(cc, under); painted++; }
+        if ((k & 3) === (frameN & 3) && (under ? Wd.uawake[cc] || true : animated[cc])) { paintAt(cc, under); painted++; }
       }
-      for (let k = 0; k < 10; k++) { paintChunk(roll, under); roll = (roll + 1) % NC; }
+      for (let k = 0; k < 10; k++) { paintAt(roll, under); roll = (roll + 1) % NC; }
     }
-    (under ? uctx : wctx).putImageData(under ? uimg : wimg, 0, 0);
+    upload(under, painted > NC / 2);
     R.stats.painted = painted;
   }
 

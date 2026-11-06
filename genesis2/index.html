@@ -205,6 +205,20 @@
   /* lean and potato performance levels: no full-screen vignette, flat panels */
   html.perf-lean #vignette { display: none; }
   html.perf-lean .glass { box-shadow: none; }
+  /* ---------- loading screen and errors ---------- */
+  #loader { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, #16223a 0%, #0b1120 70%); transition: opacity 0.45s ease; padding: 16px; }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .ld-box { width: min(420px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; }
+  .ld-title { display: flex; align-items: baseline; gap: 10px; }
+  .ld-title b { font: 700 40px/1 var(--display); letter-spacing: 0.08em; color: var(--gold); }
+  .ld-title span { font: 500 18px/1 var(--display); letter-spacing: 0.24em; color: var(--muted); }
+  .ld-bar { width: 100%; height: 8px; border-radius: 4px; background: rgba(255, 244, 214, 0.08); overflow: hidden; border: 1px solid var(--line); }
+  .ld-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #c98a2e, var(--gold)); border-radius: 4px; transition: width 0.25s ease; }
+  .ld-step { font: 600 14px var(--body); color: var(--ink); font-variant-numeric: tabular-nums; min-height: 1.3em; }
+  .ld-tip { font: italic 400 15px/1.4 var(--lore); color: var(--muted); max-width: 36ch; }
+  #errbox { position: absolute; z-index: 45; left: 50%; top: 70px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); padding: 12px 14px; display: grid; gap: 6px; font-size: 14px; }
+  #errbox #err-msg { font: 12px/1.4 ui-monospace, Menlo, monospace; color: #f3b2ac; white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow: auto; }
+  @media (prefers-reduced-motion: reduce) { #loader, .ld-bar i { transition: none; } }
   /* ---------- overlays ---------- */
   #toast { position: absolute; z-index: 9; top: 70px; left: 50%; transform: translateX(-50%); max-width: min(520px, calc(100% - 32px)); padding: 9px 14px; font-size: 14px; text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
   #toast.show { opacity: 1; }
@@ -332,6 +346,19 @@
   </div>
 
   <div id="toast" class="glass" role="status" aria-live="polite"></div>
+  <div id="loader" role="status" aria-live="polite">
+    <div class="ld-box">
+      <div class="ld-title"><b>AURA</b><span>GENESIS II</span></div>
+      <div class="ld-bar"><i id="ld-fill"></i></div>
+      <div class="ld-step" id="ld-step">Loading</div>
+      <div class="ld-tip" id="ld-tip">Every world is born in Year 0 as one continent of its own.</div>
+    </div>
+  </div>
+  <div id="errbox" class="glass" role="alert" hidden>
+    <b>Something went wrong.</b>
+    <span id="err-msg"></span>
+    <div class="btnrow"><button type="button" class="btn" id="err-copy">Copy details</button><button type="button" class="btn" id="err-close">Dismiss</button></div>
+  </div>
   <input type="file" id="loadfile" accept=".json,application/json" hidden>
   <div id="modal" hidden><div class="box glass" id="modalbox" role="dialog" aria-modal="true"></div></div>
 </div>

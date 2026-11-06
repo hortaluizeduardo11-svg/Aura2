@@ -265,18 +265,19 @@
     if (any) { shift(); lockCollisions(); }
     classify(dt);
     hotspots(dt);
+    const orogK = Math.pow(0.97, dt);
     for (let c = 0; c < GN; c++) {
       Geo.age[c] += dt;
       if (Geo.crust[c] < CONT - 0.03 && Geo.rock[c] === ROCK.BASALT) { // old ocean floor cools and sinks
         const target = oceanDepth(Geo.age[c]);
         if (Geo.crust[c] > target) Geo.crust[c] += (target - Geo.crust[c]) * 0.05 * dt;
       }
-      Geo.orog[c] *= Math.pow(0.97, dt);
+      Geo.orog[c] *= orogK;
       // isostasy: thick continental crust floats back up as erosion strips it
       if (Geo.lith[c] === 1 && Geo.crust[c] < 0.455) Geo.crust[c] += (0.455 - Geo.crust[c]) * Math.min(1, 0.06 * dt);
       else if (Geo.lith[c] === 2 && Geo.age[c] > 25) Geo.lith[c] = 0; // an old rift has become ocean floor
     }
-    climateDeep(dt);
+    if (Geo.stepN % 2 === 1) climateDeep(dt * 2); // climate changes slowly: every second step, for both (on the steps without the full erosion pass)
     erode(dt, Geo.stepN % 2 === 0);
     wilson(dt);
     if (Geo.stepN % 8 === 0) recordFrame();
@@ -620,10 +621,12 @@
   }
   Geo.sampleField = sampleField;
 
-  Geo.paintFine = function () {
+  // The fine map painted from the coarse crust and climate, a band of rows at a time: deep time
+  // sweeps the map a few rows per frame instead of repainting it all at once.
+  Geo.paintRows = function (yA, yB) {
     const { elev, fl, ft, frozen, veg, soil, snow, tbase, moist, ice, rock, plate } = Wd;
     const P = Geo.plates, sl = Geo.seaLevel;
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    for (let y = yA; y < yB; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, c = Geo.cellOf(x, y), p = P[Geo.plate[c]] || P[0];
       const ux = (x - p.ox * CS) & (T - 1), uy = (y - p.oy * CS) & (T - 1), tI = uy * T + ux;
       // continental shelves: flooded continental crust lies shallow (within the reach of an ice-age
@@ -653,8 +656,11 @@
       veg[i] = ice[i] ? 0 : AG.clamp(Wd.vegCap(mo, tt, soil[i]) * (0.55 + (tileA[(tI + 999) & (T * T - 1)] + 0.5) * 0.7), 0, 255) | 0;
       snow[i] = ice[i] || elev[i] > AG.PEAK || tt < 0.06 ? 220 : 0;
     }
-    Wd.dirty.fill(1); Wd.udirty.fill(1);
+    // the chunks those rows touch need repainting on screen
+    const r0 = (yA >> 4) * AG.CW, r1 = Math.min(AG.NC, (((yB - 1) >> 4) + 1) * AG.CW);
+    for (let k = r0; k < r1; k++) { Wd.dirty[k] = 1; Wd.udirty[k] = 1; }
   };
+  Geo.paintFine = function () { Geo.paintRows(0, H); Wd.dirty.fill(1); Wd.udirty.fill(1); };
 
   // ------------------------------------------------------------ the Dawn: finish the world
   Geo.dawn = function () {

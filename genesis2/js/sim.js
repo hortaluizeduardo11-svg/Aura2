@@ -107,17 +107,18 @@
     AG.tick += Math.round(dy * AG.YEAR_TICKS);
     time('geo', () => Geo.yearStep(dy));
     time('world', () => worldYear(dy));
-    time('life', () => Life.yearStep(dy));
-    Sim.h = { dy, cs: Civ.yearBegin(), i: 0, phase: 1 };
+    Sim.h = { dy, cs: Civ.yearBegin(), i: 0, phase: 0, end: null, ei: 0 };
   };
   // Returns true when the step is complete; stops early once AG.now() passes `until`.
   Sim.stepRun = function (until) {
     const h = Sim.h; if (!h) return true;
+    if (h.phase === 0) { time('life', () => Life.yearStep(h.dy)); h.phase = 1; if (t0() > until) return false; }
     while (h.phase === 1 && h.i < h.cs.length) { Civ.communityYear(h.cs[h.i++], h.dy); if ((h.i & 3) === 0 && t0() > until) return false; }
     if (h.phase === 1) { h.phase = 2; h.i = 0; }
-    while (h.i < h.cs.length) { Civ.yearTech(h.cs[h.i++], h.dy); if ((h.i & 7) === 0 && t0() > until) return false; }
+    while (h.phase === 2 && h.i < h.cs.length) { Civ.yearTech(h.cs[h.i++], h.dy); if ((h.i & 7) === 0 && t0() > until) return false; }
+    if (h.phase === 2) { h.phase = 3; h.end = Civ.yearEndParts(h.dy); h.ei = 0; if (t0() > until) return false; }
+    while (h.ei < h.end.length) { if (h.end[h.ei](until) === false) return false; h.ei++; if (h.ei < h.end.length && t0() > until) return false; }
     Sim.h = null;
-    Civ.yearEnd(h.dy);
     geoEvents();
     AG.History.yearTick();
     return true;

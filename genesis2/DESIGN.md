@@ -82,10 +82,16 @@ suite runs determinism, geology, genetics and technology tests without a browser
 | Millennia | up to 400 years per second | **History**: Δ = 8 |
 | Ages | 6 million years per second | **Deep time** (before the Age of People); *Skip to the Dawn* races the rest |
 
-The sim runs under a 14 ms per-frame budget. A history step is split into phases (land and
-life; each community; inventions; contacts, polities, war and languages) and spread over as many
-frames as it needs, so the picture stays smooth while thousands of people live their years. The
-order of work is identical either way (a determinism test checks it). When a rate can't be met,
+The sim runs under a per-frame budget (9 ms at the Full performance level, down to 5 ms at
+Potato). A history step is split into phases and spread over as many frames as it needs:
+- land and life
+- each community
+- inventions
+- the year's end in parts: contacts between communities (a job that can stop between rows and
+  resume), polities, war, languages and borders
+
+The picture stays smooth while thousands of people live their years. The order of work is
+identical however a step is sliced (a determinism test checks it). When a rate can't be met,
 the HUD shows "at capacity" and the achieved years per second appear in World → Engine.
 
 ### 3.3 Calendar and world story
@@ -673,9 +679,19 @@ These follow from the same rules rather than special cases:
 - Year steps cost O(persons + communities + species-regions), with Δ = 8 at top speed.
 - Embodied people are capped by LOD; v1's spatial hash, staggered AI and flow fields are kept.
 - History snapshots for counterfactuals are taken every 500 years, in a ring of 5 plus the Dawn.
-  The living are copied, in slices over several frames while the simulation waits (the picture
-  keeps moving); each dead person is copied once and shared by later snapshots; per-tick caches
-  are dropped first.
+  A snapshot is a list of about a hundred small stages (people in batches sized to take ~3 ms,
+  each world field, species, communities and polities in chunks), run over several frames while
+  the simulation waits, so the picture keeps moving. Each dead person is copied once and shared
+  by later snapshots, and per-tick caches are dropped first. A test checks that a snapshot
+  spread over many slices restores the same world as one taken at once.
+- A loading screen covers every heavy first-time job:
+  - at start: fonts, the first world, every map chunk image, the borders, the minimap and the 3D
+    shaders (compiled and drawn once off screen)
+  - again at the Dawn and for a new world
+  So the first playable frame has nothing left to build.
+- The year's contacts between communities read positions, polities, landmasses and the relevant
+  skills from flat typed arrays packed at the start of the pass, not from the large community
+  records.
 - Rendering skips what holds nothing: the darkness and glow layers in daylight, empty gas and
   cloud layers, the creature-dot layer with no creatures, weather and god rays outside watch
   time, water animation and lighting refreshes while time races. The vignette is CSS. Name

@@ -386,7 +386,7 @@
       case 'bless': if (i >= 0) { God.apply('bless', U.x[i], U.y[i], 3, 1, 1); } break;
       case 'smite': if (i >= 0) God.lightning(U.x[i], U.y[i], false); break;
       case 'dream': if (i >= 0) God.apply('dream', U.x[i], U.y[i], 1); break;
-      case 'newworld': AG.newWorld(parseInt($('#seed').value, 10) || 0); break;
+      case 'newworld': { const sd = parseInt($('#seed').value, 10) || 0; AG.Loader.show('Shaping a new world', 'Every world is born in Year 0 as one continent of its own.'); AG.Loader.set(0.3); setTimeout(() => { try { AG.newWorld(sd); AG.Loader.set(0.7, 'Painting the land'); R.prewarm(); } catch (e) { AG.showError(e); } AG.Loader.set(1, 'Ready'); AG.Loader.hide(); }, 40); break; }
       case 'save': UI.save(); break;
       case 'load': $('#loadfile').click(); break;
       case 'timelapse': UI.timelapse(); break;
