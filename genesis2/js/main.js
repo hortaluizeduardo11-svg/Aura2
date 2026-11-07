@@ -53,7 +53,7 @@
   function applyPerf() {
     const L = LEVELS[Perf.level];
     BUDGET_MS = L.budget;
-    R.perf.cosmetics = L.cosmetics; R.perf.minimapEvery = L.minimap; R.perf.fade = L.repaint / 1000; R.perf.animate = Perf.level < 2; R.perf.wildZ = Perf.level < 2 ? 4 : 7;
+    R.perf.cosmetics = L.cosmetics; R.perf.minimapEvery = L.minimap; R.perf.animate = Perf.level < 2; R.perf.wildZ = Perf.level < 2 ? 4 : 7;
     R.setScale(L.scale);
     AG.Physics.farEvery = L.farEvery; AG.Life.bodyK = L.bodyK; Civ.lodBudget = L.lod;
     if (AG.View3D) { AG.View3D.allowed = L.allow3D; AG.View3D.minQuality = L.minQ; }
@@ -192,7 +192,7 @@
   };
 
   // ------------------------------------------------------------ the loop
-  let sweepY = 0, errStreak = 0;
+  let errStreak = 0;
   let last = performance.now(), acc = 0, frames = 0, ticks = 0, years = 0, myr = 0, windowStart = last, errors = 0, lastPaint = 0, lodT = 0;
   function frame(now) {
     try {
@@ -212,15 +212,9 @@
             if (acc > Sim.DEEP_DT * 2) acc = Sim.DEEP_DT * 2;
           }
         }
-        // the map follows the moving land as a sweep of a few rows per frame (never all at once),
-        // skipped on frames that already ran a step
-        if (AG.mode === 'deep' && !stepped) {
-          const H = AG.H, rows = Math.max(4, Math.ceil(H * (dt / 1000) / (LEVELS[Perf.level].repaint / 500)));
-          const y1 = Math.min(H, sweepY + rows);
-          Geo.paintRows(sweepY, y1);
-          sweepY = y1 >= H ? 0 : y1;
-          if (sweepY === 0) R.bordersDirty = true;
-        }
+        // the next picture of the land is built off screen a few rows per frame (skipped on frames
+        // that already ran a step); the map then morphs into it everywhere at once
+        if (AG.mode === 'deep' && !stepped) R.deepFrame(Math.max(4, Math.ceil(AG.H * (dt / 1000) / (LEVELS[Perf.level].repaint / 500))));
         if (AG.mode !== 'deep') { acc = 0; if (AG.Demos._after) { const f = AG.Demos._after; AG.Demos._after = null; f(); } }
       } else if (AG.mode === 'watch') {
         if (!AG.paused) acc += dt * AG.speed;

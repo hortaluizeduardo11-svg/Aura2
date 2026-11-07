@@ -280,7 +280,10 @@
     God.brush.r = br; God.brush.str = bs; God.locus = loc;
   };
   function act(t, x, y, k) {
-    if (t.id !== 'inspect' && t.id !== 'possess') AG.History.record('tool', { id: t.id, x, y, k, r: God.brush.r, s: God.brush.str, l: God.locus });
+    if (t.id !== 'inspect' && t.id !== 'possess') {
+      AG.History.record('tool', { id: t.id, x, y, k, r: God.brush.r, s: God.brush.str, l: God.locus });
+      if (AG.mode === 'deep' && AG.Render && AG.Render.deepPoke) AG.Render.deepPoke(); // the deep-time map shows what it did
+    }
     if (t.mode === 'click') t.click(x, y); else t.apply(x, y, k);
   }
   God.press = function (x, y) {

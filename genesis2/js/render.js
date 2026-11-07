@@ -41,7 +41,7 @@
   // Performance knobs, set by AG.Perf (main.js): the canvas can hold fewer pixels than the screen
   // (drawing stays in screen coordinates through a scale transform, and the browser stretches the
   // pixel art up crisply); cosmetic layers can be switched off; the minimap redraws less often.
-  R.perf = { scale: 1, cosmetics: true, minimapEvery: 12, fade: 0.25, animate: true, wildZ: 4 };
+  R.perf = { scale: 1, cosmetics: true, minimapEvery: 12, animate: true, wildZ: 4 };
   R.setScale = function (k) { if (Math.abs(k - R.perf.scale) > 0.01) { R.perf.scale = k; R.resize(); } };
   R.resize = function () {
     const r = cv.getBoundingClientRect();
@@ -74,7 +74,7 @@
       for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) { const c = cy * CW + cx; buildDeco(c, k); decoDirty[c] = 0; }
     }
   };
-  R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
+  R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; morphReset(); Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
 
   // ------------------------------------------------------------ camera
   // The world is sized to the screen, so the smallest zoom always fills it edge to edge.
@@ -215,11 +215,12 @@
     waterColour(q, wc);
     let r = wc[0], g = wc[1], b = wc[2];
     if (!ocean) { r = r * 0.6 + C.river[0] * 0.4; g = g * 0.6 + C.river[1] * 0.4; b = b * 0.6 + C.river[2] * 0.4; }
-    const shim = noShade ? 0 : Math.sin(x * 0.8 + tm * 2.1 + d * 0.3) * Math.sin(y * 0.6 - tm * 1.7);
+    const wt = glints ? tm : 0; // water that does not animate is drawn still
+    const shim = noShade ? 0 : Math.sin(x * 0.8 + wt * 2.1 + d * 0.3) * Math.sin(y * 0.6 - wt * 1.7);
     if (shim > 0.6) { r += 14; g += 18; b += 16; }
-    if (glints && !noShade && depth > 0.025 && ((hash(x, y) + ((tm * 3) | 0) * 40503) >>> 0) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints, scattered (a still lattice of them read as streaks)
+    if (glints && !noShade && depth > 0.025 && ((hash(x, y) + ((wt * 3) | 0) * 40503) >>> 0) % 53 === 0) { r = 236; g = 246; b = 255; } // sun glints, scattered (a still lattice of them read as streaks)
     if (inner && (dry(i - 1) || dry(i + 1) || dry(i - W) || dry(i + W))) {
-      const fo = 0.42 + 0.3 * Math.sin(tm * 2.4 + (x + y) * 0.7); // lapping shoreline foam
+      const fo = 0.42 + 0.3 * Math.sin(wt * 2.4 + (x + y) * 0.7); // lapping shoreline foam
       r += (C.foam[0] - r) * fo; g += (C.foam[1] - g) * fo; b += (C.foam[2] - b) * fo;
     }
     return [r, g, b];
@@ -344,25 +345,131 @@
     return pack(clamp255(r), clamp255(g), clamp255(b));
   }
   const animated = new Uint8Array(NC); // chunks holding water, lava, acid or fire
-  function paintChunk(c, under) {
+  function paintChunk(c, under, out) { // out: a hidden picture to draw into (deep time), else the map
     const x0 = (c % CW) << 4, y0 = ((c / CW) | 0) << 4;
     if (under) {
       for (let y = y0; y < y0 + 16; y++) { let i = y * W + x0; for (let x = x0; x < x0 + 16; x++, i++) upix[i] = underPix(i, x, y); }
       return;
     }
     let sig = season + 1, ani = 0;
+    const px = out || wpix;
     for (let y = y0; y < y0 + 16; y++) {
       let i = y * W + x0;
       for (let x = x0; x < x0 + 16; x++, i++) {
-        wpix[i] = surfPix(i, x, y);
+        px[i] = surfPix(i, x, y);
         const v = Wd.veg[i], wet = Wd.fl[i] > 0.004;
         if (wet || Wd.fire[i]) ani = 1;
         sig = (Math.imul(sig, 31) + ((v >= 165 ? 3 : v >= 110 ? 2 : v >= 60 ? 1 : 0) | (Wd.snow[i] > 120 ? 4 : 0) | (Wd.bgrid[i] ? 8 : 0) | (Wd.fire[i] ? 16 : 0) | (wet ? 32 : 0) | (Wd.soil[i] << 6))) | 0;
       }
     }
     animated[c] = ani;
-    if (sig !== decoSig[c]) { decoSig[c] = sig; decoDirty[c] = 1; }
+    if (out) mo.sigB[c] = sig; // trees follow when the morph reaches this chunk
+    else if (sig !== decoSig[c]) { decoSig[c] = sig; decoDirty[c] = 1; }
   }
+  // ------------------------------------------------------------ deep time: the land morphs
+  // The geology repaints the fine map a band of rows per frame, but no band is ever shown as it is
+  // painted (that drew a line sweeping the map). The rows are drawn into a hidden picture; when it
+  // is whole, the map on screen dissolves into it everywhere at once, cell by cell, in an order set
+  // by a fixed noise field (drifting patches with a fine grain). Each dissolve lasts about as long
+  // as the next picture takes to build, so the land changes all the time, smoothly, with no sweep
+  // and no jump. Only cells that differ are touched: a dissolve costs what actually changed.
+  const NB = 64;
+  const mo = {
+    build: new Uint32Array(W * H), to: new Uint32Array(W * H), // picture being built; target of the dissolve
+    sigB: new Int32Array(NC), sigT: new Int32Array(NC),          // tree signatures of those pictures, per chunk
+    order: new Uint8Array(W * H), corder: new Uint8Array(NC),    // each cell's (and chunk's) moment in a dissolve
+    list: new Int32Array(W * H), start: new Int32Array(NB + 1), trees: [],
+    y: 0, rows: 0, ready: false, on: false, t0: 0, dur: 1, applied: 0, rot: 0, passT0: 0, stepAt: -1, poke: false,
+  };
+  (function morphOrder() {
+    // value noise: patches of ~24 and ~7 cells and a per-cell grain, flattened to an even spread
+    const v = new Float32Array(W * H);
+    const octave = (sc, wgt, salt) => {
+      const gw = Math.ceil(W / sc) + 2, gh = Math.ceil(H / sc) + 2, g = new Float32Array(gw * gh);
+      for (let k = 0; k < g.length; k++) g[k] = hash((k % gw) + salt, ((k / gw) | 0) * 7 + salt) / 4294967296;
+      for (let y = 0; y < H; y++) {
+        const fy = y / sc, iy = fy | 0, ty = fy - iy, sy = ty * ty * (3 - 2 * ty);
+        for (let x = 0; x < W; x++) {
+          const fx = x / sc, ix = fx | 0, tx = fx - ix, sx = tx * tx * (3 - 2 * tx), k = iy * gw + ix;
+          const a = g[k] + (g[k + 1] - g[k]) * sx, b = g[k + gw] + (g[k + gw + 1] - g[k + gw]) * sx;
+          v[y * W + x] += (a + (b - a) * sy) * wgt;
+        }
+      }
+    };
+    octave(24, 0.62, 101); octave(7, 0.28, 307);
+    for (let i = 0; i < W * H; i++) v[i] += (hash(i % W, ((i / W) | 0) + 9001) / 4294967296) * 0.1;
+    const BINS = 1024, hist = new Int32Array(BINS);
+    for (let i = 0; i < W * H; i++) hist[Math.min(BINS - 1, (v[i] * BINS) | 0)]++;
+    for (let b = 1; b < BINS; b++) hist[b] += hist[b - 1];
+    for (let i = 0; i < W * H; i++) mo.order[i] = Math.min(NB - 1, ((hist[Math.min(BINS - 1, (v[i] * BINS) | 0)] - 1) / (W * H)) * NB) | 0;
+    for (let c = 0; c < NC; c++) mo.corder[c] = mo.order[((((c / CW) | 0) << 4) + 8) * W + ((c % CW) << 4) + 8];
+  })();
+  // Main asks for a few rows of the fine map each frame of deep time (none while a finished
+  // picture waits for the running dissolve to end).
+  R.deepFrame = function (rows) {
+    if (mo.ready) return;
+    if (mo.y === 0 && mo.rows === 0) { // a new picture only once the land has moved or a power touched it
+      if (AG.Geo.stepN === mo.stepAt && !mo.poke) return;
+      mo.stepAt = AG.Geo.stepN; mo.poke = false; mo.passT0 = AG.now();
+    }
+    const y1 = Math.min(H, mo.y + rows);
+    AG.Geo.paintRows(mo.y, y1, true); // quiet: nothing on screen is marked for repainting
+    mo.y = y1;
+    // draw each band of chunks once its cells and the row below (shading, shores) are painted
+    const upto = y1 >= H ? AG.CH : Math.max(0, (y1 - 1) >> 4);
+    if (mo.rows < upto) { lightNow(); glints = false; }
+    for (; mo.rows < upto; mo.rows++) for (let cx = 0; cx < CW; cx++) paintChunk(mo.rows * CW + cx, false, mo.build);
+    if (mo.rows >= AG.CH) {
+      mo.ready = true; mo.y = 0; mo.rows = 0;
+      mo.dur = AG.clamp((AG.now() - mo.passT0) / 1000, 0.35, 3); // the next dissolve lasts as long as this picture took
+      R.bordersDirty = true;
+    }
+  };
+  function morphStart() {
+    // the finished picture becomes the target; the old target (already on screen) is reused
+    let t = mo.to; mo.to = mo.build; mo.build = t;
+    t = mo.sigT; mo.sigT = mo.sigB; mo.sigB = t;
+    mo.ready = false; mo.on = true; mo.t0 = AG.now(); mo.applied = 0;
+    mo.rot = (mo.rot + 23) % NB; // the order turns a little each time, so no patch always leads
+    const to = mo.to, order = mo.order, rot = mo.rot, start = mo.start, list = mo.list, n = W * H;
+    start.fill(0);
+    for (let i = 0; i < n; i++) if (wpix[i] !== to[i]) start[((order[i] + rot) % NB) + 1]++;
+    for (let b = 0; b < NB; b++) start[b + 1] += start[b];
+    const fill = start.slice(0, NB);
+    for (let i = 0; i < n; i++) if (wpix[i] !== to[i]) list[fill[(order[i] + rot) % NB]++] = i;
+    R.stats.morphCells = start[NB]; R.stats.morphs = (R.stats.morphs || 0) + 1; R.stats.morphSecs = mo.dur;
+    mo.trees.length = 0;
+    for (let c = 0; c < NC; c++) if (mo.sigT[c] !== decoSig[c]) mo.trees.push(c);
+  }
+  function morphStep() {
+    if (!mo.on) { if (!mo.ready) return; morphStart(); }
+    const t = (AG.now() - mo.t0) / (mo.dur * 1000), upto = t >= 1 ? NB : Math.floor(t * NB);
+    if (upto <= mo.applied) return;
+    const to = mo.to, list = mo.list, start = mo.start;
+    for (let k = start[mo.applied]; k < start[upto]; k++) {
+      const i = list[k], y = (i / W) | 0, cy = y >> 4, cx = (i - y * W) >> 4;
+      wpix[i] = to[i];
+      if (cx < spanLo[cy]) spanLo[cy] = cx;
+      if (cx > spanHi[cy]) spanHi[cy] = cx;
+    }
+    for (let k = mo.trees.length - 1; k >= 0; k--) {
+      const c = mo.trees[k];
+      if ((mo.corder[c] + mo.rot) % NB < upto) { decoSig[c] = mo.sigT[c]; decoDirty[c] = 1; mo.trees[k] = mo.trees[mo.trees.length - 1]; mo.trees.pop(); }
+    }
+    mo.applied = upto;
+    if (upto >= NB) mo.on = false;
+  }
+  // A chunk drawn straight onto the map (a god power, a new world) goes into the hidden pictures too.
+  function morphCopy(k) {
+    const x0 = (k % CW) << 4, y0 = ((k / CW) | 0) << 4;
+    for (let y = y0; y < y0 + 16; y++) { const i = y * W + x0, row = wpix.subarray(i, i + 16); mo.to.set(row, i); mo.build.set(row, i); }
+    mo.sigT[k] = mo.sigB[k] = decoSig[k];
+  }
+  // After the whole map is drawn at once: nothing left to dissolve into.
+  function morphSync() { mo.to.set(wpix); mo.build.set(wpix); mo.sigT.set(decoSig); mo.sigB.set(decoSig); mo.on = false; mo.trees.length = 0; }
+  function morphReset() { morphSync(); mo.ready = false; mo.y = 0; mo.rows = 0; mo.stepAt = AG.Geo.stepN; mo.poke = false; }
+  R.deepPoke = function () { mo.poke = true; }; // a power was used in deep time: rebuild the picture
+
   let visRoll = 0;
   // Only the repainted parts of the world image are uploaded: one span of chunks per chunk row
   // (putImageData converts every pixel it is given, and Safari does that on the CPU).
@@ -379,17 +486,31 @@
     else for (let cy = 0; cy < AG.CH; cy++) if (spanHi[cy] >= 0) g.putImageData(img, 0, 0, spanLo[cy] << 4, cy << 4, (spanHi[cy] - spanLo[cy] + 1) << 4, 16);
     spanLo.fill(1 << 30); spanHi.fill(-1);
   }
+  function lightNow() { const sun = Sky.sunDir(), day = Sky.daylight(); LX = day > 0.05 ? sun.x : -0.5; LY = sun.y; season = Sky.season(); }
   function updateTerrain() {
     const under = R.view === 0;
-    const sun = Sky.sunDir(), day = Sky.daylight();
-    LX = day > 0.05 ? sun.x : -0.5; LY = sun.y; season = Sky.season();
+    lightNow();
     const dirty = under ? Wd.udirty : Wd.dirty, awake = under ? Wd.uawake : Wd.awake;
     const full = lastView !== (under ? 0 : 1);
     lastView = under ? 0 : 1;
     let painted = 0;
     glints = (AG.mode === 'watch' || under) && R.perf.animate;
-    if (full) { for (let k = 0; k < NC; k++) paintChunk(k, under); dirty.fill(0); painted = NC; upload(under, true); R.stats.painted = painted; return; }
-    else {
+    if (full) {
+      for (let k = 0; k < NC; k++) paintChunk(k, under);
+      dirty.fill(0); painted = NC; upload(under, true); R.stats.painted = painted;
+      if (!under) morphSync();
+      return;
+    }
+    if (AG.mode === 'deep' && !under) {
+      // deep time: the land morphs (below); only chunks something else changed are drawn at once,
+      // into the hidden pictures too so the morph never brings back what they showed before
+      for (let k = 0; k < NC; k++) if (dirty[k]) { paintAt(k, false); dirty[k] = 0; painted++; morphCopy(k); }
+      morphStep();
+      upload(false, false);
+      R.stats.painted = painted;
+      return;
+    }
+    {
       const live = (AG.mode === 'watch' || under) && R.perf.animate; // in deep time and history (and on slow machines) water does not ripple
       for (let k = 0; k < NC; k++) if (dirty[k] || (live && awake[k] && (frameN + k) % 3 === 0)) { paintAt(k, under); dirty[k] = 0; painted++; }
       if (!live) { if (painted) upload(under, painted > NC / 2); R.stats.painted = painted; return; }
@@ -942,14 +1063,6 @@
     }
   }
 
-  // ------------------------------------------------------------ deep time
-  // The land itself shows the plates moving: each repaint of the map morphs smoothly from the
-  // last one instead of jumping (no lines, arrows or labels on top).
-  const prevC = mk(W, H), pctx = prevC.getContext('2d');
-  let fade = 0, snapWanted = false;
-
-  R.deepRepaint = function () { snapWanted = true; };
-
   // ------------------------------------------------------------ main frame
   R.frame = function (dt, alpha) {
     const t0 = performance.now();
@@ -960,7 +1073,6 @@
     const V3 = AG.View3D;
     if (V3 && V3.ok) { V3.update(dt); if (V3.active) { frame3D(dt, alpha, t0); return; } }
     const z = c.z, under = R.view === 0;
-    if (snapWanted) { pctx.clearRect(0, 0, W, H); pctx.drawImage(worldC, 0, 0); fade = 1; snapWanted = false; } // keep the last picture to morph from
     const tp = performance.now();
     updateTerrain();
     R.stats.terrainMs = performance.now() - tp;
@@ -975,7 +1087,6 @@
     ctx.fillStyle = under ? '#0b090d' : '#0e2a5a';
     ctx.fillRect(0, 0, cw, ch);
     ctx.drawImage(under ? underC : worldC, ox, oy, W * z, H * z);
-    if (!under && fade > 0) { ctx.globalAlpha = fade; ctx.drawImage(prevC, ox, oy, W * z, H * z); ctx.globalAlpha = 1; fade = Math.max(0, fade - dt / (R.perf.fade || 0.25)); }
     if (!under && R.overlay !== 'none') ctx.drawImage(borderC, ox, oy, W * z, H * z);
 
     // viewport in world cells

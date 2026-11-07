@@ -453,7 +453,16 @@ SIZE). This is a fact of evolution, not a flag.
 
 - Fine terrain is repainted by dirty chunk (v1). The 3D window holds up to 240² cells around the
   camera.
-- Deep time repaints the whole map at most 6 times per second.
+- Deep time never shows the map being repainted. The geology redraws the fine map a band of rows
+  per frame into a hidden picture. When that picture is whole, the map on screen dissolves into it
+  everywhere at once, cell by cell, in an order set by a fixed noise field: drifting patches about
+  24 and 7 cells across, plus a per-cell grain, evened out so the change is spread through the
+  dissolve.
+  - Each dissolve lasts as long as the next picture took to build, so the land changes all the
+    time with no sweep line and no jump.
+  - Only cells that differ are touched.
+  - Trees follow per chunk at that chunk's moment in the order.
+  - Nothing is rebuilt while time is paused, unless a power is used.
 - Overlays are painted into a low-resolution buffer and scaled.
 
 ---

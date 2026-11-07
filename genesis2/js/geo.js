@@ -622,8 +622,9 @@
   Geo.sampleField = sampleField;
 
   // The fine map painted from the coarse crust and climate, a band of rows at a time: deep time
-  // sweeps the map a few rows per frame instead of repainting it all at once.
-  Geo.paintRows = function (yA, yB) {
+  // builds its next picture of the land a few rows per frame (quiet: the renderer draws those rows
+  // into a hidden picture itself and morphs the map into it, so nothing is marked for repainting).
+  Geo.paintRows = function (yA, yB, quiet) {
     const { elev, fl, ft, frozen, veg, soil, snow, tbase, moist, ice, rock, plate } = Wd;
     const P = Geo.plates, sl = Geo.seaLevel;
     for (let y = yA; y < yB; y++) for (let x = 0; x < W; x++) {
@@ -656,6 +657,7 @@
       veg[i] = ice[i] ? 0 : AG.clamp(Wd.vegCap(mo, tt, soil[i]) * (0.55 + (tileA[(tI + 999) & (T * T - 1)] + 0.5) * 0.7), 0, 255) | 0;
       snow[i] = ice[i] || elev[i] > AG.PEAK || tt < 0.06 ? 220 : 0;
     }
+    if (quiet) return;
     // the chunks those rows touch need repainting on screen
     const r0 = (yA >> 4) * AG.CW, r1 = Math.min(AG.NC, (((yB - 1) >> 4) + 1) * AG.CW);
     for (let k = r0; k < r1; k++) { Wd.dirty[k] = 1; Wd.udirty[k] = 1; }
