@@ -1098,7 +1098,7 @@
   function stillPicture(V3) {
     const c = R.cam, h = R.hover, sel = AG.UI && AG.UI.sel, d = R.view === 0 ? Wd.udirty : Wd.dirty;
     let dirty = 0; for (let k = 0; k < NC; k++) dirty += d[k];
-    const busy = AG.FX.n > 0 || God.down || God.shake > 0 || Sky.flash > 0 || mo.on || mo.ready || dirty > 0 || R.bordersDirty;
+    const busy = God.meteors.length > 0 || God.impacts.length > 0 || AG.FX.n > 0 || God.down || God.shake > 0 || God.flash() > 0 || mo.on || mo.ready || dirty > 0 || R.bordersDirty;
     const sig = busy ? '' : [c.x.toFixed(3), c.y.toFixed(3), c.z.toFixed(4), c.zt, R.view, R.overlay, R.showTrade ? 1 : 0, R.follow, h.on ? h.x.toFixed(1) + ',' + h.y.toFixed(1) : '',
       God.tool, God.brush.r, God.acts | 0, God.possessed, sel ? sel.type + sel.id : '', cw, ch, R.perf.scale, R.perf.cosmetics ? 1 : 0, R.perf.animate ? 1 : 0,
       lastView, AG.tick, AG.mode, AG.Geo.stepN, AG.Geo.year, U.count, V3 && V3.sig ? V3.sig() : ''].join('|');
@@ -1193,7 +1193,7 @@
     if (!under && AG.mode === 'watch') { if (R.perf.cosmetics) weather(dt, ox, oy, z); drawSkyUnitsOver(ox, oy, z, alpha); } // no rain streaks while centuries or ages fly by
     drawParticles(ox, oy, z, under, true);
     if (!under) { drawDisasters(ox, oy, z); drawLightning(ox, oy, z); if (AG.mode === 'watch' && R.perf.cosmetics) godRays(); }
-    if (!under && Sky.flash > 0) { ctx.fillStyle = `rgba(230,236,255,${Sky.flash * 0.35})`; ctx.fillRect(0, 0, cw, ch); }
+    if (!under && God.flash() > 0) { ctx.fillStyle = `rgba(230,236,255,${God.flash() * 0.35})`; ctx.fillRect(0, 0, cw, ch); }
     const tg = performance.now();
     grade(under);
     R.stats.gradeMs = performance.now() - tg;
@@ -1381,7 +1381,7 @@
   }
   function drawDisasters(ox, oy, z) {
     for (const m of God.meteors) {
-      const t = m.t / m.T, hx = m.x - (1 - t) * 40, hy = m.y - (1 - t) * 70;
+      const t = m.t / m.T, progress = 0.25 * t + 0.75 * t * t, hx = m.x - (1 - progress) * 22, hy = m.y - (1 - progress) * 60;
       const sx = ox + hx * z, sy = oy + hy * z;
       const g = ctx.createLinearGradient(sx, sy, sx - 40 * z * 0.25, sy - 70 * z * 0.25);
       g.addColorStop(0, 'rgba(255,220,140,0.95)'); g.addColorStop(1, 'rgba(255,90,20,0)');
@@ -1530,7 +1530,7 @@
     if (R.bordersDirty) { updateBorders(); R.bordersDirty = false; }
     V3.render(dt, alpha);
     ctx.clearRect(0, 0, cw, ch);
-    if (Sky.flash > 0) { ctx.fillStyle = `rgba(230,236,255,${Sky.flash * 0.3})`; ctx.fillRect(0, 0, cw, ch); }
+    if (God.flash() > 0) { ctx.fillStyle = `rgba(230,236,255,${God.flash() * 0.3})`; ctx.fillRect(0, 0, cw, ch); }
     // city name plates float above each keep
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.font = '600 13px "Alegreya Sans", system-ui, sans-serif';

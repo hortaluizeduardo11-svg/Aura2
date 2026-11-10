@@ -11,12 +11,12 @@
   const God = (AG.God = {
     tool: 'inspect', cur: null, brush: { r: 5, str: 0.6 },
     input: { dx: 0, dy: 0, act: false, power: false, aimX: 0, aimY: 0, moveTo: null },
-    possessed: -1, tornadoes: [], meteors: [], shake: 0, disease: 0, pendingKd: -1,
+    possessed: -1, tornadoes: [], meteors: [], impacts: [], shake: 0, disease: 0, pendingKd: -1,
     down: false, wx: 0, wy: 0,
   });
 
   God.reset = function () {
-    God.tornadoes.length = 0; God.meteors.length = 0; God.possessed = -1; God.pendingKd = -1; God.shake = 0;
+    God.tornadoes.length = 0; God.meteors.length = 0; God.impacts.length = 0; God.possessed = -1; God.pendingKd = -1; God.shake = 0;
   };
 
   // ------------------------------------------------------------ brush helpers
@@ -227,7 +227,7 @@
     { id: 'harmony', cat: 'divine', name: 'Harmony', mode: 'click', color: '#81d4fa', desc: 'Tap two peoples to bind them in friendship (ends wars).', click: (x, y) => twoRealms(x, y, true) },
     { id: 'discord', cat: 'divine', name: 'Discord', mode: 'click', color: '#ef5350', desc: 'Tap two peoples to sow hatred between them.', click: (x, y) => twoRealms(x, y, false) },
     // disasters
-    { id: 'meteor', cat: 'ruin', name: 'Meteor', mode: 'click', color: '#ff7043', desc: 'Call down a meteor.', click: (x, y) => { God.meteors.push({ x, y, t: 0, T: 45, r: 4 + God.brush.r * 0.45 }); } },
+    { id: 'meteor', cat: 'ruin', name: 'Meteor', mode: 'click', color: '#ff7043', desc: 'Tap a target to launch a meteor. Watch its flight and impact in real time, even while paused.', click: (x, y) => { God.meteors.push({ x, y, t: 0, T: 45, r: 4 + God.brush.r * 0.45, realTime: true }); } },
     { id: 'volcano', cat: 'ruin', name: 'Volcano', mode: 'click', color: '#d84315', desc: 'Raise an erupting volcano.', click: (x, y) => God.volcano(x, y, 4) },
     { id: 'tornado', cat: 'ruin', name: 'Tornado', mode: 'click', color: '#b0bec5', desc: 'Spawn a tornado. Keep holding to steer it.', click: (x, y) => { God.tornadoes.push({ x, y, vx: 0, vy: 0, life: 700, steer: true, a: 0 }); } },
     { id: 'tsunami', cat: 'ruin', name: 'Tsunami', mode: 'click', color: '#4fc3f7', desc: 'Send a great wave onto the nearest coast.', click: (x, y) => God.tsunami(x, y, 8) },
@@ -292,7 +292,23 @@
     God.down = true; God.wx = x; God.wy = y;
     act(God.cur, x, y, 1);
   };
+  // Player-launched meteors use wall time, independent of civilization speed or pause.
+  // t/T stays compatible with saved games and the 2D renderer.
+  God.flash = () => God.impacts.reduce((value, impact) => Math.max(value, 0.7 - impact.age * 2.5), Sky.flash);
+  God.advanceMeteors = function (dt) {
+    for (let k = God.impacts.length - 1; k >= 0; k--) {
+      God.impacts[k].age += dt;
+      if (God.impacts[k].age > 3.8) God.impacts.splice(k, 1);
+    }
+    for (let k = God.meteors.length - 1; k >= 0; k--) {
+      const m = God.meteors[k];
+      if (!m.realTime || AG.History.replaying) continue;
+      m.t = Math.min(m.T, m.t + Math.max(0, dt) * 20);
+      if (m.t >= m.T) { meteorImpact(m); God.meteors.splice(k, 1); }
+    }
+  };
   God.frame = function (dt) {
+    God.advanceMeteors(dt);
     const k = Math.min(3, dt * 60);
     if (God.down && God.cur.mode === 'brush') act(God.cur, God.wx, God.wy, k);
     if (God.shake > 0) God.shake = Math.max(0, God.shake - dt * 30);
@@ -340,6 +356,9 @@
   }
   function meteorImpact(m) {
     const { x, y, r } = m;
+    if (AG.History.flushSnap) AG.History.flushSnap();
+    const waterHit = Wd.elev[(y | 0) * W + (x | 0)] < AG.SEA;
+    const height = AG.View3D && AG.View3D.ok ? AG.View3D.groundAt(x, y) : 0;
     eachCell(x, y, r * 1.7, (i, f, cx, cy, dd) => {
       const d = dd / r;
       if (Wd.bgrid[i] && d < 1.35) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1);
@@ -357,7 +376,11 @@
     for (const j of unitsIn(x, y, r * 1.5, 1)) Ent.damage(j, 300 * (1 - Math.sqrt(AG.dist2(U.x[j], U.y[j], x, y)) / (r * 1.5)), -1, 'a meteor');
     Wd.wakeArea(x | 0, y | 0, Math.ceil(r * 2)); Wd.wakeU(x | 0, y | 0); Wd.epoch++;
     AG.FX.burst(x, y, 'explosion', 90); AG.FX.burst(x, y, 'debris', 30); AG.FX.burst(x, y, 'ember', 30);
-    God.shake = 20; Sky.flash = Math.max(Sky.flash, 0.7);
+    God.impacts.push({ x, y, r, height, water: waterHit, age: 0 });
+    if (God.impacts.length > 12) God.impacts.shift();
+    if (AG.View3D && AG.View3D.invalidate) AG.View3D.invalidate();
+    if (AG.Render) AG.Render.invalidate();
+    God.shake = 20;
     Civ.experience(x, y, 'fire', 4); Civ.experience(x, y, 'watcher', 2);
     witness(x, y, r * 4, AG.People.MK.DISASTER, 'the falling star', -0.9);
     AG.History.event('quake', `A meteor strikes ${placeName(x, y)}`, { x, y, cause: 'a falling star' });
@@ -427,13 +450,13 @@
     AG.History.event('tsunami', `A great wave strikes the coast ${placeName(x, y)}`, { x, y, cause: natural ? 'an undersea earthquake' : 'divine will' });
   };
   God.state = () => ({ tornadoes: God.tornadoes.map((t) => Object.assign({}, t)), meteors: God.meteors.map((m) => Object.assign({}, m)) });
-  God.setState = (s) => { God.tornadoes = s.tornadoes; God.meteors = s.meteors; God.possessed = -1; };
+  God.setState = (s) => { God.tornadoes = s.tornadoes; God.meteors = s.meteors; God.impacts.length = 0; God.possessed = -1; };
 
   // per simulation tick
   God.tick = function () {
     for (let k = God.meteors.length - 1; k >= 0; k--) {
       const m = God.meteors[k];
-      if (++m.t >= m.T) { meteorImpact(m); God.meteors.splice(k, 1); }
+      if ((!m.realTime || AG.History.replaying) && ++m.t >= m.T) { meteorImpact(m); God.meteors.splice(k, 1); }
     }
     for (let k = God.tornadoes.length - 1; k >= 0; k--) {
       const t = God.tornadoes[k];

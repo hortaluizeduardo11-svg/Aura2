@@ -193,7 +193,7 @@
 
   function bindCanvas(cv) {
     const ptrs = new Map();
-    let pan = null, pinch = null, orbit = null, moved = false, start = null;
+    let pan = null, pinch = null, orbit = null, moved = false, start = null, pendingMeteor = null;
     const local = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const angle = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -202,7 +202,7 @@
       const p = local(e);
       ptrs.set(e.pointerId, p);
       if (ptrs.size === 2) {
-        God.down = false; pan = null; orbit = null;
+        God.down = false; pan = null; orbit = null; pendingMeteor = null;
         const [a, b] = [...ptrs.values()];
         pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: R.cam.z, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, a: angle(a, b) };
         return;
@@ -214,12 +214,14 @@
       if (e.button === 1 || e.button === 2 || e.altKey) { pan = p; return; }
       if (God.possessed >= 0) { God.input.moveTo = { x: w.x, y: w.y }; God.input.aimX = w.x; God.input.aimY = w.y; return; }
       if (God.tool === 'inspect') { pan = p; return; }
-      God.press(w.x, w.y);
+      // Launch on release so an iPad pinch/orbit never fires an accidental meteor.
+      if (God.tool === 'meteor') { pendingMeteor = w.valid !== false ? { id: e.pointerId, x: w.x, y: w.y } : null; return; }
+      if (w.valid !== false) God.press(w.x, w.y);
     });
     cv.addEventListener('pointermove', (e) => {
       const p = local(e);
       const w = R.screenToWorld(p.x, p.y);
-      R.hover.x = w.x; R.hover.y = w.y; R.hover.on = e.pointerType === 'mouse';
+      R.hover.x = w.x; R.hover.y = w.y; R.hover.on = e.pointerType === 'mouse' && w.valid !== false;
       God.wx = w.x; God.wy = w.y; God.input.aimX = w.x; God.input.aimY = w.y;
       if (!ptrs.has(e.pointerId)) return;
       const prev = ptrs.get(e.pointerId);
@@ -238,8 +240,12 @@
     });
     const end = (e) => {
       const p = local(e);
+      if (pendingMeteor && pendingMeteor.id === e.pointerId) {
+        if (e.type === 'pointerup' && !moved && !pinch && ptrs.size === 1 && God.tool === 'meteor' && God.possessed < 0 && Math.hypot(p.x - start.x, p.y - start.y) <= 6) God.press(pendingMeteor.x, pendingMeteor.y);
+        pendingMeteor = null;
+      }
       if (ptrs.has(e.pointerId) && God.tool === 'inspect' && !moved && !pinch && God.possessed < 0 && e.button === 0 && !e.altKey) {
-        const w = R.screenToWorld(p.x, p.y); God.press(w.x, w.y);
+        const w = R.screenToWorld(p.x, p.y); if (w.valid !== false) God.press(w.x, w.y);
       }
       ptrs.delete(e.pointerId);
       if (pinch && ptrs.size < 2) {
@@ -249,7 +255,7 @@
         R.zoomTarget(best);
         pinch = null;
       }
-      if (!ptrs.size) { God.down = false; pan = null; orbit = null; start = null; }
+      if (!ptrs.size) { God.down = false; pan = null; orbit = null; pendingMeteor = null; start = null; }
     };
     cv.addEventListener('pointerup', end);
     cv.addEventListener('pointercancel', end);
@@ -261,12 +267,13 @@
     let wAcc = 0, wLast = 0, wStep = 0;
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const now = performance.now(), d = e.deltaY * (e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? 240 : 1);
+      // (the event's own time, not the time it is handled: a slow frame must not make one swipe look like many)
+      const now = e.timeStamp || performance.now(), d = e.deltaY * (e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? 240 : 1);
       if (!d) return;
       const fresh = now - wLast > 220, notch = Math.abs(d) >= 50; // a wheel notch is one big jump; a trackpad sends small ones
       if (fresh || (d > 0) !== (wAcc > 0)) wAcc = 0;
       wLast = now; wAcc += d;
-      if (!fresh && (Math.abs(wAcc) < (e.ctrlKey ? 30 : notch ? 90 : 170) || now - wStep < (notch || e.ctrlKey ? 90 : 150))) return;
+      if (!fresh && (Math.abs(wAcc) < (e.ctrlKey ? 30 : notch ? 90 : 260) || now - wStep < (notch ? 55 : e.ctrlKey ? 90 : 220))) return;
       wStep = now; wAcc = 0;
       const p = local(e); R.zoomAt(p.x, p.y, d < 0 ? 1 : -1);
     }, { passive: false });

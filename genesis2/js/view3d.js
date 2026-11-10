@@ -22,6 +22,7 @@
   let renderer, scene, camera, sun, hemi, el, cw = 1, ch = 1, gradient, toonV, glowV, skyTex, skyCtx;
   let land, water, hot, trunks, pines, leaves, jungle, rocks, cacti, bushes, flowers;
   let people, heads, hats, beasts, props, smoke, clouds, rain, snow, bolts;
+  let landFine = null, landPlain = null;
   let wx0 = 0, wy0 = 0, ws = 0, roll = 0, needBuild = true, floraClock = 0, bldClock = 0, gTarget = 0, frameN = 0;
   const top = new Float32Array(MAXS * MAXS);
   const groups = new Map();
@@ -249,7 +250,16 @@
       }
       if (!ws) build();
       placeCamera();
-      renderer.compile(scene, camera);
+      // every shader the close-up can need is compiled here, behind the loading screen: both land
+      // materials, and every material with and without the meteor lights (so the first meteor,
+      // or the first switch of detail, does not stall a frame)
+      const keep = land.material;
+      for (const mat of [landFine, landPlain]) {
+        land.material = mat;
+        if (AG.Disaster3D && AG.Disaster3D.prewarm) AG.Disaster3D.prewarm(scene, () => renderer.compile(scene, camera));
+        renderer.compile(scene, camera);
+      }
+      land.material = keep;
       renderer.render(scene, camera);
       needBuild = true;
       return true;
@@ -325,7 +335,11 @@
     };
     const col = new THREE.BoxGeometry(1, 1, 1); col.translate(0, 0.5, 0);
     { const idx = Array.from(col.index.array); idx.splice(18, 6); col.setIndex(idx); col.clearGroups(); } // no bottom face: never seen
-    land = inst(col, new THREE.MeshLambertMaterial({ map: detail }), MAXS * MAXS, false, true);
+    // The land's fine relief (a bump map, lit per pixel) is drawn at the highest 3D detail only;
+    // below it the same texture is lit per vertex, which costs far less on phones and tablets.
+    landFine = new THREE.MeshPhongMaterial({ map: detail, bumpMap: detail, bumpScale: 0.07, shininess: 4, specular: 0x171717 });
+    landPlain = new THREE.MeshLambertMaterial({ map: detail });
+    land = inst(col, landPlain, MAXS * MAXS, false, true);
     water = inst(col, new THREE.MeshPhongMaterial({ map: detail, transparent: true, opacity: 0.9, shininess: 70, specular: 0x3a5068 }), MAXS * MAXS, false, true);
     hot = inst(col, new THREE.MeshBasicMaterial({ map: detail }), MAXS * MAXS, false, false);
     makeSea();
@@ -412,10 +426,11 @@
     renderer.setSize(w, h, false);
     camera.aspect = w / h; camera.updateProjectionMatrix();
   };
+  V.invalidate = function () { needBuild = true; seaClock = farClock = 99; };
   V.reset = function () {
     if (!V.ok) return;
     for (const g of groups.values()) scene.remove(g);
-    groups.clear(); needBuild = true; V.tilt = 0; V.yaw = 0; V.pitchBias = 0; V.yawTarget = null;
+    groups.clear(); if (AG.Disaster3D) AG.Disaster3D.reset(); needBuild = true; V.tilt = 0; V.yaw = 0; V.pitchBias = 0; V.yawTarget = null;
   };
   V.rotate = function (dyaw, dpitch) {
     V.yaw += dyaw; V.yawTarget = null;
@@ -1185,7 +1200,7 @@
     const warm = mix([255, 244, 224], [255, 170, 110], dusk);
     sun.color.setRGB(warm[0] / 255, warm[1] / 255, warm[2] / 255);
     sun.intensity = (0.1 + 0.5 * day) * (1 - gloom * 0.6);
-    hemi.intensity = (0.26 + 0.44 * day) * (1 - gloom * 0.25) + Sky.flash * 1.4; // lightning lights everything up
+    hemi.intensity = (0.26 + 0.44 * day) * (1 - gloom * 0.25) + AG.God.flash() * 1.4; // lightning lights everything up
     hemi.color.setRGB(0.55 + 0.4 * day, 0.62 + 0.36 * day, 0.85 + 0.15 * day);
     hemi.groundColor.setRGB(0.32 + 0.3 * day, 0.34 + 0.3 * day, 0.28 + 0.24 * day);
     const elev = Math.max(0.45, sh); // tops stay sunlit even near dusk
@@ -1220,6 +1235,7 @@
     if (sun.shadow.mapSize.x !== ms) { sun.shadow.mapSize.set(ms, ms); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
     sun.castShadow = Q.level < 2;                          // level 2+: no shadow pass at all
     bushes.visible = flowers.visible = Q.level < 3;        // level 3: the smallest plants go
+    if (land && landFine) land.material = Q.level === 0 ? landFine : landPlain; // fine relief at the top level only
   }
   function adaptQuality(t) {
     const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
@@ -1259,6 +1275,7 @@
     updateBolts(t);
     lighting(dist);
     updateSea(t, dt);
+    if (AG.Disaster3D) AG.Disaster3D.render(scene, t, Q.level);
     renderer.render(scene, camera);
     V.stats.window = ws; V.stats.triangles = renderer.info.render.triangles; V.stats.calls = renderer.info.render.calls; V.stats.quality = Q.level;
     V.stats.clouds = clouds.visible ? clouds.count : 0; V.stats.drops = dropN;
@@ -1270,15 +1287,30 @@
     ndc.set((sx / cw) * 2 - 1, -(sy / ch) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     const o = ray.ray.origin, d = ray.ray.direction;
-    let h = target.y, px = R.cam.x, pz = R.cam.y;
-    for (let k = 0; k < 4; k++) {
-      if (Math.abs(d.y) < 1e-5) break;
-      const tt = (h - o.y) / d.y;
-      if (tt < 0) break;
-      px = o.x + d.x * tt; pz = o.z + d.z * tt;
-      h = V.groundAt(px, pz);
+    // Traverse the actual voxel columns front to back. Iterating height planes can
+    // jump behind a ridge, which used to send a meteor away from the clicked face.
+    let entry = 0, exit = camera.far;
+    for (const [origin, dir, size] of [[o.x, d.x, W], [o.z, d.z, H]]) {
+      if (Math.abs(dir) < 1e-9) { if (origin < 0 || origin >= size) return { x: R.cam.x, y: R.cam.y, valid: false }; }
+      else { const a = -origin / dir, b = (size - origin) / dir; entry = Math.max(entry, Math.min(a, b)); exit = Math.min(exit, Math.max(a, b)); }
     }
-    return { x: AG.clamp(px, 0, W - 0.01), y: AG.clamp(pz, 0, H - 0.01) };
+    let tt = entry + 1e-6;
+    for (let n = 0; n < W + H + 4 && tt <= exit; n++) {
+      const px = o.x + d.x * tt, pz = o.z + d.z * tt;
+      const ix = Math.floor(px), iz = Math.floor(pz);
+      if (ix < 0 || iz < 0 || ix >= W || iz >= H) break;
+      const tx = Math.abs(d.x) < 1e-9 ? Infinity : ((d.x > 0 ? ix + 1 : ix) - o.x) / d.x;
+      const tz = Math.abs(d.z) < 1e-9 ? Infinity : ((d.z > 0 ? iz + 1 : iz) - o.z) / d.z;
+      const end = Math.min(tx, tz, exit), height = V.groundAt(ix + 0.5, iz + 0.5);
+      const hit = Math.abs(d.y) < 1e-9 ? Infinity : (height - o.y) / d.y;
+      // Both the top and the visible vertical side of a column can be clicked.
+      const at = o.y + d.y * tt <= height ? tt : hit;
+      if (at >= tt - 1e-5 && at <= end + 1e-5 && o.y + d.y * at >= BOTTOM) {
+        return { x: AG.clamp(o.x + d.x * at, ix + 0.0001, ix + 0.9999), y: AG.clamp(o.z + d.z * at, iz + 0.0001, iz + 0.9999), valid: true };
+      }
+      tt = end + 1e-6;
+    }
+    return { x: R.cam.x, y: R.cam.y, valid: false };
   };
   V.project = function (x, y, h) {
     pv.set(x, V.groundAt(x, y) + (h || 0), y).project(camera);

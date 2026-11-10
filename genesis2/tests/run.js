@@ -181,6 +181,21 @@ test('creatures: a lookup before the first tick returns at once, and finds a new
   return `found body ${i}; empty before and after`;
 });
 
+test('history: a new world drops a step that was half done in the old one', () => {
+  // A scenario or a new world started while a history step was spread over frames used to carry on
+  // that step against the new world's records (and crash on its missing buildings).
+  const AG = load({ W: 160, H: 96 });
+  AG.Sim.newWorld(3); AG.Sim.skipDeep();
+  for (let y = 0; y < 40; y += 4) AG.Sim.yearStep(4);
+  AG.Sim.stepBegin(4); AG.Sim.stepRun(AG.now() - 1);
+  assert(AG.Sim.h, 'the step should still be in progress');
+  AG.Sim.newWorld(4);
+  assert(!AG.Sim.h, 'the old step should be gone (reaching the Dawn would otherwise finish it against the new world)');
+  AG.Sim.skipDeep();
+  for (let y = 0; y < 40; y += 4) { AG.Sim.stepBegin(4); while (!AG.Sim.stepRun(AG.now() - 1)) { /* sliced */ } }
+  return `${AG.People.alive} people after 40 sliced years in the new world`;
+});
+
 test('save/load: a loaded world has the same future as the original', () => {
   const W = 224, H = 144, A = fromSave(dawnSave(7, W, H), W, H);
   for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);
