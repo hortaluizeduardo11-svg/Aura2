@@ -338,6 +338,12 @@
     const heal = Math.pow(0.25, dy * (AG.Tech.knows(c, 'herbal') ? 1.4 : 1)), f = Math.pow(0.45, dy), fl = Math.pow(0.8, dy), ft = Math.pow(0.9, dy);
     const dec = [], DEC = 11; for (let k = 0; k < DEC; k++) dec.push(Math.pow(0.9, dy * (1 - (k / (DEC - 1)) * 0.6)));
     const brewing = AG.Tech.knows(c, 'brewing'), nutrK = Math.min(1, dy * 2), adultAge = AG.SPECIES[0].adult;
+    // Sunlight and skin: under a strong sun pale skin loses folate, under a weak one dark skin
+    // makes too little vitamin D. A small extra hazard for the young, growing with the mismatch
+    // between a person's pigment and the light where they live, lets skin colour follow the land
+    // over the generations (as it did for us), instead of being painted on.
+    const ci = AG.clamp(c.y | 0, 0, AG.H - 1) * AG.W + AG.clamp(c.x | 0, 0, AG.W - 1);
+    const sun = AG.clamp((AG.World.tbase[ci] - 0.05) / 0.75, 0, 1), pigOpt = 28 + sun * 205;
     for (let q = mem.length - 1; q >= 0; q--) {
       const P = People.get(mem[q]);
       if (!P || P.died !== null) { mem.splice(q, 1); continue; }
@@ -352,7 +358,8 @@
       const hunger = Math.pow(Math.max(0, 0.6 - P.nutr) / 0.6, 2) * 0.4;
       let injury = 0; for (let k = 0; k < 2; k++) injury += P.parts[k] > 0.7 ? 0.15 * medicine : 0;
       const sick = P.dis ? diseaseHazard(P) * medicine : 0;
-      const h = infant + 0.003 + sen * (1 + P.frail) + hunger + injury + sick + (P.traits & TR.sickly ? 0.006 : 0);
+      const mis = age < 30 ? Math.abs(People.ph(P, L.HUE) - pigOpt) / 255 : 0, light = mis * 0.012;
+      const h = infant + 0.003 + sen * (1 + P.frail) + hunger + injury + sick + light + (P.traits & TR.sickly ? 0.006 : 0);
       // (hunger only kills when people are really starving; mild want lowers fertility instead)
       if (rnd() < 1 - Math.exp(-h * dy)) {
         const parts = [[infant, 'a fever in infancy'], [sen + 0.004, age > 55 ? 'old age' : 'an accident'], [hunger, 'hunger'], [injury, 'wounds'], [sick, P.dis ? AG.DISEASES[P.dis - 1].name : 'illness']];

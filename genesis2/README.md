@@ -135,6 +135,41 @@ Settings take effect at once and are saved in the browser.
   - asymmetric relationships (affection and respect, at most 24 per person)
   - body-part injuries, frailty and chronic illness, pregnancy, and births from both parents'
     genomes
+  - skin colour follows the sun: pale skin fares slightly worse under a strong sun and dark skin
+    under a weak one, so over the generations people grow darker in hot lands and lighter in
+    cold ones (a test checks the direction)
+- **The 3D close-up** (`models3d.js`) draws everything from what the simulation knows:
+  - **People** dress for their land and era:
+    - hooded fur parkas in the cold
+    - hide wraps in the Stone Age
+    - dyed tunics and dresses in temperate lands (richer dyes with every era)
+    - pale robes and turbans in the dry heat
+    - wraps and bare skin in the tropics
+    Skin and hair come from each person's own genome (pigment, the albino allele, grey with age).
+    Hairstyles are a fashion of their people. Hats show the role: crown, helmet (leather, bronze,
+    then iron), priest's cowl, straw hat, feathers. Soldiers carry spears and shields in their
+    realm's colours.
+  - **Animals** get a body plan per species from their gene-derived kind: deer, elk, gazelle,
+    ibex, aurochs, bison, mammoth, wild horse; wolf, great cat, bear, hyena; great ape, monkey;
+    and, once tamed, cattle, horses, goats and sheep. Each has its own antlers, horns, tusks,
+    trunk, mane and tail.
+    - Proportions come from the genes: fast species are leggier, strong ones stockier, cold ones
+      shaggy and small-eared, hot ones big-eared.
+    - The coat comes from the species' pigment and climate, white in the far cold.
+    - Markings (spots, stripes, saddle, side stripe, dorsal stripe, socks, blaze) pass down the
+      lineage: a species split off by a sea barrier keeps most of its parent's look and changes
+      some of it, so related species look related.
+    - Each animal's own pigment shades its coat; albinos are white; antlers and big horns are
+      male; domestic herds come in several colours.
+  - **Houses** follow the climate and terrain of their community:
+    - log cabins with snow on the roof, and earth lodges, in the snow
+    - turf-roofed longhouses and carved poles in the cold
+    - timber frame and thatch in temperate lands (tiles from the Bronze Age)
+    - stone and slate in the highlands, with corbelled beehive huts
+    - flat-roofed adobe with domes and ladders, stepped temples, in the dry heat
+    - stilt houses under palm thatch, spirit houses, tiered temples, in the tropics
+    Stone Age camps are hide domes over mammoth-bone arches in the cold, windbreaks in the desert
+    and leaf shelters in the tropics.
 - **Civilization** (`civ.js`, `tech.js`, `war.js`, `lang.js`):
   - **Communities** (bands, villages, towns) survey their land. Jobs are allocated by marginal
     food yield. They eat, starve, move camp, split, merge, marry out (exogamy) and settle.

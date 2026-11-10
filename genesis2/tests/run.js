@@ -196,6 +196,23 @@ test('history: a new world drops a step that was half done in the old one', () =
   return `${AG.People.alive} people after 40 sliced years in the new world`;
 });
 
+test('people: skin pigment follows the sun (darker under a strong sun, lighter under a weak one)', () => {
+  // The same people under a scorching or a dim sky: pigment drifts toward what the light favours.
+  const W = 224, H = 144;
+  const run = (hot) => {
+    const A = fromSave(dawnSave(7, W, H), W, H), Wd = A.World;
+    for (let i = 0; i < A.N; i++) Wd.tbase[i] = hot ? Math.max(Wd.tbase[i], 0.85) : Math.min(Wd.tbase[i], 0.2);
+    for (let y = 0; y < 1600; y += 8) A.Sim.yearStep(8);
+    let sum = 0, n = 0;
+    for (const P of A.People.map.values()) if (P.died === null) { sum += A.Life.express(P.gen, 0, A.Life.L.HUE); n++; }
+    return [sum / Math.max(1, n), n];
+  };
+  const [hot, nh] = run(true), [dim, nd] = run(false);
+  assert(nh > 50 && nd > 50, `people should survive in both (${nh}, ${nd})`);
+  assert(hot - dim > 10, `the sunny people should end up darker (${hot.toFixed(0)} vs ${dim.toFixed(0)})`);
+  return `mean pigment ${hot.toFixed(0)} under a strong sun, ${dim.toFixed(0)} under a weak one, after 1,600 years`;
+});
+
 test('save/load: a loaded world has the same future as the original', () => {
   const W = 224, H = 144, A = fromSave(dawnSave(7, W, H), W, H);
   for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);

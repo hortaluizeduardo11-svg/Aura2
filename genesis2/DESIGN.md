@@ -52,6 +52,8 @@ js/god.js      player powers
 js/render.js   stylized 2D renderer + overlays
 js/view3d.js   3D renderer (voxel terrain, cel-shaded models)
 js/disaster3d.js  real-time meteor flights and impacts in the 3D close-up
+js/models3d.js people (regional dress, genetic skin and hair), animals (per-species body plans,
+               inherited markings) and regional architecture, instanced
 js/icons.js    pixel icons: one per power, the power-bar tabs and the tool dock
 js/ui.js       power bar, tool dock, panels, inspector, phylogeny, tech tree, menu, input
 js/screens.js  loading screen (starfield, the world's own globe) and title screen (emblem)
@@ -710,6 +712,12 @@ These follow from the same rules rather than special cases:
   - A paused world is drawn only when a signature of everything visible changes (camera,
     pointer, selection, tool use, settings, dirty chunks, particles), with one safety frame every
     30. Animation time stops with the world, so nothing jumps when it is redrawn.
+- 3D models (`models3d.js`): each person is three or four instances (clothes, skin, hair, hat)
+  of models built once per style; colours per instance come from their genome (skin, hair), their
+  realm and era (cloth). Each species gets one merged, vertex-coloured model (and one per sex
+  where antlers or horns differ, per colour morph for domestic herds); an animal's own pigment
+  only scales its brightness. Models are built when first seen and dropped with the world.
+  Building models are cached by type, realm, variant, style and era band.
 - A lost WebGL context switches the close-up off until the browser restores it; the 2D map
   carries on.
 - Interface (pixel art, `index.html`, `ui.js`, `icons.js`, `screens.js`):

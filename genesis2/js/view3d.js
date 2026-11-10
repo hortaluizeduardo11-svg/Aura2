@@ -236,6 +236,7 @@
     far.geometry.computeBoundingSphere();
   }
   V.parts = () => ({ sea, far, scene }); // (for debugging and screenshots)
+  V._lib = () => ({ Kit, merge, GEO, kitFor, gradient }); // (for a model sheet)
   // Warm-up during the loading screen: build a window, compile every shader program (including the
   // building and glow materials, through two tiny stand-ins) and draw once off-screen, so the first
   // zoom into 3D does not stall on compiling and uploading.
@@ -397,6 +398,8 @@
       { geo: GEO.box, c: [200, 200, 200], x: 0, y: 0.2, z: -0.2, sx: 0.04, sy: 0.04, sz: 0.1, rx: -0.6 },
     ]);
     people = inst(humanGeo, toon({ vertexColors: true }), MAXU, true, false);
+    // detailed people, animals and regional houses (models3d.js): instanced, one model per style or species
+    if (AG.Models3D) AG.Models3D.setup({ THREE, GEO, merge, scene, material: toon({ vertexColors: true }) });
     heads = inst(GEO.ico, toon({}), MAXU, true, false);
     hats = inst(GEO.cone, toon({}), MAXU, true, false);
     beasts = inst(beastGeo, toon({ vertexColors: true }), MAXU, true, false);
@@ -430,7 +433,7 @@
   V.reset = function () {
     if (!V.ok) return;
     for (const g of groups.values()) scene.remove(g);
-    groups.clear(); if (AG.Disaster3D) AG.Disaster3D.reset(); needBuild = true; V.tilt = 0; V.yaw = 0; V.pitchBias = 0; V.yawTarget = null;
+    groups.clear(); if (AG.Disaster3D) AG.Disaster3D.reset(); if (AG.Models3D && AG.Models3D.ready) AG.Models3D.reset(); needBuild = true; V.tilt = 0; V.yaw = 0; V.pitchBias = 0; V.yawTarget = null;
   };
   V.rotate = function (dyaw, dpitch) {
     V.yaw += dyaw; V.yawTarget = null;
@@ -613,14 +616,17 @@
   }
 
   // ------------------------------------------------------------ buildings
-  const STONE = 0x9c978f, STONE2 = 0x7f7a73, BEAM = 0x5e4130, WOOD = 0x8a6440, PLASTER = 0xe2d3b0, DOOR = 0x3a2618, GOLD = 0xe2b64c, WIN = 0xffd27a, SLIT = 0x1a1410;
+  const STONE_ = 0x9c978f, STONE2_ = 0x7f7a73, STONE = STONE_, STONE2 = STONE2_, BEAM = 0x5e4130, WOOD = 0x8a6440, PLASTER = 0xe2d3b0, DOOR = 0x3a2618, GOLD = 0xe2b64c, WIN = 0xffd27a, SLIT = 0x1a1410;
   const modelCache = new Map(), cropMats = new Map();
   function roofOf(kc, v) { return hexOf([kc[0] * 0.55 + 70 + v * 6, kc[1] * 0.55 + 36 + v * 4, kc[2] * 0.55 + 26]); }
   function merlonRing(k, hex, y, r, n, size) {
     for (let q = 0; q < n; q++) { const a = (q / n) * Math.PI * 2; k.box(hex, Math.cos(a) * r, y, Math.sin(a) * r, size, size * 1.1, size, -a); }
   }
-  function kitFor(type, kc, v) {
+  function kitFor(type, kc, v, style, era) {
     const k = new Kit(), flagC = hexOf(kc), roof = roofOf(kc, v), smokes = [];
+    const M3 = AG.Models3D;
+    if (M3 && style) { const sm = M3.houseKit(k, type, style, kc, v, era || 0, roof); if (sm) { const out = k.done(); out.smoke = sm; return out; } }
+    const pal = M3 && style ? M3.palette(style) : null, STONE = pal ? pal.STONE : STONE_, STONE2 = pal ? pal.STONE2 : STONE2_;
     switch (type) {
       case BT.HOUSE: {
         const wall = [PLASTER, 0xead9b6, 0xd8c39a][v];
@@ -879,13 +885,18 @@
     g.userData = { kd: b.kd, site: true, rise: wall, riseH: h * 0.9 };
     return g;
   }
+  function keyOf(b) {
+    const c = Civ.cities[b.city], era = c ? c.era : 0, style = AG.Models3D ? AG.Models3D.styleOf(b) : '';
+    return `${b.type}|${b.kd}|${b.id % 3}|${style}|${era >= 4 ? 1 : era >= 2 ? 0 : -1}`;
+  }
   function model(b) {
     if (b.prog < 1) return siteModel(b);
     const kn = Civ.kingdoms[b.kd], kc = kn ? kn.color : [150, 150, 150], v = b.id % 3;
-    const key = `${b.type}|${b.kd}|${v}`;
+    const c = Civ.cities[b.city], era = c ? c.era : 0, style = AG.Models3D ? AG.Models3D.styleOf(b) : '';
+    const key = `${b.type}|${b.kd}|${v}|${style}|${era >= 4 ? 1 : era >= 2 ? 0 : -1}`;
     let kit = modelCache.get(key);
     if (!kit) {
-      kit = kitFor(b.type, kc, v);
+      kit = kitFor(b.type, kc, v, style, era);
       const fk = new Kit(); fk.box(STONE2, 0, -2, 0, b.w * 0.92, 2.02, b.h * 0.92); // foundation hides any slope underneath
       kit.base = fk.done().lit;
       modelCache.set(key, kit);
@@ -894,7 +905,7 @@
     const lit = new THREE.Mesh(kit.lit, toonV); lit.castShadow = lit.receiveShadow = true; g.add(lit);
     const base = new THREE.Mesh(kit.base, toonV); base.receiveShadow = true; g.add(base);
     if (kit.glow) g.add(new THREE.Mesh(kit.glow, glowV));
-    g.userData = { kd: b.kd, smoke: kit.smoke };
+    g.userData = { kd: b.kd, smoke: kit.smoke, key };
     if (b.type === BT.FARM) { const crops = new THREE.Mesh(cropGeo(), cropMat(b.growth)); crops.castShadow = true; g.add(crops); g.userData.crops = crops; }
     if (b.type === BT.HOUSE || b.type === BT.WALL || b.type === BT.TENT || b.type === BT.HUT || b.type === BT.HALL || b.type === BT.SHRINE) g.rotation.y = ((b.id >>> 2) % 4) * (Math.PI / 2);
     return g;
@@ -908,7 +919,7 @@
         const b = Civ.buildings[bid];
         if (!b.alive || b.cx < wx0 || b.cy < wy0 || b.cx >= x1 || b.cy >= y1) continue;
         let g = groups.get(b.id);
-        if (!g || g.userData.kd !== b.kd || (g.userData.site && b.prog >= 1)) { if (g) scene.remove(g); g = model(b); groups.set(b.id, g); scene.add(g); }
+        if (!g || g.userData.kd !== b.kd || (g.userData.site && b.prog >= 1) || (g.userData.key && (frameN + b.id) % 240 === 0 && g.userData.key !== keyOf(b))) { if (g) scene.remove(g); g = model(b); groups.set(b.id, g); scene.add(g); } // (rebuilt when the era brings new roofs)
         let base = -1e9;
         for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) base = Math.max(base, V.groundAt(x, y));
         if (b.type === BT.DOCK) base = Math.max(base, 0.12);
@@ -925,6 +936,7 @@
   // ------------------------------------------------------------ creatures
   const CARGO = [[150, 110, 66], [120, 190, 70], [150, 104, 60], [160, 160, 160], [180, 100, 70], [250, 210, 70], [110, 220, 255]];
   function updateUnits(alpha, t) {
+    const M3 = AG.Models3D;
     let np = 0, nh = 0, nhat = 0, nb = 0, nprop = 0;
     const x1 = wx0 + ws, y1 = wy0 + ws, PM = MAXU * 2 - 4;
     const prop = (x, y, z, sx, sy, sz, ry, rgb, roll) => { if (nprop < PM) place(props, nprop++, x, y, z, sx, sy, sz, ry, rgb, 0, roll); };
@@ -950,6 +962,18 @@
           if (sp === SP.CRAWLER) break;
           const civ = d.kind === 'civ', child = U.job[i] === J.CHILD && civ;
           const k = FIG * (child ? 0.7 : 1) * (sp === SP.HERALD ? 1.5 : 1) * (0.92 + (U.genes[i * NG + G.STAT] / 255) * 0.2);
+          if (civ && M3 && M3.ready) { // a person in the clothes of their land and era, with their own skin and hair
+            const kk = k * 0.92 * (U.sex[i] === 1 ? 1.03 : 0.97);
+            M3.person(i, x, g + bob, y, kk, ry, wob);
+            if (U.job[i] === J.SOLDIER || U.sq[i] >= 0) {
+              prop(x + rx * 0.14 * kk, g + bob + 0.05, y + rz * 0.14 * kk, 0.025, 0.62 * kk, 0.025, ry, [150, 120, 84]);
+              prop(x + rx * 0.14 * kk, g + bob + 0.66 * kk, y + rz * 0.14 * kk, 0.05, 0.08, 0.05, ry, [210, 214, 222]);
+              prop(x - rx * 0.13 * kk + fx * 0.02, g + bob + 0.13 * kk, y - rz * 0.13 * kk + fz * 0.02, 0.028, 0.15 * kk, 0.13 * kk, ry, kc); // a shield in the realm's colour
+              prop(x - rx * 0.145 * kk + fx * 0.02, g + bob + 0.195 * kk, y - rz * 0.145 * kk + fz * 0.02, 0.012, 0.03 * kk, 0.03 * kk, ry, [214, 190, 120]);
+            }
+            if (U.carry[i]) prop(x - fx * 0.1 * kk, g + bob + 0.2 * kk, y - fz * 0.1 * kk, 0.1 * kk, 0.1 * kk, 0.08 * kk, ry, CARGO[U.carry[i]]);
+            break;
+          }
           const cloth = !civ ? (sp === SP.HOLLOW ? [110, 122, 104] : d.fur) : U.job[i] === J.PRIEST ? [238, 234, 222] : kc;
           place(people, np++, x, g + bob, y, k, k, k, ry, cloth, 0, wob);
           const hy = g + bob + 0.36 * k;
@@ -965,15 +989,19 @@
           break;
         }
         case 'animal': {
+          if (M3 && M3.ready && M3.animal(i, x, g + bob * 0.5, y, FIG, ry, wob * 0.5)) break; // its own species' body, coat and markings
           const k = FIG * (sp === SP.WOLF ? 0.9 : 1.05);
           place(beasts, nb++, x, g + bob * 0.5, y, k, k, k, ry, d.fur, 0, wob * 0.5);
           if (sp === SP.DEER && U.sex[i]) for (const side of [-1, 1]) prop(x + fx * 0.25 * k + rx * side * 0.04, g + 0.36 * k, y + fz * 0.25 * k + rz * side * 0.04, 0.02, 0.14, 0.02, ry, [214, 196, 160], side * 0.4);
           break;
         }
         case 'ambient': {
-          const flap = Math.sin(t * 12 + i), lift = g + 4 + Math.sin(t + i) * 0.4;
-          prop(x, lift, y, 0.06, 0.05, 0.14, ry, d.fur);
-          for (const side of [-1, 1]) prop(x + rx * side * 0.1, lift + flap * 0.04, y + rz * side * 0.1, 0.16, 0.015, 0.08, ry, d.fur, -side * flap * 0.6);
+          const flap = Math.sin(t * 12 + i), lift = g + 4 + Math.sin(t + i) * 0.4, bs = U.sid[i] >= 0 ? AG.Life.species[U.sid[i]] : null;
+          const fc = bs ? bs.color : d.fur, big = bs && bs.mean[AG.Life.L.SIZE] > 130 ? 1.6 : 1; // the species' own colours and size
+          prop(x, lift, y, 0.06 * big, 0.05 * big, 0.14 * big, ry, fc);
+          prop(x + fx * 0.09 * big, lift + 0.02 * big, y + fz * 0.09 * big, 0.045 * big, 0.045 * big, 0.045 * big, ry, fc.map((c) => c * 0.8));
+          prop(x + fx * 0.125 * big, lift + 0.025 * big, y + fz * 0.125 * big, 0.016 * big, 0.016 * big, 0.03 * big, ry, [230, 170, 60]);
+          for (const side of [-1, 1]) prop(x + rx * side * 0.1 * big, lift + flap * 0.04, y + rz * side * 0.1 * big, 0.16 * big, 0.015, 0.08 * big, ry, fc, -side * flap * 0.6);
           break;
         }
         case 'vehicle': {
@@ -1007,7 +1035,8 @@
     }
     people.count = np; heads.count = nh; hats.count = nhat; beasts.count = nb; props.count = nprop;
     for (const m of [people, heads, hats, beasts, props]) flag(m);
-    V.stats.creatures = np + nb;
+    if (M3 && M3.ready) { M3.endFrame(); V.stats.models = M3.stats; }
+    V.stats.creatures = np + nb + (M3 && M3.ready ? M3.drawn : 0);
   }
 
   // ------------------------------------------------------------ chimney smoke
