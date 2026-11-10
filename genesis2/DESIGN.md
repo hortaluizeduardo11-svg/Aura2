@@ -82,8 +82,8 @@ suite runs determinism, geology, genetics and technology tests without a browser
 | Millennia | up to 400 years per second | **History**: Δ = 8 |
 | Ages | 6 million years per second | **Deep time** (before the Age of People); *Skip to the Dawn* races the rest |
 
-The sim runs under a per-frame budget (9 ms at the Full performance level, down to 5 ms at
-Potato). A history step is split into phases and spread over as many frames as it needs:
+The sim runs under a per-frame budget (9 ms at the High quality level, down to 5 ms at Minimum,
+and doubled when the frame rate is capped at 30). A history step is split into phases and spread over as many frames as it needs:
 - land and life
 - each community
 - inventions
@@ -693,6 +693,22 @@ These follow from the same rules rather than special cases:
   the simulation waits, so the picture keeps moving. Each dead person is copied once and shared
   by later snapshots, and per-tick caches are dropped first. A test checks that a snapshot
   spread over many slices restores the same world as one taken at once.
+- Settings (`AG.Settings` in `core.js`) are short strings saved in the browser. `auto` leaves an
+  item to the governor's level; a chosen value overrides it. `applyPerf` in `main.js` is the one
+  place that turns level plus settings into engine switches.
+- Frame pacing: the screen's own rate is measured from the callbacks, and a picture is drawn on
+  every n-th one (120 Hz → 60, 144 Hz → 72; 60 and 90 Hz screens are left alone). The governor
+  compares the frame rate with the chosen target, so a 30 fps cap is not mistaken for a slow
+  machine.
+- Work that cannot be seen is not done:
+  - Every world-sized layer is drawn through `blit`, which copies only the on-screen part.
+  - Night light and gas are computed for the view plus a margin (`viewWin`), and brought up to
+    date at once if the camera jumps past it.
+  - A paused world is drawn only when a signature of everything visible changes (camera,
+    pointer, selection, tool use, settings, dirty chunks, particles), with one safety frame every
+    30. Animation time stops with the world, so nothing jumps when it is redrawn.
+- A lost WebGL context switches the close-up off until the browser restores it; the 2D map
+  carries on.
 - A loading screen covers every heavy first-time job:
   - at start: fonts, the first world, every map chunk image, the borders, the minimap and the 3D
     shaders (compiled and drawn once off screen)

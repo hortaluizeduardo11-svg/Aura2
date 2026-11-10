@@ -278,6 +278,10 @@
     el = renderer.domElement; el.id = 'world3d'; el.setAttribute('aria-hidden', 'true');
     el.style.visibility = 'hidden';
     host.insertBefore(el, overlay);
+    // A lost graphics context (a sleeping phone, a driver reset) must not take the game down: the
+    // map carries on as 2D pixel art, and the close-up is rebuilt when the context comes back.
+    el.addEventListener('webglcontextlost', (e) => { e.preventDefault(); V.ok = false; V.lost = true; V.active = false; V.tilt = 0; el.style.visibility = 'hidden'; }, false);
+    el.addEventListener('webglcontextrestored', () => { V.lost = false; V.ok = true; needBuild = true; try { applyQuality(); } catch (e) { /* next frame */ } }, false);
     makeGeos();
     scene = new THREE.Scene();
     const sc = document.createElement('canvas'); sc.width = 2; sc.height = 128; skyCtx = sc.getContext('2d');
@@ -1219,13 +1223,17 @@
   }
   function adaptQuality(t) {
     const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
-    if (Q.lock) return; // (screenshots and benchmarks pin a level)
+    if (Q.lock || Q.fixed) return; // (a level chosen in the settings, or pinned by a benchmark)
     if (t - Q.since < 1.5 || real <= 0) return; // the first moments after entering include building the scene
     Q.ema = Q.ema * 0.7 + Math.min(120, 1 / real) * 0.3;
     if (Q.level < (V.minQuality || 0)) { Q.level = V.minQuality; Q.last = t; applyQuality(); }
     if (Q.ema < 22 && Q.level < 3 && t - Q.last > 0.8) { Q.level++; Q.last = t; applyQuality(); }
     else if (Q.ema > 52 && Q.level > (V.minQuality || 0) && t - Q.last > 8) { Q.level--; Q.last = t; applyQuality(); }
   }
+  // Settings: a fixed level of detail (0 best to 3 fastest), or null to let it adapt to the frame rate.
+  V.fixQuality = function (level) { Q.fixed = level !== null && level !== undefined; if (Q.fixed && V.ok) V.setQuality(level); };
+  // What the camera and the scene look like right now, for "nothing changed, nothing to redraw".
+  V.sig = () => (V.ok ? `${V.active ? 1 : 0}${needBuild ? 1 : 0}${Q.level}|${V.tilt.toFixed(4)}|${V.yaw.toFixed(4)}|${(V.pitchBias || 0).toFixed(3)}` : '-');
   V.setQuality = function (level) { Q.level = AG.clamp(level | 0, 0, 3); Q.last = performance.now() / 1000; applyQuality(); };
   V.render = function (dt, alpha) {
     const t = performance.now() / 1000;

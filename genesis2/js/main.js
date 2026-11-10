@@ -43,39 +43,52 @@
   // far trees, then canvas resolution and simulation time per frame, finally the 3D close-up.
   // 'auto' adapts (starting from what the device reports); a fixed level can be chosen in World.
   const LEVELS = [
-    { name: 'Full', scale: 1, budget: 9, cosmetics: true, farEvery: 4, bodyK: 1, lod: 6000, allow3D: true, minQ: 0, minimap: 12, repaint: 250 },
-    { name: 'Light', scale: 1, budget: 7, cosmetics: false, farEvery: 4, bodyK: 0.8, lod: 4000, allow3D: true, minQ: 1, minimap: 24, repaint: 300 },
-    { name: 'Lean', scale: 0.75, budget: 6, cosmetics: false, farEvery: 8, bodyK: 0.55, lod: 2500, allow3D: true, minQ: 2, minimap: 40, repaint: 400 },
-    { name: 'Potato', scale: 0.5, budget: 5, cosmetics: false, farEvery: 8, bodyK: 0.35, lod: 1200, allow3D: false, minQ: 3, minimap: 60, repaint: 500 },
+    { name: 'High', scale: 1, budget: 9, cosmetics: true, farEvery: 4, bodyK: 1, lod: 6000, allow3D: true, minQ: 0, minimap: 12, repaint: 250 },
+    { name: 'Medium', scale: 1, budget: 7, cosmetics: false, farEvery: 4, bodyK: 0.8, lod: 4000, allow3D: true, minQ: 1, minimap: 24, repaint: 300 },
+    { name: 'Low', scale: 0.75, budget: 6, cosmetics: false, farEvery: 8, bodyK: 0.55, lod: 2500, allow3D: true, minQ: 2, minimap: 40, repaint: 400 },
+    { name: 'Minimum', scale: 0.5, budget: 5, cosmetics: false, farEvery: 8, bodyK: 0.35, lod: 1200, allow3D: false, minQ: 3, minimap: 60, repaint: 500 },
   ];
-  const Perf = (AG.Perf = { mode: 'auto', level: 0, LEVELS, slow: 0, fast: 0, lastChange: 0, ceiling: 3 });
-  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } } };
+  const Perf = (AG.Perf = { mode: 'auto', level: 0, LEVELS, slow: 0, fast: 0, lastChange: 0, ceiling: 3, target: 60, frameMs: 1000 / 60 });
+  const S = AG.Settings;
+  // A level sets everything; a setting left on Auto follows it, a chosen one overrides it.
   function applyPerf() {
-    const L = LEVELS[Perf.level];
-    BUDGET_MS = L.budget;
-    R.perf.cosmetics = L.cosmetics; R.perf.minimapEvery = L.minimap; R.perf.animate = Perf.level < 2; R.perf.wildZ = Perf.level < 2 ? 4 : 7;
-    R.setScale(L.scale);
+    const L = LEVELS[Perf.level], v = S.v;
+    const pick = (k, auto) => (v[k] === 'on' ? true : v[k] === 'off' ? false : auto);
+    // frame rate: Auto and 60 draw at most 60 pictures a second (a 120 Hz screen would double the
+    // work for nothing); 30 saves battery; Display follows the screen
+    Perf.target = v.fps === '30' ? 30 : 60;
+    Perf.frameMs = v.fps === 'display' ? 0 : 1000 / Perf.target;
+    BUDGET_MS = L.budget * (60 / Perf.target); // fewer, longer frames: the same share of each for the simulation
+    R.perf.cosmetics = pick('weather', L.cosmetics); R.perf.animate = pick('water', Perf.level < 2);
+    R.perf.minimapEvery = L.minimap; R.perf.wildZ = Perf.level < 2 ? 4 : 7; R.perf.shake = v.shake !== 'off';
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    R.setScale(v.resolution === 'auto' ? L.scale : v.resolution === 'native' ? dpr : AG.clamp(+v.resolution || 1, 0.5, 1));
     AG.Physics.farEvery = L.farEvery; AG.Life.bodyK = L.bodyK; Civ.lodBudget = L.lod;
-    if (AG.View3D) { AG.View3D.allowed = L.allow3D; AG.View3D.minQuality = L.minQ; }
-    document.documentElement.classList.toggle('perf-lean', Perf.level >= 2);
+    if (AG.View3D) { AG.View3D.allowed = pick('view3d', L.allow3D); AG.View3D.minQuality = L.minQ; AG.View3D.fixQuality(v.detail3d === 'auto' ? null : +v.detail3d); }
+    const root = document.documentElement.classList;
+    root.toggle('perf-lean', Perf.level >= 2); root.toggle('no-vignette', v.vignette === 'off');
+    root.toggle('no-ticker', v.ticker === 'off'); root.toggle('no-minimap', v.minimap === 'off'); root.toggle('show-fps', v.showFps === 'on');
     if (AG.UI && AG.UI.onPerf) AG.UI.onPerf();
   }
-  Perf.set = function (mode) {
-    Perf.mode = mode; store.set('aura2.perf', mode);
-    if (mode !== 'auto') Perf.level = AG.clamp(+mode, 0, 3);
+  Perf.set = function (mode) { S.set('quality', mode); };
+  function qualityChanged() {
+    const mode = S.v.quality;
+    Perf.mode = mode === 'auto' ? 'auto' : String(AG.clamp(+mode || 0, 0, 3));
+    if (Perf.mode !== 'auto') Perf.level = +Perf.mode;
     Perf.slow = Perf.fast = 0; Perf.lastChange = performance.now();
-    applyPerf();
-  };
+  }
+  S.onChange((k) => { if (k === 'quality' || k === null) qualityChanged(); applyPerf(); });
   // per second: two slow seconds in a row step down; ten smooth ones step back up
   function governPerf(fps, now) {
-    if (Perf.mode !== 'auto' || AG.fastDawn || AG.creating) return; // racing to the Dawn is slow on purpose
-    if (fps < 45) { Perf.slow++; Perf.fast = 0; } else if (fps > 57) { Perf.fast++; Perf.slow = 0; } else { Perf.slow = 0; Perf.fast = 0; }
+    if (Perf.mode !== 'auto' || AG.fastDawn || AG.creating || document.hidden) return; // racing to the Dawn is slow on purpose
+    const T = Perf.target;
+    if (fps < T * 0.75) { Perf.slow++; Perf.fast = 0; } else if (fps > T * 0.95) { Perf.fast++; Perf.slow = 0; } else { Perf.slow = 0; Perf.fast = 0; }
     if (Perf.slow >= 2 && Perf.level < 3) { Perf.level++; Perf.slow = 0; Perf.lastChange = now; applyPerf(); }
     else if (Perf.fast >= 10 && Perf.level > 0 && now - Perf.lastChange > 15000) { Perf.level--; Perf.fast = 0; Perf.lastChange = now; applyPerf(); }
   }
   {
-    const saved = store.get('aura2.perf');
-    if (saved && saved !== 'auto') { Perf.mode = saved; Perf.level = AG.clamp(+saved || 0, 0, 3); }
+    const saved = S.v.quality;
+    if (saved && saved !== 'auto') { Perf.mode = String(AG.clamp(+saved || 0, 0, 3)); Perf.level = +Perf.mode; }
     else Perf.level = AG.LOW_END ? 2 : (navigator.hardwareConcurrency || 8) <= 4 ? 1 : 0; // a head start from what the device reports
   }
 
@@ -192,9 +205,14 @@
   };
 
   // ------------------------------------------------------------ the loop
-  let errStreak = 0;
+  let errStreak = 0, rafLast = 0, rafEma = 1000 / 60, rafN = 0;
   let last = performance.now(), acc = 0, frames = 0, ticks = 0, years = 0, myr = 0, windowStart = last, errors = 0, lastPaint = 0, lodT = 0;
   function frame(now) {
+    // frame-rate cap: draw on every n-th callback of the screen, n from the screen's own rate
+    // (measured), so 120 Hz gives 60, 144 Hz gives 72 and a 60 or 90 Hz screen is left alone
+    const rd = now - rafLast; rafLast = now;
+    if (rd > 2 && rd < 60) rafEma += (rd - rafEma) * 0.05;
+    if (Perf.frameMs) { const n = Math.max(1, Math.floor(Perf.frameMs / rafEma + 0.25)); if (++rafN % n) { requestAnimationFrame(frame); return; } }
     try {
       let dt = now - last; last = now;
       if (dt > 250) dt = 250;
@@ -243,7 +261,8 @@
       const t1 = performance.now();
       AG.FX.update(dt / 1000);
       AG.God.frame(dt / 1000);
-      R.frame(dt / 1000, AG.paused || AG.mode !== 'watch' ? 1 : Math.min(1, acc / STEP));
+      // a paused world is a still picture: it is drawn again only when the view or the world changes
+      R.frame(dt / 1000, AG.paused || AG.mode !== 'watch' ? 1 : Math.min(1, acc / STEP), AG.paused && !AG.fastDawn && !Loader.on);
       AG.UI.frame(dt / 1000);
       AG.stats.renderMs = AG.stats.renderMs * 0.9 + (performance.now() - t1) * 0.1;
       frames++;
@@ -292,6 +311,8 @@
       requestAnimationFrame(frame);
     } catch (e) { showError(e); Loader.set(1, 'Could not start: see the message above'); }
   }
+  // Coming back to a hidden tab: carry on from now, with no burst of catching up.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); windowStart = last; frames = 0; ticks = 0; years = 0; myr = 0; } });
   document.getElementById('err-copy').addEventListener('click', () => { const t = document.getElementById('err-msg').textContent; if (navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {}); });
   document.getElementById('err-close').addEventListener('click', () => { document.getElementById('errbox').hidden = true; });
   boot();

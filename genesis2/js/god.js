@@ -30,6 +30,7 @@
     }
   }
   function unitsIn(x, y, r, layer) {
+    Ent.freshGrid(); // powers act between ticks, and in deep time and history no tick keeps the grid
     const n = Ent.near(x, y, r, layer, 512), out = [];
     for (let q = 0; q < n; q++) out.push(Ent.buf[q]);
     return out;
@@ -284,6 +285,7 @@
       AG.History.record('tool', { id: t.id, x, y, k, r: God.brush.r, s: God.brush.str, l: God.locus });
       if (AG.mode === 'deep' && AG.Render && AG.Render.deepPoke) AG.Render.deepPoke(); // the deep-time map shows what it did
     }
+    God.acts = (God.acts | 0) + 1; // (a paused picture is redrawn when a power is used)
     if (t.mode === 'click') t.click(x, y); else t.apply(x, y, k);
   }
   God.press = function (x, y) {

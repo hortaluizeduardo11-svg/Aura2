@@ -7,6 +7,37 @@
   const AG = (window.AG = window.AG || {});
 
   // ------------------------------------------------------------ world & time
+  // ------------------------------------------------------------ player settings
+  // Saved in the browser where storage is allowed (the game works the same without it). Every
+  // value is a short string; 'auto' leaves the choice to the performance governor.
+  AG.Settings = (function () {
+    const DEF = {
+      quality: 'auto',    // auto | 0 High | 1 Medium | 2 Low | 3 Minimum
+      resolution: 'auto', // auto | 0.5 | 0.75 | 1 | native
+      fps: 'auto',        // auto (60) | 30 | 60 | display
+      view3d: 'auto',     // auto | on | off
+      detail3d: 'auto',   // auto | 0 | 1 | 2 | 3
+      weather: 'auto',    // weather, clouds, sun rays and far trees: auto | on | off
+      water: 'auto',      // rippling water: auto | on | off
+      shake: 'on', vignette: 'on', showFps: 'off', ticker: 'on', minimap: 'on',
+      worldSize: 'auto',  // auto | small | medium | large (takes effect when the page loads)
+    };
+    const KEY = 'aura2.settings', v = Object.assign({}, DEF), subs = [];
+    try {
+      const ls = window.localStorage, raw = ls && ls.getItem(KEY);
+      if (raw) { const o = JSON.parse(raw); for (const k in DEF) if (typeof o[k] === 'string') v[k] = o[k]; }
+      else if (ls) { const old = ls.getItem('aura2.perf'); if (old) v.quality = old; } // the earlier single setting
+    } catch (e) { /* storage blocked: defaults */ }
+    const save = () => { try { window.localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } };
+    return {
+      DEF, v,
+      get: (k) => v[k],
+      set(k, val) { if (!(k in DEF) || v[k] === String(val)) return; v[k] = String(val); save(); for (const f of subs) f(k); },
+      reset() { Object.assign(v, DEF); save(); for (const f of subs) f(null); },
+      onChange(f) { subs.push(f); },
+    };
+  })();
+
   // The world takes the shape of the screen: pick the largest integer zoom at which a world of
   // ~140k-280k cells exactly covers the viewport, so the map always fills it edge to edge.
   (function sizeWorld() {
@@ -14,10 +45,11 @@
     if (cfg.W && cfg.H) { AG.W = cfg.W; AG.H = cfg.H; AG.BASE_ZOOM = cfg.zoom || 3; return; } // tests pick a size
     const vw = Math.max(360, window.innerWidth || 1280), vh = Math.max(360, window.innerHeight || 800);
     // a low-end device (or a saved Potato setting) gets a world of about half as many cells
-    let saved = null; try { saved = window.localStorage && localStorage.getItem('aura2.perf'); } catch (e) { /* storage blocked */ }
+    const saved = AG.Settings.v.quality, size = AG.Settings.v.worldSize;
     const nav = window.navigator || {}, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
     AG.LOW_END = saved === '3' || (saved !== '0' && saved !== '1' && (mem <= 4 || cores <= 2));
-    const lo = AG.LOW_END ? 60000 : 140000, hi = AG.LOW_END ? 120000 : 280000;
+    const RANGE = { small: [60000, 110000], medium: [120000, 190000], large: [200000, 300000] };
+    const [lo, hi] = RANGE[size] || (AG.LOW_END ? [60000, 120000] : [140000, 280000]); // a chosen world size beats the guess
     let best = null, bestErr = Infinity;
     for (const z of [6, 5, 4, 3, 2]) {
       const w = Math.min(1024, Math.ceil(vw / z / 16) * 16), h = Math.min(1024, Math.ceil(vh / z / 16) * 16), n = w * h;

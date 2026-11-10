@@ -39,6 +39,7 @@
   Ent.reset = function () {
     U.alive.fill(0); U.hi = 0; U.count = 0; freeTop = 0; nextUid = 1;
     Ent.count.fill(0); Ent.births = 0; Ent.deaths = 0;
+    if (Ent.rebuildGrid) Ent.rebuildGrid(); // no stale lists from the world before
   };
 
   function slot() {
@@ -264,7 +265,7 @@
 
   // ------------------------------------------------------------ spatial hash
   const SC = 8, SGW = Math.ceil(W / SC), SGH = Math.ceil(H / SC), SCELLS = SGW * SGH;
-  const head = new Int32Array(SCELLS * 3), next = new Int32Array(MAXU);
+  const head = new Int32Array(SCELLS * 3).fill(-1), next = new Int32Array(MAXU).fill(-1); // -1 ends a list: an unbuilt grid is empty, never a loop
   Ent.buf = new Int32Array(1024);
   Ent.rebuildGrid = function () {
     head.fill(-1);
@@ -278,6 +279,9 @@
       next[i] = head[c]; head[c] = i;
     }
   };
+  // The grid is rebuilt once per watch tick. Outside the ticks (deep time, history, a paused
+  // world) a caller asks for a fresh one first with Ent.freshGrid().
+  Ent.freshGrid = Ent.rebuildGrid;
   Ent.near = function (x, y, r, layer, max) {
     max = max || 1024;
     const buf = Ent.buf, r2 = r * r, base0 = layer * SCELLS;
@@ -285,7 +289,7 @@
     const y0 = Math.max(0, ((y - r) / SC) | 0), y1 = Math.min(SGH - 1, ((y + r) / SC) | 0);
     let n = 0;
     for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
-      for (let j = head[base0 + cy * SGW + cx]; j >= 0; j = next[j]) {
+      for (let j = head[base0 + cy * SGW + cx], guard = MAXU; j >= 0 && guard-- > 0; j = next[j]) {
         if (!U.alive[j]) continue;
         const dx = U.x[j] - x, dy = U.y[j] - y;
         if (dx * dx + dy * dy <= r2) { buf[n++] = j; if (n >= max) return n; }

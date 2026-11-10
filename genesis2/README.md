@@ -43,6 +43,18 @@ geology and evolution models, the invention graph, LOD, update order and the per
 - Right-drag turns and tilts in 3D; `[` and `]` turn, `N` faces north.
 - `1`–`5` set the speeds and Space pauses.
 - `Tab` cycles layers and `B` cycles overlays.
+- `Esc` cancels, releases a possessed body, or opens the menu.
+- A mouse wheel zooms one step per notch. A trackpad swipe or pinch is added up into steps, so one
+  swipe doesn't fly through every zoom level.
+
+**Menu** (the Menu button or `Esc`; the world waits while it is open):
+- **Game:** save and load, time-lapse, a new world from a seed, the two scenarios.
+- **Settings:** frame-rate counter, event ticker, minimap, screen shake, world size.
+- **Graphics:** quality, resolution, frame rate, the 3D close-up and its detail, weather and far
+  trees, moving water, vignette.
+- **Controls:** the keys and gestures.
+
+Settings take effect at once and are saved in the browser.
 
 **Panels:**
 - **Inspect:** a person's story, mind, memories, family, relationships, health and genome. Also
@@ -52,7 +64,8 @@ geology and evolution models, the invention graph, LOD, update order and the per
 - **Life:** the tree of life.
 - **History:** the chronicle, with a cause on every entry, plus era timelines, era maps and
   "what if this never happened?".
-- **World:** save/load, time-lapse, scenarios, new world, engine stats and diseases.
+- **World:** save/load, time-lapse, scenarios, new world, engine stats and diseases. Graphics
+  settings are in the menu.
 
 **Powers** (9 families, 53 tools):
 - **Land:** raise or lower ground, plant meadows, forests or wild grain.
@@ -127,17 +140,29 @@ geology and evolution models, the invention graph, LOD, update order and the per
 ## Performance
 
 The game keeps itself smooth on modest machines. A governor watches the real frame rate and
-steps through four levels; World → Performance can fix one instead:
-- **Full:** everything.
-- **Light:** no cosmetic weather, god rays or far trees; a smaller simulation slice per frame.
-- **Lean:** the canvas at 75% resolution (the pixel art is stretched up crisply); no water
+steps through four levels. Menu → Graphics can fix one instead, or override single items:
+- **High:** everything.
+- **Medium:** no cosmetic weather, god rays or far trees; a smaller simulation slice per frame.
+- **Low:** the canvas at 75% resolution (the pixel art is stretched up crisply); no water
   ripples; wild animals as dots until zoomed in close; off-screen fluids rest longer; fewer
   bodies near the camera; the 3D close-up at reduced quality.
-- **Potato:** the canvas at 50%; the 3D close-up off (the map zooms in as 2D pixel art); the
+- **Minimum:** the canvas at 50%; the 3D close-up off (the map zooms in as 2D pixel art); the
   fewest bodies.
 
-Low-end devices (by reported memory and cores), or a saved Potato choice, also start with a
-world of about a third as many cells.
+Low-end devices (by reported memory and cores), or a saved Minimum choice, also start with a
+world of about a third as many cells; Menu → Settings → World size chooses it outright. No panel
+uses backdrop blur, so the moving map is never re-blurred under the interface.
+
+Work that cannot be seen is not done:
+- Each map layer (terrain, borders, creature dots, gas, light, glow, clouds) is drawn only where
+  it is on screen. Night light and gas are also computed only for the visible part of the map,
+  with a margin wider than any glow reaches.
+- A paused world is a still picture. It is redrawn only when the view or the world changes
+  (camera, pointer, selection, a power, a setting), so a paused game uses almost no power.
+- Pictures are drawn at most 60 times a second by default, even on a 120 Hz screen; 30 is offered
+  to save battery, and Display follows the screen.
+- Bodies exist only near the camera, fluids rest away from it, and trees and labels outside the
+  view are skipped (as before).
 
 A loading screen covers the start, the Dawn and every new world. Behind it, these are prepared
 before the first playable frame:
@@ -148,13 +173,18 @@ before the first playable frame:
 Nothing heavy waits for a frame in play. A history step, the year's contacts between communities
 and each 500-year snapshot are cut into small stages that run within the frame budget. They run
 in the same order, so the results are identical. If something does fail, an error box shows the
-message instead of a frozen screen. No panel uses backdrop blur, so the moving map is never
-re-blurred under the interface.
+message instead of a frozen screen.
+
+**Browsers and devices.** The code avoids newer syntax and has fallbacks where features vary:
+- no WebGL, or a lost graphics context: the map stays 2D and the game carries on
+- no browser storage (private windows, embedded frames): settings simply aren't saved
+- touch screens: drag, pinch and two-finger turn; the layout folds for phones
+- high-density screens: Resolution → Sharp draws labels at the screen's own pixels
 
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 14 headless tests, ~50 s
+node genesis2/tests/run.js            # 15 headless tests, ~55 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -167,6 +197,8 @@ The tests cover:
   spread over frames.
 - **Save/load:** a loaded world has the same future as the original.
 - **Snapshots:** one copied over many frames restores the same world as one taken at once.
+- **Creatures:** a lookup before the first tick returns at once (a click in deep time once froze
+  the page), and finds a new body after the grid is refreshed.
 - **Genetics:** 1:2:1 recessive ratios and mutation rates.
 - **Speciation:** across a newly flooded strait it happens; in a connected control it doesn't.
 - **Selection:** cold tolerance tracks the climate.

@@ -42,10 +42,10 @@
   // (drawing stays in screen coordinates through a scale transform, and the browser stretches the
   // pixel art up crisply); cosmetic layers can be switched off; the minimap redraws less often.
   R.perf = { scale: 1, cosmetics: true, minimapEvery: 12, animate: true, wildZ: 4 };
-  R.setScale = function (k) { if (Math.abs(k - R.perf.scale) > 0.01) { R.perf.scale = k; R.resize(); } };
+  R.setScale = function (k) { if (Math.abs(k - R.perf.scale) > 0.01) { R.perf.scale = k; R.resize(); plates.clear(); for (const d in digits) delete digits[d]; } };
   R.resize = function () {
     const r = cv.getBoundingClientRect();
-    cw = Math.max(1, Math.round(r.width)); ch = Math.max(1, Math.round(r.height));
+    cw = Math.max(1, Math.round(r.width)); ch = Math.max(1, Math.round(r.height)); sigLast = '';
     cv.width = Math.max(1, Math.round(cw * R.perf.scale)); cv.height = Math.max(1, Math.round(ch * R.perf.scale));
     if (AG.View3D && AG.View3D.ok) AG.View3D.resize(cw, ch);
     R.minZoom = Math.max(cw / W, ch / H);
@@ -74,7 +74,7 @@
       for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) { const c = cy * CW + cx; buildDeco(c, k); decoDirty[c] = 0; }
     }
   };
-  R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; morphReset(); Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
+  R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; morphReset(); R.invalidate(); Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
 
   // ------------------------------------------------------------ camera
   // The world is sized to the screen, so the smallest zoom always fills it edge to edge.
@@ -741,61 +741,75 @@
     }
     bctx.putImageData(bimg, 0, 0);
   }
-  function blur(a, w, h, r) {
-    for (let y = 0; y < h; y++) {
+  // Box blur of the part [x0,x1) x [y0,y1) of a w-wide field (edges clamp to that part).
+  function blur(a, w, x0, y0, x1, y1, r) {
+    const X = x1 - 1, Y = y1 - 1;
+    for (let y = y0; y < y1; y++) {
       let s = 0; const row = y * w;
-      for (let x = -r; x <= r; x++) s += a[row + AG.clamp(x, 0, w - 1)];
-      for (let x = 0; x < w; x++) {
+      for (let x = x0 - r; x <= x0 + r; x++) s += a[row + AG.clamp(x, x0, X)];
+      for (let x = x0; x < x1; x++) {
         tmp[row + x] = s / (2 * r + 1);
-        s += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+        s += a[row + Math.min(X, x + r + 1)] - a[row + Math.max(x0, x - r)];
       }
     }
-    for (let x = 0; x < w; x++) {
+    for (let x = x0; x < x1; x++) {
       let s = 0;
-      for (let y = -r; y <= r; y++) s += tmp[AG.clamp(y, 0, h - 1) * w + x];
-      for (let y = 0; y < h; y++) {
+      for (let y = y0 - r; y <= y0 + r; y++) s += tmp[AG.clamp(y, y0, Y) * w + x];
+      for (let y = y0; y < y1; y++) {
         a[y * w + x] = s / (2 * r + 1);
-        s += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+        s += tmp[Math.min(Y, y + r + 1) * w + x] - tmp[Math.max(y0, y - r) * w + x];
       }
     }
   }
+  // Light and gas are worked out only for the part of the map on screen (plus a margin wider than
+  // any glow reaches); the rest is brought up to date when the camera gets there.
+  const lwin = { x0: 0, y0: 0, x1: 0, y1: 0 }, gwin = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  function viewWin(m) { // the view in half-cells (the grid of the light and gas layers), m cells of margin
+    const c = R.cam, hw = cw / 2 / c.z, hh = ch / 2 / c.z;
+    return { x0: Math.max(0, Math.floor((c.x - hw) / 2) - m), y0: Math.max(0, Math.floor((c.y - hh) / 2) - m), x1: Math.min(LW, Math.ceil((c.x + hw) / 2) + m), y1: Math.min(LH, Math.ceil((c.y + hh) / 2) + m) };
+  }
+  const covers = (a, b) => a.x0 <= b.x0 && a.y0 <= b.y0 && a.x1 >= b.x1 && a.y1 >= b.y1;
   let lightOn = true, glowOn = true, gasOn = true, cloudOn = true;
   function updateLight() {
     const under = R.view === 0, day = Sky.daylight();
-    if (!under && AG.mode !== 'watch') { lightOn = glowOn = false; return; } // deep time and history are drawn in plain daylight
-    lum.fill(0);
-    for (let ly = 0; ly < LH; ly++) for (let lx = 0; lx < LW; lx++) {
-      const i = (ly * 2) * W + lx * 2, j = ly * LW + lx;
-      if (under) {
-        if (Wd.ugF[i] && Wd.ugT[i] === UF.MAGMA) lum[j] += 1.3;
-        else { const u = Wd.ug[i]; if (u === UG.CRYSTAL) lum[j] += 0.8; else if (u === UG.FUNGUS) lum[j] += 0.45; else if (u === UG.TUNNEL) lum[j] += 0.14; }
-      } else {
-        if (Wd.fire[i]) lum[j] += 1.5;
-        else if (Wd.fl[i] > 0.003 && Wd.ft[i] === FT.LAVA) lum[j] += 1.1;
+    if (!under && AG.mode !== 'watch') { lightOn = glowOn = false; lwin.x1 = 0; return; } // deep time and history are drawn in plain daylight
+    const w = viewWin(14), x0 = w.x0, y0 = w.y0, x1 = w.x1, y1 = w.y1;
+    if (x1 <= x0 || y1 <= y0) return;
+    const add = (wx, wy, v) => { const lx = (wx / 2) | 0, ly = (wy / 2) | 0; if (lx >= x0 && lx < x1 && ly >= y0 && ly < y1) lum[ly * LW + lx] += v; };
+    for (let ly = y0; ly < y1; ly++) {
+      lum.fill(0, ly * LW + x0, ly * LW + x1);
+      for (let lx = x0; lx < x1; lx++) {
+        const i = (ly * 2) * W + lx * 2, j = ly * LW + lx;
+        if (under) {
+          if (Wd.ugF[i] && Wd.ugT[i] === UF.MAGMA) lum[j] += 1.3;
+          else { const u = Wd.ug[i]; if (u === UG.CRYSTAL) lum[j] += 0.8; else if (u === UG.FUNGUS) lum[j] += 0.45; else if (u === UG.TUNNEL) lum[j] += 0.14; }
+        } else {
+          if (Wd.fire[i]) lum[j] += 1.5;
+          else if (Wd.fl[i] > 0.003 && Wd.ft[i] === FT.LAVA) lum[j] += 1.1;
+        }
       }
     }
     if (under) {
-      for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.layer[i] === 0) { const j = ((U.y[i] / 2) | 0) * LW + ((U.x[i] / 2) | 0); if (j >= 0 && j < lum.length) lum[j] += 1.6; }
+      for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.layer[i] === 0) add(U.x[i], U.y[i], 1.6);
     } else {
       for (const c of Civ.cities) {
         if (!c.alive) continue;
         for (const bid of c.buildings) {
           const b = Civ.buildings[bid];
-          if (b.prog < 1 || b.type === BT.WALL || b.type === BT.FARM) continue;
-          const j = ((b.cy / 2) | 0) * LW + ((b.cx / 2) | 0);
-          lum[j] += b.type === BT.KEEP || b.type === BT.TEMPLE ? 2.2 : 1.1;
+          if (!b || b.prog < 1 || b.type === BT.WALL || b.type === BT.FARM) continue;
+          add(b.cx, b.cy, b.type === BT.KEEP || b.type === BT.TEMPLE ? 2.2 : 1.1);
         }
       }
-      for (let p = 0; p < Proj.n; p++) if (Proj.kind[p] === 2) { const j = ((Proj.y[p] / 2) | 0) * LW + ((Proj.x[p] / 2) | 0); if (j >= 0 && j < lum.length) lum[j] += 2; }
-      for (const s of Sky.strikes) { const j = ((s.y / 2) | 0) * LW + ((s.x / 2) | 0); if (j >= 0 && j < lum.length) lum[j] += 8; }
-      for (let k = 0; k < Wd.vents.length; k++) { const v = Wd.vents[k]; lum[((v.y / 2) | 0) * LW + ((v.x / 2) | 0)] += 4; }
+      for (let p = 0; p < Proj.n; p++) if (Proj.kind[p] === 2) add(Proj.x[p], Proj.y[p], 2);
+      for (const s of Sky.strikes) add(s.x, s.y, 8);
+      for (let k = 0; k < Wd.vents.length; k++) { const v = Wd.vents[k]; add(v.x, v.y, 4); }
     }
-    blur(lum, LW, LH, 2); blur(lum, LW, LH, 2);
+    blur(lum, LW, x0, y0, x1, y1, 2); blur(lum, LW, x0, y0, x1, y1, 2);
     const dark = under ? 0.86 : (1 - day) * (AG.speed >= 4 && !AG.paused ? 0.45 : 0.8); // gentler nights when time races
     const tr = under ? 4 : 8, tg = under ? 3 : 12, tb = under ? 10 : 38;
     const glowK = under ? 0.6 : 0.15 + (1 - day) * 0.5;
     let la = 0, ga2 = 0;
-    for (let j = 0; j < lum.length; j++) {
+    for (let ly = y0; ly < y1; ly++) for (let j = ly * LW + x0, e = ly * LW + x1; j < e; j++) {
       const L = lum[j] * 1.6;
       const a = (dark * (1 - (L > 1 ? 1 : L)) * 255) | 0;
       lpix[j] = pack(tr, tg, tb, a); if (a > la) la = a;
@@ -804,21 +818,25 @@
     }
     // layers with nothing in them are not uploaded or drawn
     lightOn = la > 2; glowOn = ga2 > 2;
-    if (lightOn) lctx.putImageData(limg, 0, 0);
-    if (glowOn) gctx.putImageData(gimg, 0, 0);
+    if (lightOn) lctx.putImageData(limg, 0, 0, x0, y0, x1 - x0, y1 - y0);
+    if (glowOn) gctx.putImageData(gimg, 0, 0, x0, y0, x1 - x0, y1 - y0);
+    lwin.x0 = x0; lwin.y0 = y0; lwin.x1 = x1; lwin.y1 = y1;
   }
   const GASCOL = [[0, 0, 0], [236, 240, 244], [74, 70, 68], [140, 205, 70]];
   function updateGas() {
     let any = false;
-    for (let ly = 0; ly < LH; ly++) for (let lx = 0; lx < LW; lx++) {
+    const w = viewWin(8), x0 = w.x0, y0 = w.y0, x1 = w.x1, y1 = w.y1;
+    if (x1 <= x0 || y1 <= y0) return;
+    for (let ly = y0; ly < y1; ly++) for (let lx = x0; lx < x1; lx++) {
       const i = ly * 2 * W + lx * 2, g = Math.max(Wd.gas[i], Wd.gas[i + 1], Wd.gas[i + W], Wd.gas[i + W + 1]);
       if (g < 0.01) { gspix[ly * LW + lx] = 0; continue; }
       any = true;
       const c = GASCOL[Wd.gt[i] || Wd.gt[i + 1] || Wd.gt[i + W] || 2];
       gspix[ly * LW + lx] = pack(c[0], c[1], c[2], Math.min(210, (g * 420) | 0));
     }
-    if (any || gasOn) gsctx.putImageData(gsimg, 0, 0);
+    if (any || gasOn) gsctx.putImageData(gsimg, 0, 0, x0, y0, x1 - x0, y1 - y0);
     gasOn = any;
+    gwin.x0 = x0; gwin.y0 = y0; gwin.x1 = x1; gwin.y1 = y1;
   }
   function updateClouds() {
     if (AG.mode === 'deep') { cloudOn = false; return; } // no weather over millions of years
@@ -1064,30 +1082,61 @@
   }
 
   // ------------------------------------------------------------ main frame
-  R.frame = function (dt, alpha) {
+  // Draw only the part of a world-sized layer that is on screen. A layer can be at any resolution
+  // (cells, half cells, cloud cells); one layer pixel of margin keeps smoothed edges the same.
+  function blit(img, ox, oy, z) {
+    const kx = img.width / W, ky = img.height / H;
+    const x0 = Math.max(0, Math.floor((-ox / z) * kx) - 1), y0 = Math.max(0, Math.floor((-oy / z) * ky) - 1);
+    const x1 = Math.min(img.width, Math.ceil(((cw - ox) / z) * kx) + 1), y1 = Math.min(img.height, Math.ceil(((ch - oy) / z) * ky) + 1);
+    if (x1 <= x0 || y1 <= y0) return;
+    ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0, ox + (x0 / kx) * z, oy + (y0 / ky) * z, ((x1 - x0) / kx) * z, ((y1 - y0) / ky) * z);
+  }
+  // A paused world is a still picture. Everything that can change what is on screen goes into one
+  // signature; while it stays the same nothing is drawn (after a few frames for the layers to
+  // settle), apart from one safety frame every half second.
+  let sigLast = '', sigSame = 0, miniDue = false;
+  function stillPicture(V3) {
+    const c = R.cam, h = R.hover, sel = AG.UI && AG.UI.sel, d = R.view === 0 ? Wd.udirty : Wd.dirty;
+    let dirty = 0; for (let k = 0; k < NC; k++) dirty += d[k];
+    const busy = AG.FX.n > 0 || God.down || God.shake > 0 || Sky.flash > 0 || mo.on || mo.ready || dirty > 0 || R.bordersDirty;
+    const sig = busy ? '' : [c.x.toFixed(3), c.y.toFixed(3), c.z.toFixed(4), c.zt, R.view, R.overlay, R.showTrade ? 1 : 0, R.follow, h.on ? h.x.toFixed(1) + ',' + h.y.toFixed(1) : '',
+      God.tool, God.brush.r, God.acts | 0, God.possessed, sel ? sel.type + sel.id : '', cw, ch, R.perf.scale, R.perf.cosmetics ? 1 : 0, R.perf.animate ? 1 : 0,
+      lastView, AG.tick, AG.mode, AG.Geo.stepN, AG.Geo.year, U.count, V3 && V3.sig ? V3.sig() : ''].join('|');
+    if (busy || sig !== sigLast) { sigLast = sig; sigSame = 0; return false; }
+    sigSame++;
+    if (sigSame === 6 || sigSame % 30 === 0) { miniDue = true; return false; } // the last settling frame, and the safety frames
+    return sigSame > 6;
+  }
+  R.invalidate = function () { sigLast = ''; sigSame = 0; };
+  R.frame = function (dt, alpha, still) {
     const t0 = performance.now();
-    tm += dt; frameN++;
+    if (!still) tm += dt; // (paused: water, flags and glows hold still)
+    frameN++;
     const RS = R.perf.scale; ctx.setTransform(RS, 0, 0, RS, 0, 0);
     const c = R.cam;
     R.updateCamera(dt);
     const V3 = AG.View3D;
-    if (V3 && V3.ok) { V3.update(dt); if (V3.active) { frame3D(dt, alpha, t0); return; } }
+    if (V3 && V3.ok) V3.update(dt);
+    if (still && stillPicture(V3)) { R.stats.ms = 0; R.stats.idle = true; return; }
+    R.stats.idle = false;
+    if (V3 && V3.ok && V3.active) { frame3D(dt, alpha, t0); return; }
     const z = c.z, under = R.view === 0;
     const tp = performance.now();
     updateTerrain();
     R.stats.terrainMs = performance.now() - tp;
     if (R.bordersDirty || (R.overlay === 'heat' && frameN % 20 === 0) || (AG.mode === 'deep' && frameN % 10 === 0)) { updateBorders(); R.bordersDirty = false; }
-    if (frameN % 2 === 0) updateLight();
-    if (frameN % 3 === 0 && !under) updateGas();
+    const vis = viewWin(0); // (a jump of the camera past the margin brings the layers up to date at once)
+    if (frameN % 2 === 0 || ((lightOn || glowOn) && !covers(lwin, vis))) updateLight();
+    if (!under && (frameN % 3 === 0 || (gasOn && !covers(gwin, vis)))) updateGas();
     if (frameN % 4 === 0) { if (R.perf.cosmetics) updateClouds(); else cloudOn = false; }
 
     let ox = Math.round(cw / 2 - c.x * z), oy = Math.round(ch / 2 - c.y * z);
-    if (God.shake > 0) { ox += Math.round((Math.random() - 0.5) * God.shake * 0.7); oy += Math.round((Math.random() - 0.5) * God.shake * 0.7); }
+    if (God.shake > 0 && R.perf.shake !== false) { ox += Math.round((Math.random() - 0.5) * God.shake * 0.7); oy += Math.round((Math.random() - 0.5) * God.shake * 0.7); }
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = under ? '#0b090d' : '#0e2a5a';
     ctx.fillRect(0, 0, cw, ch);
-    ctx.drawImage(under ? underC : worldC, ox, oy, W * z, H * z);
-    if (!under && R.overlay !== 'none') ctx.drawImage(borderC, ox, oy, W * z, H * z);
+    blit(under ? underC : worldC, ox, oy, z);
+    if (!under && R.overlay !== 'none') blit(borderC, ox, oy, z);
 
     // viewport in world cells
     const vx0 = -ox / z - 2, vy0 = -oy / z - 2, vx1 = vx0 + cw / z + 4, vy1 = vy0 + ch / z + 6;
@@ -1111,33 +1160,33 @@
       }
     }
     R.stats.sprites = sprites;
-    if ((!sprites || wildDots) && U.count > 0) { updateDots(alpha, sprites); ctx.drawImage(dotsC, ox, oy, W * z, H * z); }
+    if ((!sprites || wildDots) && U.count > 0) { updateDots(alpha, sprites); blit(dotsC, ox, oy, z); }
     if (sprites) drawUnits(ox, oy, z, s, alpha, vx0, vy0, vx1, vy1, under);
     else R._sky = [];
     drawProjectiles(ox, oy, z, under);
     drawParticles(ox, oy, z, under, false);
     if (!under) {
       ctx.imageSmoothingEnabled = true;
-      if (gasOn) ctx.drawImage(gasC, ox, oy, W * z, H * z);
+      if (gasOn) blit(gasC, ox, oy, z);
       if (cloudOn) {
         const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
         const sun = Sky.sunDir();
         ctx.globalAlpha = cvis * Sky.daylight();
-        ctx.drawImage(shadC, ox - sun.x * 7 * z, oy + 5 * z, W * z, H * z);
+        blit(shadC, ox - sun.x * 7 * z, oy + 5 * z, z);
         ctx.globalAlpha = 1;
       }
     } else ctx.imageSmoothingEnabled = true;
     // light: darkness then warm glow (skipped in full daylight)
-    if (lightOn) ctx.drawImage(lightC, ox, oy, W * z, H * z);
+    if (lightOn) blit(lightC, ox, oy, z);
     if (glowOn) {
       ctx.globalCompositeOperation = 'lighter';
-      ctx.drawImage(glowC, ox, oy, W * z, H * z);
+      blit(glowC, ox, oy, z);
       ctx.globalCompositeOperation = 'source-over';
     }
     if (!under && cloudOn) {
       const cvis = R.view === 2 ? 1 : AG.clamp(0.9 - z / 7, 0.1, 0.6);
       ctx.globalAlpha = cvis;
-      ctx.drawImage(cloudC, ox, oy, W * z, H * z);
+      blit(cloudC, ox, oy, z);
       ctx.globalAlpha = 1;
     }
     ctx.imageSmoothingEnabled = false;
@@ -1151,7 +1200,7 @@
     drawLabels(ox, oy, z, under);
     drawSelection(ox, oy, z, alpha);
     drawCursor(ox, oy, z);
-    if (frameN % R.perf.minimapEvery === 0) drawMinimap();
+    if (frameN % R.perf.minimapEvery === 0 || miniDue) { drawMinimap(); miniDue = false; }
     R.stats.ms = performance.now() - t0;
   };
 
@@ -1397,18 +1446,21 @@
   // the head count is stamped from pre-drawn digits, so a plate is redrawn only when its name,
   // colour, rank or the number of digits changes
   const digits = {};
+  const plateK = () => (R.perf.scale > 1 ? R.perf.scale : 1); // drawn finer than CSS pixels at Sharp resolution, so text stays crisp
   function digitSet(big) {
     const key = big ? 'b' : 's';
     if (digits[key]) return digits[key];
+    const K = plateK();
     const font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`, prev = ctx.font;
     ctx.font = font;
     let adv = 0; for (let d = 0; d < 10; d++) adv = Math.max(adv, ctx.measureText(String(d)).width);
     ctx.font = prev;
     adv = Math.ceil(adv);
-    const h = big ? 22 : 20, c = mk(adv * 10, h), g = c.getContext('2d');
+    const h = big ? 22 : 20, c = mk(Math.ceil(adv * 10 * K), Math.ceil(h * K)), g = c.getContext('2d');
+    g.scale(K, K);
     g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(232,182,76,0.95)';
     for (let d = 0; d < 10; d++) g.fillText(String(d), d * adv + adv / 2, h / 2 + 1);
-    return (digits[key] = { c, adv, h });
+    return (digits[key] = { c, adv, h, K });
   }
   function plateSprite(name, nd, k, cap, big) {
     const key = `${name}|${nd}|${k.css}|${cap ? 1 : 0}${big ? 1 : 0}`;
@@ -1420,7 +1472,8 @@
     ctx.font = prevFont;
     const D = digitSet(big), pw = D.adv * nd;
     const ph = big ? 22 : 20, crest = 7, pad = 7, w = Math.ceil(crest + pad + nw + 8 + pw + pad);
-    const c = mk(w + 2, ph + 7), g = c.getContext('2d'), x0 = 1, y0 = 1, mid = y0 + ph / 2;
+    const K = plateK(), c = mk(Math.ceil((w + 2) * K), Math.ceil((ph + 7) * K)), g = c.getContext('2d'), x0 = 1, y0 = 1, mid = y0 + ph / 2;
+    g.scale(K, K);
     g.font = font; g.textAlign = 'left'; g.textBaseline = 'middle';
     g.fillStyle = 'rgba(12,16,27,0.82)';
     g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, w, ph, 5); else g.rect(x0, y0, w, ph); g.fill();
@@ -1430,16 +1483,18 @@
     g.fillText(name, x0 + crest + pad, mid + 1);
     g.beginPath(); g.moveTo(x0 + w / 2 - 4, y0 + ph); g.lineTo(x0 + w / 2 + 4, y0 + ph); g.lineTo(x0 + w / 2, y0 + ph + 5); g.closePath();
     g.fillStyle = 'rgba(12,16,27,0.82)'; g.fill();
-    e = { c, w, ph, numX: crest + pad + nw + 8, t: frameN };
+    e = { c, w, ph, numX: crest + pad + nw + 8, t: frameN, cw: w + 2, chh: ph + 7 };
     plates.set(key, e);
     if (plates.size > 900) for (const [kk, v] of plates) if (frameN - v.t > 90) plates.delete(kk);
     return e;
   }
   function plate(sx, sy, name, pop, k, cap, big, captureT) {
     const e = plateSprite(name, pop.length, k, cap, big), x0 = Math.round(sx - e.w / 2), y0 = Math.round(sy - e.ph / 2);
-    ctx.drawImage(e.c, x0 - 1, y0 - 1);
-    const D = digitSet(big);
-    for (let q = 0; q < pop.length; q++) { const d = pop.charCodeAt(q) - 48; if (d >= 0 && d <= 9) ctx.drawImage(D.c, d * D.adv, 0, D.adv, D.h, x0 + e.numX + q * D.adv, y0, D.adv, D.h); }
+    const D = digitSet(big), K = D.K, sm = ctx.imageSmoothingEnabled;
+    if (K !== 1) ctx.imageSmoothingEnabled = true; // (a finer image laid onto a finer canvas, one to one)
+    ctx.drawImage(e.c, x0 - 1, y0 - 1, e.cw, e.chh);
+    for (let q = 0; q < pop.length; q++) { const d = pop.charCodeAt(q) - 48; if (d >= 0 && d <= 9) ctx.drawImage(D.c, d * D.adv * K, 0, D.adv * K, D.h * K, x0 + e.numX + q * D.adv, y0, D.adv, D.h); }
+    if (K !== 1) ctx.imageSmoothingEnabled = sm;
     if (captureT > 0) { ctx.fillStyle = '#ef5350'; ctx.fillRect(x0 + 4, y0 + e.ph + 2, ((e.w - 8) * captureT) / 100, 3); }
   }
   function drawLabels(ox, oy, z, under) {
@@ -1505,7 +1560,7 @@
       if (God.cur.mode === 'brush') ring3D(h.x, h.y, God.brush.r);
       else { const p = V3.project(h.x, h.y, 0.05); if (p.vis) { ctx.beginPath(); ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y); ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8); ctx.stroke(); } }
     }
-    if (frameN % R.perf.minimapEvery === 0) drawMinimap();
+    if (frameN % R.perf.minimapEvery === 0 || miniDue) { drawMinimap(); miniDue = false; }
     R.stats.ms = performance.now() - t0;
   }
   function drawSelection(ox, oy, z, alpha) {
@@ -1534,7 +1589,7 @@
     else { ctx.beginPath(); ctx.moveTo(sx - 7, sy); ctx.lineTo(sx + 7, sy); ctx.moveTo(sx, sy - 7); ctx.lineTo(sx, sy + 7); ctx.stroke(); }
   }
   function drawMinimap() {
-    if (!mctx) return;
+    if (!mctx || AG.Settings.v.minimap === 'off') return;
     const mw = mini.width, mh = mini.height;
     mctx.imageSmoothingEnabled = true;
     mctx.drawImage(R.view === 0 ? underC : worldC, 0, 0, mw, mh);

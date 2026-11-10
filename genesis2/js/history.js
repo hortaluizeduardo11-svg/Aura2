@@ -132,7 +132,7 @@
     st.push(() => {
       normalize();
       for (const c of Civ.cities) if (c._ps) { c._ps = null; c._psT = -1; } // a per-tick cache of members: never worth copying
-      Object.assign(snap, { v: 2, seed: AG.seed, tick: AG.tick, mode: AG.mode, year: year(), rng: { core: AG.rndState(), geo: Geo.rng ? Geo.rng.get() : 0, life: Life.rng ? Life.rng.get() : 0 } });
+      Object.assign(snap, { v: 2, dims: [AG.W, AG.H], seed: AG.seed, tick: AG.tick, mode: AG.mode, year: year(), rng: { core: AG.rndState(), geo: Geo.rng ? Geo.rng.get() : 0, life: Life.rng ? Life.rng.get() : 0 } });
       snap.world = {}; snap.worldMisc = clone({ springs: Wd.springs, vents: Wd.vents, epoch: Wd.epoch });
     });
     for (const k of WORLD_FIELDS()) st.push(() => { snap.world[k] = Wd[k].slice(); });
@@ -302,12 +302,19 @@
     return v;
   }
   History.serialize = function () { return JSON.stringify({ aura: 'genesis2', saved: year(), snap: pack(History.capture()), log: History.log }); };
+  // A save holds one world of a fixed shape; a file is checked before the world in play is touched.
+  History.check = function (text) {
+    let f;
+    try { f = JSON.parse(text); } catch (e) { throw new Error('this is not a save file'); }
+    if (!f || f.aura !== 'genesis2' || !f.snap) throw new Error('this is not an AURA: Genesis 2 save');
+    const d = f.snap.dims;
+    if (d && (d[0] !== AG.W || d[1] !== AG.H)) throw new Error(`it holds a ${d[0]}×${d[1]} world and this window made a ${AG.W}×${AG.H} one. The world takes the shape of the window: open the save in a window of the size it was saved in`);
+    return f;
+  };
   History.deserialize = function (text) {
-    const f = JSON.parse(text);
-    if (f.aura !== 'genesis2') throw new Error('Not an AURA: Genesis 2 save');
-    if (AG.W !== f.snap.world.elev.d.length * 3 / 4 / 4 / AG.H && false) throw new Error('World size differs');
+    const f = History.check(text);
     const s = unpack(f.snap);
-    if (s.world.elev.length !== AG.N) throw new Error(`This save is for a ${Math.round(Math.sqrt(s.world.elev.length))}-wide world; open it in a window of the same shape.`);
+    if (s.world.elev.length !== AG.N) throw new Error(`it holds a world of ${s.world.elev.length} cells and this window made one of ${AG.N}. Open the save in a window of the size it was saved in`);
     History.restore(s);
     History.log = f.log || [];
     History.snaps = [{ year: AG.Geo.year, tick: AG.tick, data: History.capture() }];

@@ -164,6 +164,23 @@ test('history: a snapshot copied over many frames restores the same world as one
   return `${n} slices, hash ${a1}`;
 });
 
+test('creatures: a lookup before the first tick returns at once, and finds a new body after a refresh', () => {
+  // The lookup grid is built by the watch tick. In deep time no tick has run yet: a click on the map
+  // once walked an unbuilt list forever and froze the page.
+  const AG = load({ W: 160, H: 96 });
+  AG.Sim.newWorld(3);
+  assert(AG.Ent.near(80, 48, 30, 1, 64) === 0, 'an unbuilt grid should hold nobody');
+  let i = -1;
+  for (let y = 8; y < 88 && i < 0; y += 4) for (let x = 8; x < 152 && i < 0; x += 4) if (AG.World.passLand(y * AG.W + x)) i = AG.Ent.spawn(AG.SP.GRAZER, x, y, { force: true });
+  assert(i >= 0, 'a grazer should be placed on land');
+  AG.Ent.freshGrid();
+  const n = AG.Ent.near(AG.U.x[i], AG.U.y[i], 2, AG.U.layer[i], 8);
+  assert(n >= 1 && AG.Ent.buf[0] === i, 'the new body should be found after the grid is refreshed');
+  AG.Sim.newWorld(4);
+  assert(AG.Ent.near(80, 48, 200, 1, 64) === 0, 'a new world should start with an empty grid');
+  return `found body ${i}; empty before and after`;
+});
+
 test('save/load: a loaded world has the same future as the original', () => {
   const W = 224, H = 144, A = fromSave(dawnSave(7, W, H), W, H);
   for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);

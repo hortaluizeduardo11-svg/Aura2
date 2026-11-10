@@ -35,7 +35,8 @@
     $('#overlay').addEventListener('change', (e) => { R.overlay = e.target.value; R.bordersDirty = true; });
     $('#btn-trade').addEventListener('click', (e) => { R.showTrade = !R.showTrade; e.currentTarget.classList.toggle('on', R.showTrade); e.currentTarget.setAttribute('aria-pressed', R.showTrade); });
     $('#btn-panel').addEventListener('click', () => setPanel($('#panel').hidden));
-    $('#btn-help').addEventListener('click', help);
+    $('#btn-menu').addEventListener('click', () => openMenu('game'));
+    $('#modalbox').addEventListener('click', menuClick);
     document.querySelector('.tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab); });
     $('#pbody').addEventListener('click', panelClick);
     $('#panel').addEventListener('pointerenter', () => { panelHover = true; });
@@ -46,6 +47,7 @@
     $('#pad-power').addEventListener('click', () => { God.input.power = true; });
     $('#pad-release').addEventListener('click', () => { God.release(); R.follow = -1; });
     $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+    $('#loadfile').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) UI.load(f); e.target.value = ''; }); // (cleared so the same file can be chosen again)
     bindCanvas($('#world'));
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -59,7 +61,7 @@
     });
     setTab('chronicle');
   };
-  UI.onPerf = function () { if (UI.tab === 'world' && !$('#panel').hidden) { worldBuilt = false; renderPanel(true); } };
+  UI.onPerf = function () { if (menuTab && !$('#modal').hidden) renderMenu(); };
   UI.reset = function () { UI.sel = null; worldBuilt = false; fillDiseases(); if (UI.tab !== 'chronicle') setTab(UI.tab); };
 
   // 9x9 pixel glyphs, one per tool family, tinted per tool and outlined like the world's sprites
@@ -160,6 +162,7 @@
 
   // ============================================================ picking
   UI.unitAt = function (x, y) {
+    Ent.freshGrid(); // a click comes between ticks (and in deep time and history nothing else builds the grid)
     const r = Math.max(1.2, 8 / R.cam.z);
     const layers = R.view === 0 ? [0] : [2, 1];
     for (const L of layers) {
@@ -251,7 +254,22 @@
     cv.addEventListener('pointerup', end);
     cv.addEventListener('pointercancel', end);
     cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') R.hover.on = false; });
-    cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = local(e); R.zoomAt(p.x, p.y, e.deltaY < 0 ? 1 : -1); }, { passive: false });
+    // Wheel and trackpad zoom. A mouse wheel sends one event per notch; a trackpad sends dozens per
+    // swipe (and a pinch arrives as ctrl+wheel), so the scrolling is added up: the first event of a
+    // gesture zooms one step at once, then one step per stretch of scrolling, never faster than
+    // the camera can follow.
+    let wAcc = 0, wLast = 0, wStep = 0;
+    cv.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const now = performance.now(), d = e.deltaY * (e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? 240 : 1);
+      if (!d) return;
+      const fresh = now - wLast > 220, notch = Math.abs(d) >= 50; // a wheel notch is one big jump; a trackpad sends small ones
+      if (fresh || (d > 0) !== (wAcc > 0)) wAcc = 0;
+      wLast = now; wAcc += d;
+      if (!fresh && (Math.abs(wAcc) < (e.ctrlKey ? 30 : notch ? 90 : 170) || now - wStep < (notch || e.ctrlKey ? 90 : 150))) return;
+      wStep = now; wAcc = 0;
+      const p = local(e); R.zoomAt(p.x, p.y, d < 0 ? 1 : -1);
+    }, { passive: false });
   }
   function zoomTo(sx, sy, z) {
     const b = R.screenToWorld(sx, sy);
@@ -279,7 +297,7 @@
       case '-': case '_': R.zoomAt(R.size().w / 2, R.size().h / 2, -1); break;
       case 'b': { const o = [...document.querySelectorAll('#overlay option')].map((x) => x.value); R.overlay = o[(o.indexOf(R.overlay) + 1) % o.length]; $('#overlay').value = R.overlay; R.bordersDirty = true; break; }
       case 'i': showCat('look'); selectTool('inspect'); break;
-      case 'escape': God.pendingKd = -1; R.follow = -1; break;
+      case 'escape': if (God.pendingKd >= 0 || R.follow >= 0) { God.pendingKd = -1; R.follow = -1; } else openMenu('game'); break; // nothing to cancel: the menu
       case '[': if (R.is3D()) AG.View3D.turn(-Math.PI / 8); break;
       case ']': if (R.is3D()) AG.View3D.turn(Math.PI / 8); break;
       case 'n': if (R.is3D()) AG.View3D.north(); break;
@@ -323,6 +341,7 @@
       label = `${Geo.label()} · ${worldEra()}${season}${storm ? ' · ' + Sky.STORMS[storm.type].name : ''}`;
     }
     $('#clock').innerHTML = `<span class="sun" style="background:${sun}"></span>${esc(label)}`;
+    if (AG.Settings.v.showFps === 'on') $('#fps').textContent = `${Math.round(AG.stats.fps)} fps · ${AG.Perf.LEVELS[AG.Perf.level].name}${R.stats.idle ? ' · still' : ''}`;
     const sea = Math.round(Geo.seaLevel * 2500);
     if (AG.mode === 'deep') $('#stats').innerHTML = `<b>${Life.alive().length}</b> species · <b>${Life.speciations}</b> splits · <b>${Life.extinctions}</b> extinctions`;
     else $('#stats').innerHTML = `<b>${fmt(People.alive)}</b> people · <b>${Civ.cities.filter((c) => c.alive).length}</b> communities · <b>${Life.alive().length}</b> species · sea ${sea >= 0 ? '+' : ''}${sea} m${AG.throttled ? ' · <span style="color:var(--war)">at capacity</span>' : ''}`;
@@ -377,7 +396,6 @@
     if (t.dataset.branch) { History.switchBranch(+t.dataset.branch); UI.toast('Switched timelines.'); renderPanel(true); return; }
     if (t.dataset.x !== undefined) { const x = +t.dataset.x, y = +t.dataset.y; if (x >= 0) { R.follow = -1; R.centerOn(x, y, Math.max(R.cam.z, 4)); } return; }
     if (t.dataset.dis !== undefined) { diseaseEditor(+t.dataset.dis); return; }
-    if (t.dataset.perf !== undefined) { AG.Perf.set(t.dataset.perf); worldBuilt = false; renderPanel(true); UI.toast(t.dataset.perf === 'auto' ? 'Performance: automatic.' : `Performance: ${AG.Perf.LEVELS[AG.Perf.level].name}.`); return; }
     const a = t.dataset.act, i = selectedUnit();
     switch (a) {
       case 'follow': if (i >= 0) { R.follow = i; R.view = U.layer[i] === 0 ? 0 : 1; syncLayers(); if (R.cam.z < 4) R.setZoom(6); if (AG.mode !== 'watch') AG.setSpeed('1'); } else { const P = UI.sel && People.get(UI.sel.id); if (P) { const c = Civ.cities[P.comm]; if (c) { AG.setSpeed('1'); R.centerOn(c.x, c.y, 8); UI.toast('Watching their community; tap Follow again once they appear.'); } } } break;
@@ -386,8 +404,9 @@
       case 'bless': if (i >= 0) { God.apply('bless', U.x[i], U.y[i], 3, 1, 1); } break;
       case 'smite': if (i >= 0) God.lightning(U.x[i], U.y[i], false); break;
       case 'dream': if (i >= 0) God.apply('dream', U.x[i], U.y[i], 1); break;
-      case 'newworld': { const sd = parseInt($('#seed').value, 10) || 0; AG.Loader.show('Shaping a new world', 'Every world is born in Year 0 as one continent of its own.'); AG.Loader.set(0.3); setTimeout(() => { try { AG.newWorld(sd); AG.Loader.set(0.7, 'Painting the land'); R.prewarm(); } catch (e) { AG.showError(e); } AG.Loader.set(1, 'Ready'); AG.Loader.hide(); }, 40); break; }
+      case 'newworld': newWorld(parseInt($('#seed').value, 10) || 0); break;
       case 'save': UI.save(); break;
+      case 'settings': openMenu('graphics'); break;
       case 'load': $('#loadfile').click(); break;
       case 'timelapse': UI.timelapse(); break;
       case 'demo-emergence': AG.Demos.emergence(); break;
@@ -633,8 +652,8 @@
       <div class="btnrow" style="margin-top:4px"><button type="button" class="btn" data-act="demo-emergence">Emergence: from bands to the first eras</button><button type="button" class="btn" data-act="demo-sea">Rising sea: a land bridge drowns</button></div>
       <h3>Shape the next world</h3>
       <div class="btnrow" style="margin-top:0"><input id="seed" type="number" class="hudbtn" style="width:130px" placeholder="Random seed" aria-label="World seed"><button type="button" class="btn primary" data-act="newworld">New world</button></div>
-      <h3>Performance</h3><p class="muted" style="font-size:13px">Auto keeps the picture smooth by giving up what the eye misses least: weather and far trees first, then canvas sharpness and simulation time per frame, and on the slowest machines the 3D close-up. Potato also uses a smaller world from the next page load.</p>
-      <div class="subtabs" id="perfbtns">${[['auto', 'Auto'], ['0', 'Full'], ['1', 'Light'], ['2', 'Lean'], ['3', 'Potato']].map(([v, n]) => `<button type="button" data-perf="${v}" class="${AG.Perf && AG.Perf.mode === v ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <h3>Graphics and settings</h3><p class="muted" style="font-size:13px">Quality, resolution, frame rate, the 3D close-up and more are in the menu.</p>
+      <div class="btnrow" style="margin-top:4px"><button type="button" class="btn" data-act="settings">Open graphics settings</button></div>
       <h3>Stress test</h3><div class="btnrow" style="margin-top:4px"><button type="button" class="btn" data-act="stress">Add 4,000 animals</button></div>`;
   }
   function worldStats() {
@@ -660,7 +679,11 @@
   };
   UI.load = function (file) {
     const fr = new FileReader();
-    fr.onload = () => { try { AG.Civ.foldAll(); History.deserialize(fr.result); AG.UI.reset(); AG.syncAfterLoad && AG.syncAfterLoad(); UI.toast('World loaded.'); } catch (e) { UI.toast('Could not load: ' + e.message); } };
+    fr.onload = () => {
+      try { History.check(fr.result); } catch (e) { UI.toast('Could not load: ' + e.message); return; } // refuse a wrong file before touching this world
+      try { AG.Civ.foldAll(); History.deserialize(fr.result); AG.UI.reset(); AG.syncAfterLoad && AG.syncAfterLoad(); UI.toast('World loaded.'); } catch (e) { UI.toast('Could not load: ' + e.message); }
+    };
+    fr.onerror = () => UI.toast('Could not read that file.');
     fr.readAsText(file);
   };
   UI.timelapse = function () {
@@ -688,12 +711,45 @@
   };
 
   // ============================================================ modals
-  function openModal(html) { $('#modalbox').innerHTML = html; $('#modal').hidden = false; }
-  function closeModal() { $('#modal').hidden = true; }
+  function openModal(html) { menuTab = null; $('#modalbox').classList.remove('wide'); $('#modalbox').innerHTML = html; $('#modal').hidden = false; }
+  function closeModal() {
+    $('#modal').hidden = true; menuTab = null;
+    if (menuPaused) { menuPaused = false; if (AG.paused) AG.togglePause(); } // the menu paused the world: carry on
+  }
   UI.closeModal = closeModal;
-  function help() {
-    openModal(`<h2>A god of deep time</h2><p class="muted">The world begins 250 million years ago as one supercontinent. Watch the plates drift (Ages), or skip to the Dawn, when the cleverest primates become people. Then history runs on its own: bands spread, languages split, and wherever conditions allow, farming, metal and states appear.</p>
-      <div class="keys">
+
+  // ------------------------------------------------------------ the menu
+  // Game, Settings, Graphics and Controls. The world waits while the menu is open. Every setting
+  // takes effect at once and is saved in the browser; "Auto" leaves a choice to the performance
+  // governor, which gives up what the eye misses least when frames run slow.
+  let menuTab = null, menuPaused = false;
+  const loadedWorldSize = AG.Settings.v.worldSize;
+  const SETTINGS = {
+    graphics: [
+      ['quality', 'Quality', [['auto', 'Auto'], ['0', 'High'], ['1', 'Medium'], ['2', 'Low'], ['3', 'Minimum']], () => `Auto watches the frame rate and gives up what the eye misses least: weather and far trees first, then sharpness and simulation time per frame, last the 3D close-up. Now running at ${AG.Perf.LEVELS[AG.Perf.level].name}.`],
+      ['resolution', 'Resolution', () => [['auto', 'Auto'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%']].concat((window.devicePixelRatio || 1) > 1.1 ? [['native', 'Sharp']] : []), () => `How finely the map is drawn. The pixel art is stretched up crisply, so lower settings cost little.${(window.devicePixelRatio || 1) > 1.1 ? ' Sharp uses every pixel of this screen: crisper labels, more work.' : ''}`],
+      ['fps', 'Frame rate', [['auto', 'Auto'], ['30', '30'], ['60', '60'], ['display', 'Display']], () => 'Auto draws up to 60 pictures a second. 30 saves battery and heat. Display follows a faster screen (120 Hz and up).'],
+      ['view3d', '3D close-up', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], () => (AG.View3D.ok ? 'Past 8× zoom the camera tilts into a 3D view. Off keeps the map as 2D pixel art at every zoom.' : AG.View3D.lost ? 'The graphics context was lost; the 3D view returns when the browser restores it.' : 'This browser has no WebGL, so the map stays 2D.')],
+      ['detail3d', '3D detail', [['auto', 'Auto'], ['0', 'High'], ['1', 'Medium'], ['2', 'Low'], ['3', 'Minimum']], () => 'Sharpness, shadows and small plants in the 3D view. Auto follows the frame rate.'],
+      ['weather', 'Weather and far trees', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], () => 'Rain, snow, cloud shadows, sun rays, and trees when zoomed far out.'],
+      ['water', 'Moving water', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], () => 'Ripples, glints and lapping shores while you watch.'],
+      ['vignette', 'Vignette', [['on', 'On'], ['off', 'Off']], () => 'The soft darkening toward the edges of the screen.'],
+    ],
+    settings: [
+      ['showFps', 'Frame rate counter', [['on', 'On'], ['off', 'Off']], () => 'Shows frames per second and the quality level next to the calendar.'],
+      ['ticker', 'Event ticker', [['on', 'On'], ['off', 'Off']], () => 'The latest happenings at the bottom of the screen.'],
+      ['minimap', 'Minimap', [['on', 'On'], ['off', 'Off']], () => 'The small map of the whole world.'],
+      ['shake', 'Screen shake', [['on', 'On'], ['off', 'Off']], () => 'The jolt of quakes, eruptions and meteor strikes.'],
+      ['worldSize', 'World size', [['auto', 'Auto'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']], () => `How many cells the next world has, and so how many people it can hold. A smaller world runs faster. Takes effect when the page is loaded again${AG.Settings.v.worldSize !== loadedWorldSize ? ': <button type="button" class="link" data-mact="reload">reload now</button> (save your world first)' : ''}. This world: ${fmt(W * H)} cells.`],
+    ],
+  };
+  function settingRows(list) {
+    return list.map(([key, name, opts, desc]) => {
+      const cur = AG.Settings.v[key], o = typeof opts === 'function' ? opts() : opts;
+      return `<div class="setrow"><b id="set-${key}">${name}</b><div class="subtabs" role="group" aria-labelledby="set-${key}">${o.map(([v, n]) => `<button type="button" data-set="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}" aria-pressed="${cur === v}">${n}</button>`).join('')}</div><small>${desc()}</small></div>`;
+    }).join('');
+  }
+  const KEYS_HTML = `<div class="keys">
         <kbd>Pause · 1× 4× 16×</kbd><span>Watch time: people and animals near the camera act moment to moment</span>
         <kbd>Centuries · Millennia</kbd><span>History time: 20 or 400 years a second, everyone living on their records</span>
         <kbd>Ages · Skip to the Dawn</kbd><span>Deep time: 6 million years a second, before people; or race to the Dawn</span>
@@ -705,9 +761,63 @@
         <kbd>Space</kbd><span>Pause, or strike while possessing</span>
         <kbd>1 2 3 · 4 5</kbd><span>Watch at 1×, 4×, 16× · Centuries · Millennia</span>
         <kbd>Tab · B</kbd><span>Cycle layers · cycle overlays</span>
+        <kbd>Esc</kbd><span>Cancel, release a possessed body, or open this menu</span>
+      </div>`;
+  function menuBody(tab) {
+    switch (tab) {
+      case 'graphics': return settingRows(SETTINGS.graphics) + `<p class="muted" style="font-size:12px;margin:10px 0 0">${Math.round(AG.stats.fps)} frames a second right now. Nothing here changes how the world plays out, only how it is drawn.</p>`;
+      case 'settings': return settingRows(SETTINGS.settings) + `<div class="btnrow"><button type="button" class="btn" data-mact="defaults">Restore all defaults</button></div>`;
+      case 'controls': return `<p class="muted">Every world is born in Year 0 as one supercontinent. Watch the plates drift (Ages), or skip to the Dawn, when the cleverest primates become people. Then history runs on its own: bands spread, split and marry; languages drift apart; farming, metal, writing and states appear only where the land allows.</p>${KEYS_HTML}
+      <p class="muted" style="font-size:13px">Try: open History and ask "what if this never happened?" of an invention; sow wild grain near a band; send a dream to a curious child; push a plate in deep time; start an ice age and watch the land bridges open.</p>`;
+      default: return `<div class="menulist">
+        <button type="button" class="btn primary" data-mact="resume">Back to the world</button>
+        <button type="button" class="btn" data-mact="save">Save world…</button>
+        <button type="button" class="btn" data-mact="load">Load world…</button>
+        <button type="button" class="btn" data-mact="timelapse">Time-lapse of the continents</button>
       </div>
-      <p class="muted" style="font-size:13px">Try: open History and ask "what if this never happened?" of an invention; sow wild grain near a band; send a dream to a curious child; push a plate in deep time; start an ice age and watch the land bridges open.</p>
-      <div class="btnrow"><button type="button" class="btn primary" onclick="AG.UI.closeModal()">Back to the world</button></div>`);
+      <h3>New world</h3><div class="btnrow" style="margin-top:0"><input id="mseed" type="number" class="hudbtn" style="width:140px" placeholder="Random seed" aria-label="World seed"><button type="button" class="btn" data-mact="newworld">Create</button></div>
+      <h3>Scenarios</h3><div class="btnrow" style="margin-top:0"><button type="button" class="btn" data-mact="demo-emergence">Emergence: from bands to the first eras</button><button type="button" class="btn" data-mact="demo-sea">Rising sea: a land bridge drowns</button></div>
+      <p class="muted" style="font-size:12px;margin:14px 0 0">${AG.calText(AG.mode === 'deep' ? null : AG.Geo.year)} · seed ${AG.seed} · the world waits while this menu is open.</p>`;
+    }
+  }
+  function renderMenu() {
+    const box = $('#modalbox'), top = box.scrollTop;
+    box.classList.add('wide');
+    box.innerHTML = `<div class="menuhead"><h2>AURA <span>Genesis II</span></h2><button type="button" class="btn" data-mact="resume" aria-label="Close the menu">Close</button></div>
+      <div class="menutabs" role="tablist">${[['game', 'Game'], ['settings', 'Settings'], ['graphics', 'Graphics'], ['controls', 'Controls']].map(([k, n]) => `<button type="button" role="tab" data-menu="${k}" aria-selected="${menuTab === k}" class="${menuTab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <div class="menubody">${menuBody(menuTab)}</div>`;
+    box.scrollTop = top;
+  }
+  function openMenu(tab) {
+    const was = menuTab;
+    if ($('#modal').hidden || !was) { if (!AG.paused && !AG.fastDawn) { AG.setSpeed('0'); menuPaused = true; } }
+    menuTab = tab || 'game';
+    renderMenu(); $('#modal').hidden = false;
+    if (!was) $('#modalbox').scrollTop = 0;
+  }
+  UI.openMenu = openMenu;
+  function help() { openMenu('controls'); }
+  function menuClick(e) {
+    if (!menuTab) return; // another dialog owns the box
+    const t = e.target.closest('[data-menu],[data-set],[data-mact]'); if (!t) return;
+    if (t.dataset.menu) { menuTab = t.dataset.menu; renderMenu(); $('#modalbox').scrollTop = 0; return; }
+    if (t.dataset.set) { AG.Settings.set(t.dataset.set, t.dataset.val); renderMenu(); return; }
+    const done = () => { menuPaused = false; closeModal(); }; // the world that follows sets its own pace
+    switch (t.dataset.mact) {
+      case 'resume': closeModal(); break;
+      case 'save': UI.save(); break;
+      case 'load': done(); $('#loadfile').click(); break;
+      case 'timelapse': { const p = menuPaused; menuPaused = false; UI.timelapse(); menuPaused = p; break; }
+      case 'newworld': { const sd = parseInt($('#mseed').value, 10) || 0; done(); newWorld(sd); break; }
+      case 'demo-emergence': done(); AG.Demos.emergence(); break;
+      case 'demo-sea': done(); AG.Demos.risingSea(); break;
+      case 'defaults': AG.Settings.reset(); renderMenu(); UI.toast('Settings restored to their defaults.'); break;
+      case 'reload': location.reload(); break;
+    }
+  }
+  function newWorld(sd) {
+    AG.Loader.show('Shaping a new world', 'Every world is born in Year 0 as one continent of its own.'); AG.Loader.set(0.3);
+    setTimeout(() => { try { AG.newWorld(sd); AG.Loader.set(0.7, 'Painting the land'); R.prewarm(); } catch (e) { AG.showError(e); } AG.Loader.set(1, 'Ready'); AG.Loader.hide(); }, 40);
   }
   function diseaseEditor(idx) {
     const D = idx >= 0 && AG.DISEASES[idx] ? AG.DISEASES[idx] : { name: AG.Names.disease(), color: '#c0ca33', contagion: 0.12, radius: 1.5, lethality: 0.3, incubation: 1, duration: 3, slow: 0.2, sterile: 0, madness: 0, hollow: 0, targets: AG.CIV_MASK };
