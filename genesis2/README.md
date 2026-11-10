@@ -30,6 +30,28 @@ geology and evolution models, the invention graph, LOD, update order and the per
 
 ## Playing
 
+The game starts behind a loading screen: a pixel starfield with your planet turning in the middle,
+painted from the world as it is being made. Then the title screen shows the Aura emblem over the
+living world, with **Play**, **New World**, **Settings** and **Save & Load**. The menu can bring
+the title screen back.
+
+**The interface** is pixel art throughout, in one pixel font:
+- **Top bar:** the calendar, the speeds, Skip to the Dawn, the Chronicle window and the Menu.
+- **Power bar** along the bottom, in six tabs: Terrain, Civilizations, Creatures, Weather,
+  Destruction and World.
+  - Each tab lays its powers out as two rows of icon buttons, in labelled groups (Shape, Paint,
+    Geology, Underground, and so on). Hover over a power for its name and what it does; on a
+    touch screen the card shows when you pick it.
+  - The World tab holds the layers (Underground, Surface, Sky), the map overlays, trade routes,
+    the windows, and save, load, time-lapse, settings and the title screen.
+  - The red button on the left folds the bar away; any tab brings it back.
+- **Tool dock** on the left edge:
+  - The upper slot shows the brush's size and shape as pixels, and opens a small window for size,
+    strength, round or square shape, and the gene or disease a power needs.
+  - The lower slot shows the power in hand, with a red X to put it down (back to Inspect).
+- **Windows** (the Chronicle and inspector, the menu, dialogs) have pixel frames and a red close
+  square in the top-right corner.
+
 | Control | Clock | What happens |
 |---|---|---|
 | **Ages** | deep time, ~6 million years a second | Plates drift; species radiate and go extinct. Nothing is drawn on top of the map: the land itself shows the plates at work, morphing smoothly as continents part, collide and raise mountains. |
@@ -43,7 +65,8 @@ geology and evolution models, the invention graph, LOD, update order and the per
 - Right-drag turns and tilts in 3D; `[` and `]` turn, `N` faces north.
 - `1`–`5` set the speeds and Space pauses.
 - `Tab` cycles layers and `B` cycles overlays.
-- `Esc` cancels, releases a possessed body, or opens the menu.
+- `Esc` cancels, closes the brush window, releases a possessed body, or opens the menu. On the
+  title screen, `Esc` or `Enter` plays.
 - A mouse wheel zooms one step per notch. A trackpad swipe or pinch is added up into steps, so one
   swipe doesn't fly through every zoom level.
 
@@ -67,7 +90,7 @@ Settings take effect at once and are saved in the browser.
 - **World:** save/load, time-lapse, scenarios, new world, engine stats and diseases. Graphics
   settings are in the menu.
 
-**Powers** (9 families, 53 tools):
+**Powers** (53, each with its own pixel icon; this is what they do, the bar groups them in six tabs):
 - **Land:** raise or lower ground, plant meadows, forests or wild grain.
 - **Geology:** push a plate, trigger or calm a fault, force an eruption, start an ice age, warm
   the world.
@@ -76,7 +99,8 @@ Settings take effect at once and are saved in the browser.
   brush.
 - **Divine:** bless, curse, plague (with a disease designer), send a dream, omens, inspire,
   harmony, discord.
-- **Ruin:** meteors, tornadoes, tsunamis.
+- **Ruin:** meteors (they fly in real time, even while paused, with a 3D flight and impact up
+  close), tornadoes, tsunamis.
 - **Deep:** dig, ore, magma, aquifers.
 
 ## What's simulated

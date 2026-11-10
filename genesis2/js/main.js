@@ -19,12 +19,7 @@
 
   // ------------------------------------------------------------ loading screen and errors
   const $ = (q) => document.querySelector(q);
-  const Loader = (AG.Loader = {
-    on: true,
-    set(p, text) { const f = $('#ld-fill'); if (f) f.style.width = Math.round(AG.clamp(p, 0, 1) * 100) + '%'; if (text) { const t = $('#ld-step'); if (t) t.textContent = text; } },
-    show(text, tip) { const el = $('#loader'); if (!el) return; el.hidden = false; el.classList.remove('hide'); Loader.on = true; Loader.set(0, text); if (tip !== undefined) { const t = $('#ld-tip'); if (t) t.textContent = tip; } },
-    hide() { const el = $('#loader'); if (!el) return; el.classList.add('hide'); Loader.on = false; setTimeout(() => { if (!Loader.on) el.hidden = true; }, 500); },
-  });
+  const Loader = AG.Loader; // (screens.js: the starfield loading screen with the turning globe)
   const shown = new Set();
   function showError(e) {
     const msg = String((e && (e.stack || e.message)) || e).split('\n').slice(0, 6).join('\n');
@@ -117,7 +112,7 @@
     Sim.newWorld(seed);
     AG.fastDawn = false; AG.paused = false;
     R.reset(); AG.View3D.reset(); AG.UI.reset();
-    R.overlay = 'none'; const o = document.querySelector('#overlay'); if (o) o.value = 'none';
+    AG.UI.setOverlay('none');
     R.bordersDirty = true;
     AG.creating = false;
     AG.deepHold = 3; // a moment to see the newborn continent before the plates start to move
@@ -128,7 +123,7 @@
   // When the Dawn comes: watch the first band at its fire, speed 1.
   AG.onDawn = function (p) {
     AG.fastDawn = false;
-    R.overlay = 'realms'; const o = document.querySelector('#overlay'); if (o) o.value = 'realms';
+    AG.UI.setOverlay('realms');
     const c = Civ.cities.find((q) => q.alive);
     if (c) R.centerOn(c.x, c.y, 8);
     setFocus();
@@ -145,8 +140,7 @@
   AG.syncAfterLoad = function () {
     R.reset(); AG.View3D.reset();
     if (AG.mode === 'watch') { AG.Life.embody(); setFocus(); Civ.lod(); }
-    R.overlay = AG.mode === 'deep' ? 'none' : 'realms';
-    const o = document.querySelector('#overlay'); if (o) o.value = R.overlay;
+    AG.UI.setOverlay(AG.mode === 'deep' ? 'none' : 'realms');
     R.bordersDirty = true;
     AG.UI.syncSpeed();
   };
@@ -195,7 +189,7 @@
         Geo.climate.carbon += 0.12; // a strong warming: the ice sheets collapse within a few thousand years
         AG.History.event('god', 'The world warms: the great ice sheets begin to fail', { cause: 'the Rising Sea scenario' });
         if (best) { R.centerOn(best.x, best.y, 4); AG.UI.select('city', best.id); }
-        R.overlay = 'none'; document.querySelector('#overlay').value = 'none'; R.bordersDirty = true;
+        AG.UI.setOverlay('none');
         AG.setSpeed('m');
         AG.UI.toast(best ? `The sea is rising. ${best.name} sits lowest of all the camps; watch the coast.` : 'The sea is rising.');
       };
@@ -224,7 +218,7 @@
           if (AG.fastDawn) { const y0 = Geo.myr; Sim.skipDeep(45); myr += Geo.myr - y0; if (AG.mode === 'deep') Loader.set(Math.min(0.95, Geo.myr / 260), `Racing through the ages · ${Geo.label()}`); }
           else if (AG.deepHold > 0) AG.deepHold -= dt / 1000;
           else {
-            acc += (dt / 1000) * DEEP_MYPS;
+            acc += (dt / 1000) * DEEP_MYPS * (AG.Title && AG.Title.on ? 0.3 : 1); // (slowly behind the title screen: the land drifts, the Dawn waits)
             // one geology step at most per frame (a step is the heaviest thing deep time does)
             if (acc >= Sim.DEEP_DT) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; stepped = true; }
             if (acc > Sim.DEEP_DT * 2) acc = Sim.DEEP_DT * 2;
@@ -289,11 +283,11 @@
     if (!document.fonts) return;
     const link = document.querySelector('link[href*="fonts.googleapis"]');
     if (link && !link.sheet) await Promise.race([new Promise((res) => { link.addEventListener('load', res, { once: true }); link.addEventListener('error', res, { once: true }); }), wait(3500)]);
-    await Promise.race([Promise.all(['700 20px "Pixelify Sans"', '500 14px "Pixelify Sans"', '400 14px "Alegreya Sans"', '600 13px "Alegreya Sans"', '700 14px "Alegreya Sans"', '500 16px "Alegreya"', 'italic 400 15px "Alegreya"'].map((f) => document.fonts.load(f).catch(() => null))), wait(3500)]);
+    await Promise.race([Promise.all(['700 40px "Pixelify Sans"', '600 16px "Pixelify Sans"', '500 14px "Pixelify Sans"', '400 14px "Pixelify Sans"'].map((f) => document.fonts.load(f).catch(() => null))), wait(3500)]);
   }
   async function boot() {
     try {
-      Loader.set(0.05, 'Loading fonts');
+      Loader.start(); Loader.set(0.05, 'Loading fonts');
       await fontsReady();
       Loader.set(0.18, 'Starting the renderer'); await nextFrame();
       AG.UI.init(); applyPerf();
@@ -305,7 +299,8 @@
       AG.View3D.prewarm();
       Loader.set(0.95, 'Warming up'); await nextFrame();
       R.frame(0.016, 1); // one full frame behind the curtain: layers, labels, everything cached
-      Loader.set(1, 'Ready'); await wait(120);
+      Loader.set(1, 'Ready'); await wait(160);
+      AG.Title.show(); // the title screen, over the newborn world
       Loader.hide();
       last = performance.now(); AG.deepHold = 3;
       requestAnimationFrame(frame);

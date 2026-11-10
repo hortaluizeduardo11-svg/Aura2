@@ -1451,7 +1451,7 @@
     const key = big ? 'b' : 's';
     if (digits[key]) return digits[key];
     const K = plateK();
-    const font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`, prev = ctx.font;
+    const font = `600 ${big ? 13 : 12}px "Pixelify Sans", "Courier New", monospace`, prev = ctx.font;
     ctx.font = font;
     let adv = 0; for (let d = 0; d < 10; d++) adv = Math.max(adv, ctx.measureText(String(d)).width);
     ctx.font = prev;
@@ -1466,7 +1466,7 @@
     const key = `${name}|${nd}|${k.css}|${cap ? 1 : 0}${big ? 1 : 0}`;
     let e = plates.get(key);
     if (e) { e.t = frameN; return e; }
-    const font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`, prevFont = ctx.font;
+    const font = `600 ${big ? 13 : 12}px "Pixelify Sans", "Courier New", monospace`, prevFont = ctx.font;
     ctx.font = font;
     const nw = measure(name);
     ctx.font = prevFont;
@@ -1501,7 +1501,7 @@
     if (under) return;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     const big = z >= 6;
-    ctx.font = `600 ${big ? 13 : 12}px "Alegreya Sans", system-ui, sans-serif`;
+    ctx.font = `600 ${big ? 13 : 12}px "Pixelify Sans", "Courier New", monospace`;
     for (const c of Civ.cities) {
       if (!c.alive) continue;
       const k = Civ.kingdoms[c.kd], cap = k.capital === c.id;
@@ -1533,7 +1533,7 @@
     if (God.flash() > 0) { ctx.fillStyle = `rgba(230,236,255,${God.flash() * 0.3})`; ctx.fillRect(0, 0, cw, ch); }
     // city name plates float above each keep
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.font = '600 13px "Alegreya Sans", system-ui, sans-serif';
+    ctx.font = '600 13px "Pixelify Sans", "Courier New", monospace';
     const plates = [];
     for (const c of Civ.cities) {
       if (!c.alive) continue;

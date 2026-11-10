@@ -51,8 +51,11 @@ js/history.js  NEW  cause-linked chronicle, timeline, era maps, save/load, branc
 js/god.js      player powers
 js/render.js   stylized 2D renderer + overlays
 js/view3d.js   3D renderer (voxel terrain, cel-shaded models)
-js/ui.js       panels, inspector, phylogeny, tech tree, timeline, time controls
-js/main.js     clocks, modes, frame loop
+js/disaster3d.js  real-time meteor flights and impacts in the 3D close-up
+js/icons.js    pixel icons: one per power, the power-bar tabs and the tool dock
+js/ui.js       power bar, tool dock, panels, inspector, phylogeny, tech tree, menu, input
+js/screens.js  loading screen (starfield, the world's own globe) and title screen (emblem)
+js/main.js     clocks, modes, frame loop, performance governor, boot
 tests/         headless Node test suite and scenario demos
 ```
 
@@ -709,6 +712,21 @@ These follow from the same rules rather than special cases:
     30. Animation time stops with the world, so nothing jumps when it is redrawn.
 - A lost WebGL context switches the close-up off until the browser restores it; the 2D map
   carries on.
+- Interface (pixel art, `index.html`, `ui.js`, `icons.js`, `screens.js`):
+  - One pixel font (Pixelify Sans) and one frame style: a two-pixel dark outline with a light
+    upper-left edge and a dark lower-right edge, on olive-slate stone colours.
+  - Powers live in a bar docked along the bottom: six tabs, each a set of labelled groups of 46 px
+    icon buttons in two rows with recessed dividers. `BAR` in `ui.js` is the single map from tabs
+    and groups to the 53 powers (each appears once) and the world switches.
+  - Icons are 12x12 drawings in a shared palette, outlined automatically and drawn once as data
+    URLs; they are shown at 3x, pixelated.
+  - The loading screen's globe is a 112 px sphere sampled from a 256x128 texture taken from the
+    world's own elevation, ice and vegetation as it is being made (noise continents before there
+    is a world). Light is quantized into four steps; clouds turn at a different speed. Only drawn
+    while the loading screen is visible.
+  - The title emblem is drawn once at 220x184: a landscape in a gold ring, with the wordmark cut
+    from the pixel font into on/off pixels, extruded and outlined.
+  - Behind the title screen deep time runs at 30% speed, so the land drifts but the Dawn waits.
 - A loading screen covers every heavy first-time job:
   - at start: fonts, the first world, every map chunk image, the borders, the minimap and the 3D
     shaders (compiled and drawn once off screen)

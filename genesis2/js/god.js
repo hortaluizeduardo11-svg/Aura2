@@ -9,7 +9,7 @@
   const rnd = AG.rnd;
 
   const God = (AG.God = {
-    tool: 'inspect', cur: null, brush: { r: 5, str: 0.6 },
+    tool: 'inspect', cur: null, brush: { r: 5, str: 0.6, shape: 'round' },
     input: { dx: 0, dy: 0, act: false, power: false, aimX: 0, aimY: 0, moveTo: null },
     possessed: -1, tornadoes: [], meteors: [], impacts: [], shake: 0, disease: 0, pendingKd: -1,
     down: false, wx: 0, wy: 0,
@@ -20,15 +20,20 @@
   };
 
   // ------------------------------------------------------------ brush helpers
+  // A brush power paints a round or a square patch (the player's choice); everything else that
+  // uses this (craters, blasts) is always round.
+  let shapeNow = 'round';
   function eachCell(x, y, r, fn) {
     const x0 = Math.max(1, Math.floor(x - r)), x1 = Math.min(W - 2, Math.ceil(x + r));
     const y0 = Math.max(1, Math.floor(y - r)), y1 = Math.min(H - 2, Math.ceil(y + r));
-    const r2 = r * r;
+    const r2 = r * r, sq = shapeNow === 'square';
     for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
-      const d2 = (cx + 0.5 - x) * (cx + 0.5 - x) + (cy + 0.5 - y) * (cy + 0.5 - y);
+      const dx = cx + 0.5 - x, dy = cy + 0.5 - y;
+      const d2 = sq ? Math.max(dx * dx, dy * dy) : dx * dx + dy * dy;
       if (d2 <= r2) fn(cy * W + cx, 1 - d2 / r2, cx, cy, Math.sqrt(d2));
     }
   }
+  function withShape(t, shape, f) { shapeNow = t.mode === 'brush' && shape === 'square' ? 'square' : 'round'; try { f(); } finally { shapeNow = 'round'; } }
   function unitsIn(x, y, r, layer) {
     Ent.freshGrid(); // powers act between ticks, and in deep time and history no tick keeps the grid
     const n = Ent.near(x, y, r, layer, 512), out = [];
@@ -272,21 +277,21 @@
     if (AG.Render) { if (t.deep) AG.Render.view = 0; else if (t.cat !== 'look' && t.cat !== 'sky' && AG.Render.view === 0) AG.Render.view = 1; }
   };
   // Every act is logged (tick, tool, place, brush) so a replay can repeat it exactly.
-  God.apply = function (id, x, y, k, r, str, extra) {
+  God.apply = function (id, x, y, k, r, str, extra, shape) {
     if (AG.History.flushSnap) AG.History.flushSnap(); // a snapshot being copied belongs to the moment before
     const t = God.byId[id]; if (!t) return;
     const br = God.brush.r, bs = God.brush.str, loc = God.locus;
     if (r !== undefined) { God.brush.r = r; God.brush.str = str; if (extra !== undefined) God.locus = extra; }
-    if (t.mode === 'click') t.click(x, y); else t.apply(x, y, k);
+    if (t.mode === 'click') t.click(x, y); else withShape(t, shape || God.brush.shape, () => t.apply(x, y, k));
     God.brush.r = br; God.brush.str = bs; God.locus = loc;
   };
   function act(t, x, y, k) {
     if (t.id !== 'inspect' && t.id !== 'possess') {
-      AG.History.record('tool', { id: t.id, x, y, k, r: God.brush.r, s: God.brush.str, l: God.locus });
+      AG.History.record('tool', { id: t.id, x, y, k, r: God.brush.r, s: God.brush.str, l: God.locus, sh: God.brush.shape === 'square' ? 'square' : undefined });
       if (AG.mode === 'deep' && AG.Render && AG.Render.deepPoke) AG.Render.deepPoke(); // the deep-time map shows what it did
     }
     God.acts = (God.acts | 0) + 1; // (a paused picture is redrawn when a power is used)
-    if (t.mode === 'click') t.click(x, y); else t.apply(x, y, k);
+    if (t.mode === 'click') t.click(x, y); else withShape(t, God.brush.shape, () => t.apply(x, y, k));
   }
   God.press = function (x, y) {
     God.down = true; God.wx = x; God.wy = y;

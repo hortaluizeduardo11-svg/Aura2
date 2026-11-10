@@ -21,9 +21,12 @@
     R.init($('#world'), $('#minimap'));
     if (AG.View3D.init($('#app'), $('#world'))) R.resize();
     $('#compass').addEventListener('click', () => AG.View3D.north());
-    buildCats(); showCat('look'); selectTool('inspect');
-    $('#toolgrid').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) selectTool(b.dataset.tool); });
-    $('#bsize').addEventListener('input', (e) => { God.brush.r = +e.target.value; $('#bsizev').textContent = e.target.value; });
+    buildBar(); showTab('terrain'); setBarOpen(true); selectTool('inspect');
+    $('#dk-brush').addEventListener('click', () => setBrushPop($('#brushpop').hidden));
+    $('#dk-tool').addEventListener('click', () => { if (God.tool !== 'inspect') selectTool('inspect'); else setBrushPop($('#brushpop').hidden); });
+    $('#brushpop-x').addEventListener('click', () => setBrushPop(false));
+    $('#shaperow').addEventListener('click', (e) => { const b = e.target.closest('[data-shape]'); if (b) { God.brush.shape = b.dataset.shape; syncDock(); } });
+    $('#bsize').addEventListener('input', (e) => { God.brush.r = +e.target.value; $('#bsizev').textContent = e.target.value; drawBrushSlot(); });
     $('#bstr').addEventListener('input', (e) => { God.brush.str = +e.target.value; $('#bstrv').textContent = Math.round(e.target.value * 100); });
     $('#disease').addEventListener('change', (e) => { God.disease = +e.target.value; });
     $('#locus').addEventListener('change', (e) => { God.locus = +e.target.value; });
@@ -31,10 +34,10 @@
     $('#btn-editdisease').addEventListener('click', () => diseaseEditor(-1));
     $('#speed').addEventListener('click', (e) => { const b = e.target.closest('[data-speed]'); if (b) AG.setSpeed(b.dataset.speed); });
     $('#btn-dawn').addEventListener('click', () => AG.skipToDawn());
-    $('#layers').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) { R.view = +b.dataset.view; syncLayers(); } });
-    $('#overlay').addEventListener('change', (e) => { R.overlay = e.target.value; R.bordersDirty = true; });
-    $('#btn-trade').addEventListener('click', (e) => { R.showTrade = !R.showTrade; e.currentTarget.classList.toggle('on', R.showTrade); e.currentTarget.setAttribute('aria-pressed', R.showTrade); });
     $('#btn-panel').addEventListener('click', () => setPanel($('#panel').hidden));
+    $('#panel-x').addEventListener('click', () => setPanel(false));
+    $('#title').addEventListener('click', titleClick);
+    $('#ti-seed').addEventListener('keydown', (e) => { if (e.key === 'Enter') titleClick({ target: document.querySelector('[data-title="create"]') }); });
     $('#btn-menu').addEventListener('click', () => openMenu('game'));
     $('#modalbox').addEventListener('click', menuClick);
     document.querySelector('.tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab); });
@@ -64,59 +67,179 @@
   UI.onPerf = function () { if (menuTab && !$('#modal').hidden) renderMenu(); };
   UI.reset = function () { UI.sel = null; worldBuilt = false; fillDiseases(); if (UI.tab !== 'chronicle') setTab(UI.tab); };
 
-  // 9x9 pixel glyphs, one per tool family, tinted per tool and outlined like the world's sprites
-  const GLYPHS = {
-    look: ['.........', '...xxx...', '.xx...xx.', 'x..xxx..x', 'x..x.x..x', 'x..xxx..x', '.xx...xx.', '...xxx...', '.........'],
-    land: ['.........', '....x....', '...xxx...', '..xx.xx..', '..x...x.x', '.x....xxx', 'xx.....xx', 'x.......x', 'xxxxxxxxx'],
-    elem: ['....x....', '....x....', '...xxx...', '..xx.xx..', '.xx...xx.', '.x.....x.', '.x.....x.', '..xx.xx..', '...xxx...'],
-    sky: ['...xxx...', '.xxx.xxx.', 'x.......x', 'xxxxxxxxx', '....x....', '...x.....', '..xxx....', '....x....', '...x.....'],
-    life: ['.........', '.xx...xx.', 'x..x.x..x', 'x...x...x', '.xx.x.xx.', '....x....', '....x....', '..xxxxx..', '.........'],
-    divine: ['....x....', '....x....', '...xxx...', 'xxxxxxxxx', '.xxxxxxx.', '..xxxxx..', '..xx.xx..', '.xx...xx.', '.x.....x.'],
-    ruin: ['....x....', '...xx....', '...xxx...', '..xx.xx..', '..x..xx..', '.xx...xx.', '.x..x..x.', '.x.xxx.x.', '..xxxxx..'],
-    deep: ['..xxxxx..', '.x..x..x.', 'x...x...x', '....x....', '....x....', '....x....', '....x....', '....x....', '....x....'],
-  };
-  const glyphCache = new Map();
-  function glyph(cat, color) {
-    const key = cat + color;
-    if (glyphCache.has(key)) return glyphCache.get(key);
-    const c = document.createElement('canvas'); c.width = 11; c.height = 11;
-    const x = c.getContext('2d'), rows = GLYPHS[cat] || GLYPHS.look;
-    x.fillStyle = 'rgba(10,12,20,0.9)';
-    for (let y = 0; y < 9; y++) for (let k = 0; k < 9; k++) if (rows[y][k] === 'x') x.fillRect(k, y, 3, 3);
-    x.fillStyle = color;
-    for (let y = 0; y < 9; y++) for (let k = 0; k < 9; k++) if (rows[y][k] === 'x') x.fillRect(k + 1, y + 1, 1, 1);
-    const url = c.toDataURL();
-    glyphCache.set(key, url);
-    return url;
+  // ============================================================ the power bar
+  // Six families of powers in tabs along the top edge of a bar docked at the bottom. Each family
+  // is laid out in groups of square icon buttons, two rows high, with recessed dividers between
+  // the groups; the last family holds the world's own switches (layers, map overlays, windows,
+  // save and load). Every power appears exactly once.
+  const BAR = [
+    { id: 'terrain', name: 'Terrain', icon: 'tab-terrain', groups: [['Shape', ['raise', 'lower', 'smooth']], ['Paint', ['grass', 'forest', 'desert', 'grain', 'snowcap']], ['Geology', ['plate', 'calm', 'iceage', 'warm']], ['Underground', ['dig', 'fill', 'ore', 'magma', 'aquifer']]] },
+    { id: 'civ', name: 'Civilizations', icon: 'tab-civ', groups: [['People', ['people', 'possess']], ['Guide', ['dream', 'omen', 'inspire']], ['Diplomacy', ['harmony', 'discord']], ['Grace', ['bless']], ['Look', [['panel:peoples', 'Peoples'], ['panel:chronicle', 'History']]]] },
+    { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Look', [['panel:life', 'Tree of life']]]] },
+    { id: 'weather', name: 'Weather', icon: 'tab-weather', groups: [['Storms', ['rain', 'thunder', 'blizzard', 'heat', 'bolt']], ['Elements', ['water', 'lava', 'acid', 'fire', 'freeze', 'drain']]] },
+    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse']]] },
+    { id: 'world', name: 'World', icon: 'tab-world', groups: [['Look', ['inspect']], ['Layer', [['view:0', 'Underground'], ['view:1', 'Surface'], ['view:2', 'Sky']]],
+      ['Map', [['ov:realms', 'Realms'], ['ov:faith', 'Faiths'], ['ov:language', 'Languages'], ['ov:era', 'Eras'], ['ov:genes', 'Genes'], ['ov:rock', 'Rock'], ['ov:resources', 'Resources'], ['ov:heat', 'Climate'], ['ov:none', 'Plain'], ['trade', 'Trade routes']]],
+      ['Windows', [['panel:inspect', 'Inspector'], ['panel:world', 'World stats'], ['minimap', 'Minimap']]], ['Game', [['act:save', 'Save'], ['act:load', 'Load'], ['act:timelapse', 'Time-lapse'], ['act:menu', 'Settings'], ['act:title', 'Title screen']]]] },
+  ];
+  const OVERLAYS = ['realms', 'faith', 'language', 'era', 'genes', 'rock', 'resources', 'heat', 'none'];
+  const tabOfTool = {};
+  for (const T of BAR) for (const [, items] of T.groups) for (const it of items) if (typeof it === 'string') tabOfTool[it] = T.id;
+  const icon = (id) => AG.Icons.url(id);
+  function buildBar() {
+    $('#bartabs').innerHTML = BAR.map((T) => `<button type="button" class="btab" role="tab" data-btab="${T.id}" aria-selected="false" title="${T.name}"><i class="bt-sz" aria-hidden="true"><img src="${icon(T.icon)}" alt=""><em>${T.name}</em></i><span><img src="${icon(T.icon)}" alt=""><em>${T.name}</em></span></button>`).join('');
+    $('#bar-backimg').src = icon('back');
+    $('#bartabs').addEventListener('click', (e) => { const b = e.target.closest('[data-btab]'); if (b) showTab(b.dataset.btab, true); });
+    $('#bar-back').addEventListener('click', () => setBarOpen(false));
+    $('#pgrid').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tool],[data-wx]'); if (!b) return;
+      if (b.dataset.tool) { selectTool(b.dataset.tool); showTip(b, true); return; }
+      worldAction(b.dataset.wx);
+    });
+    // tooltips: on hover with a mouse; on touch a selection shows the card for a moment instead
+    $('#pgrid').addEventListener('pointerover', (e) => { if (e.pointerType !== 'mouse') return; const b = e.target.closest('[data-tool],[data-wx]'); if (b) showTip(b, false); });
+    $('#pgrid').addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-tool],[data-wx]'))) hideTip(); });
+    $('#pgrid').addEventListener('scroll', hideTip, { passive: true });
+    // a vertical wheel scrolls the bar sideways when it is wider than the screen
+    $('#pgrid').addEventListener('wheel', (e) => { const g = e.currentTarget; if (g.scrollWidth > g.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { g.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   }
+  function itemHTML(it) {
+    if (typeof it === 'string') {
+      const t = God.byId[it]; if (!t) return '';
+      return `<button type="button" class="pcell${God.tool === it ? ' on' : ''}" data-tool="${it}" aria-label="${esc(t.name)}" aria-pressed="${God.tool === it}"><img src="${icon(it)}" alt=""></button>`;
+    }
+    const [key, label] = it;
+    return `<button type="button" class="pchip${worldOn(key) ? ' on' : ''}" data-wx="${key}">${esc(label)}</button>`;
+  }
+  function showTab(id, fromUser) {
+    if (fromUser && UI.barTab === id && UI.barOpen) { setBarOpen(false); return; } // the open tab again folds the bar
+    UI.barTab = id;
+    const T = BAR.find((b) => b.id === id) || BAR[0];
+    for (const b of document.querySelectorAll('.btab')) { const on = b.dataset.btab === T.id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }
+    $('#pgrid').innerHTML = T.groups.map(([name, items], k) => {
+      const wide = items.some((it) => typeof it !== 'string');
+      return `${k ? '<i class="pdiv" aria-hidden="true"></i>' : ''}<div class="pgroup" role="group" aria-label="${esc(name)}"><div class="pcap">${esc(name)}</div><div class="pcells${wide ? ' wide' : ''}">${items.map(itemHTML).join('')}</div></div>`;
+    }).join('');
+    $('#pgrid').scrollLeft = 0;
+    if (fromUser) setBarOpen(true);
+  }
+  UI.showTab = showTab;
+  function setBarOpen(open) {
+    UI.barOpen = open;
+    document.documentElement.classList.toggle('bar-closed', !open);
+    hideTip();
+    if (!open) for (const b of document.querySelectorAll('.btab')) b.classList.remove('on');
+    else for (const b of document.querySelectorAll('.btab')) b.classList.toggle('on', b.dataset.btab === UI.barTab);
+  }
+  // the switches of the World tab
+  function worldOn(key) {
+    const [k, v] = key.split(':');
+    if (k === 'view') return R.view === +v;
+    if (k === 'ov') return R.overlay === v;
+    if (k === 'trade') return R.showTrade;
+    if (k === 'minimap') return AG.Settings.v.minimap !== 'off';
+    if (k === 'panel') return !$('#panel').hidden && UI.tab === v;
+    return false;
+  }
+  function worldAction(key) {
+    const [k, v] = key.split(':');
+    if (k === 'view') { R.view = +v; syncLayers(); }
+    else if (k === 'ov') setOverlay(v);
+    else if (k === 'trade') { R.showTrade = !R.showTrade; R.invalidate && R.invalidate(); }
+    else if (k === 'minimap') AG.Settings.set('minimap', AG.Settings.v.minimap === 'off' ? 'on' : 'off');
+    else if (k === 'panel') { if (worldOn(key)) setPanel(false); else { setPanel(true); setTab(v); } }
+    else if (k === 'act') {
+      if (v === 'save') UI.save();
+      else if (v === 'load') $('#loadfile').click();
+      else if (v === 'timelapse') UI.timelapse();
+      else if (v === 'menu') openMenu('graphics');
+      else if (v === 'title') AG.Title.show();
+    }
+    refreshBarState();
+  }
+  function setOverlay(v) {
+    R.overlay = OVERLAYS.includes(v) ? v : 'none'; R.bordersDirty = true;
+    refreshBarState();
+  }
+  UI.setOverlay = setOverlay;
+  // selection marks on the bar, without rebuilding it
+  function refreshBarState() {
+    for (const b of document.querySelectorAll('#pgrid [data-tool]')) { const on = b.dataset.tool === God.tool; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
+    for (const b of document.querySelectorAll('#pgrid [data-wx]')) b.classList.toggle('on', worldOn(b.dataset.wx));
+  }
+  UI.refreshBar = refreshBarState;
+  const tipEl = () => $('#tip');
+  let tipTimer = 0;
+  function showTip(b, brief) {
+    const el = tipEl(); if (!el) return;
+    let title, text;
+    if (b.dataset.tool) { const t = God.byId[b.dataset.tool]; title = t.name; text = t.desc; }
+    else { title = b.textContent; text = WX_TIPS[b.dataset.wx.split(':')[0]] || ''; }
+    el.innerHTML = `<b>${esc(title)}</b>${text ? `<span>${esc(text)}</span>` : ''}`;
+    el.hidden = false;
+    const r = b.getBoundingClientRect(), app = $('#app').getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    el.style.left = Math.round(AG.clamp(r.left + r.width / 2 - w / 2 - app.left, 8, app.width - w - 8)) + 'px';
+    el.style.top = Math.round(Math.max(8, r.top - app.top - h - 10 - (b.closest('#pgrid') ? 16 : 0))) + 'px';
+    clearTimeout(tipTimer);
+    if (brief) tipTimer = setTimeout(hideTip, 2600);
+  }
+  function hideTip() { clearTimeout(tipTimer); const el = tipEl(); if (el) el.hidden = true; }
+  const WX_TIPS = { view: 'Which layer of the world to look at (Tab cycles them).', ov: 'What the map shows over the land (B cycles the overlays).', trade: 'Show the routes of trade between communities.', minimap: 'The small map of the whole world.', panel: 'Open or close this window.', act: '' };
 
-  const CAT_TINT = { look: '#f1ead8', land: '#c8a27a', geo: '#ff9d4d', elem: '#6fb6ff', sky: '#c9d7ff', life: '#8fd16b', divine: '#ffd56b', ruin: '#ff7a4d', deep: '#d9a066' };
-  function buildCats() {
-    $('#cats').innerHTML = God.CATS.map((c) => `<button type="button" class="cat" role="tab" data-cat="${c.id}"><img src="${glyph(c.id === 'geo' ? 'ruin' : c.id, CAT_TINT[c.id])}" alt=""><span>${c.name}</span></button>`).join('');
-    $('#cats').addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) showCat(b.dataset.cat); });
-  }
-  function showCat(id) {
-    UI.cat = id;
-    for (const b of document.querySelectorAll('.cat')) { b.classList.toggle('on', b.dataset.cat === id); b.setAttribute('aria-selected', b.dataset.cat === id); }
-    $('#toolgrid').innerHTML = God.TOOLS.filter((t) => t.cat === id).map((t) =>
-      `<button type="button" class="tool${t.id === God.tool ? ' on' : ''}" data-tool="${t.id}" title="${esc(t.desc)}"><img src="${glyph(t.cat === 'geo' ? 'ruin' : t.cat, t.color)}" alt=""><span>${esc(t.name)}</span></button>`).join('');
-  }
+  // ============================================================ the tool dock
+  // Two slots on the left edge: the brush (its size and shape, drawn as pixels) and the power in
+  // hand, with a red X to put it down. The brush slot opens a small window with the brush's size,
+  // strength and shape, and the choices a power needs (which gene, which disease).
   const SIZED = new Set(['meteor', 'volcano', 'rain', 'thunder', 'blizzard', 'heat', 'fault']);
-  function selectTool(id) {
-    God.select(id);
-    for (const b of document.querySelectorAll('.tool')) b.classList.toggle('on', b.dataset.tool === id);
+  function drawBrushSlot() {
+    const c = $('#dk-brushc'); if (!c) return;
+    const g = c.getContext('2d'), r = God.brush.r, d = Math.max(1, Math.min(13, Math.round(1 + (r - 1) * 0.63))), sq = God.brush.shape === 'square';
+    g.clearRect(0, 0, 15, 15);
+    const rr = d / 2;
+    for (let y = 0; y < 15; y++) for (let x = 0; x < 15; x++) {
+      const dx = x + 0.5 - 7.5, dy = y + 0.5 - 7.5;
+      const inside = sq ? Math.abs(dx) <= rr && Math.abs(dy) <= rr : dx * dx + dy * dy <= rr * rr + 0.25;
+      if (!inside) continue;
+      const edge = sq ? Math.abs(dx) > rr - 1 || Math.abs(dy) > rr - 1 : dx * dx + dy * dy > (rr - 1) * (rr - 1);
+      g.fillStyle = edge ? '#ffd27a' : '#f0a030'; g.fillRect(x, y, 1, 1);
+    }
+    $('#dk-size').textContent = r;
+  }
+  function syncDock() {
     const t = God.cur;
+    $('#dk-toolimg').src = icon(God.tool);
+    $('#dk-x').hidden = God.tool === 'inspect';
+    $('#dk-tool').title = God.tool === 'inspect' ? 'Inspect: tap anything to read its story' : `${t.name}: tap to put it down`;
     $('#toolname').textContent = t.name;
     $('#tooldesc').textContent = t.desc;
-    $('#sizerow').hidden = t.mode !== 'brush' && !SIZED.has(id);
-    $('#strrow').hidden = t.mode !== 'brush' && id !== 'fault';
-    $('#diseaserow').hidden = id !== 'plague';
+    $('#sizerow').hidden = t.mode !== 'brush' && !SIZED.has(God.tool);
+    $('#strrow').hidden = t.mode !== 'brush' && God.tool !== 'fault';
+    $('#shaperow').hidden = t.mode !== 'brush';
+    $('#diseaserow').hidden = God.tool !== 'plague';
     $('#locusrow').hidden = !t.locus;
+    for (const b of document.querySelectorAll('[data-shape]')) b.classList.toggle('on', b.dataset.shape === (God.brush.shape || 'round'));
+    drawBrushSlot();
+  }
+  function setBrushPop(open) {
+    $('#brushpop').hidden = !open;
+    $('#dk-brush').classList.toggle('on', open);
+    $('#dk-brush').setAttribute('aria-expanded', open);
+  }
+  UI.setBrushPop = setBrushPop;
+  function selectTool(id) {
+    God.select(id);
+    refreshBarState();
+    syncDock();
+    // powers that need a choice open the brush window with it
+    if (God.cur.locus || id === 'plague') setBrushPop(true);
     $('#world').style.cursor = id === 'inspect' ? 'grab' : 'crosshair';
     syncLayers();
   }
   UI.selectTool = selectTool;
-  function syncLayers() { for (const b of document.querySelectorAll('#layers button')) b.classList.toggle('on', +b.dataset.view === R.view); }
+  // bring a power into view on the bar (its family's tab)
+  function revealTool(id) { const tab = tabOfTool[id]; if (tab) { showTab(tab); setBarOpen(true); } selectTool(id); }
+  UI.revealTool = revealTool;
+  function syncLayers() { refreshBarState(); }
   UI.syncSpeed = function () {
     const cur = AG.paused ? '0' : AG.mode === 'deep' ? 'a' : AG.mode === 'history' ? (AG.histRate > 100 ? 'm' : 'c') : String(AG.speed);
     for (const b of document.querySelectorAll('#speed button')) {
@@ -130,11 +253,13 @@
     if (God.disease >= AG.DISEASES.length) God.disease = 0;
     $('#disease').value = God.disease;
   }
-  function setPanel(open) { $('#panel').hidden = !open; $('#btn-panel').classList.toggle('on', open); $('#btn-panel').setAttribute('aria-pressed', open); }
+  function setPanel(open) { $('#panel').hidden = !open; $('#btn-panel').classList.toggle('on', open); $('#btn-panel').setAttribute('aria-pressed', open); refreshBarState(); }
   UI.setPanel = setPanel;
   function setTab(t) {
     UI.tab = t; worldBuilt = false;
     for (const b of document.querySelectorAll('.tab')) { b.classList.toggle('on', b.dataset.tab === t); b.setAttribute('aria-selected', b.dataset.tab === t); }
+    $('#ptitle').textContent = { inspect: 'Inspector', peoples: 'Peoples', life: 'Tree of Life', chronicle: 'History', world: 'World' }[t] || 'Chronicle';
+    refreshBarState();
     renderPanel(true);
   }
   UI.setTab = setTab;
@@ -290,6 +415,8 @@
     if (tag === 'input' || tag === 'select' || tag === 'textarea') { if (e.key === 'Escape') e.target.blur(); return; }
     const k = e.key.toLowerCase();
     if (!$('#modal').hidden) { if (k === 'escape') closeModal(); return; }
+    if (AG.Title && AG.Title.on) { if (k === 'escape' || k === 'enter') { e.preventDefault(); AG.Title.hide(); } return; }
+    if (k === 'escape' && !$('#brushpop').hidden) { setBrushPop(false); return; }
     if (God.possessed >= 0) {
       if (k === ' ') { God.input.act = true; e.preventDefault(); setTimeout(() => { God.input.act = false; }, 120); return; }
       if (k === 'e') { God.input.power = true; return; }
@@ -302,8 +429,8 @@
       case 'tab': e.preventDefault(); R.view = (R.view + 2) % 3; syncLayers(); break;
       case '+': case '=': R.zoomAt(R.size().w / 2, R.size().h / 2, 1); break;
       case '-': case '_': R.zoomAt(R.size().w / 2, R.size().h / 2, -1); break;
-      case 'b': { const o = [...document.querySelectorAll('#overlay option')].map((x) => x.value); R.overlay = o[(o.indexOf(R.overlay) + 1) % o.length]; $('#overlay').value = R.overlay; R.bordersDirty = true; break; }
-      case 'i': showCat('look'); selectTool('inspect'); break;
+      case 'b': { setOverlay(OVERLAYS[(OVERLAYS.indexOf(R.overlay) + 1) % OVERLAYS.length]); UI.toast(`Map: ${{ realms: 'Realms', faith: 'Faiths', language: 'Languages', era: 'Eras', genes: 'Genes', rock: 'Rock', resources: 'Resources', heat: 'Climate', none: 'Plain' }[R.overlay]}`); break; }
+      case 'i': selectTool('inspect'); break;
       case 'escape': if (God.pendingKd >= 0 || R.follow >= 0) { God.pendingKd = -1; R.follow = -1; } else openMenu('game'); break; // nothing to cancel: the menu
       case '[': if (R.is3D()) AG.View3D.turn(-Math.PI / 8); break;
       case ']': if (R.is3D()) AG.View3D.turn(Math.PI / 8); break;
@@ -718,7 +845,9 @@
   };
 
   // ============================================================ modals
-  function openModal(html) { menuTab = null; $('#modalbox').classList.remove('wide'); $('#modalbox').innerHTML = html; $('#modal').hidden = false; }
+  const XSVG = '<svg width="12" height="12" viewBox="0 0 6 6" shape-rendering="crispEdges" aria-hidden="true"><path fill="#fff" d="M0 0h1v1H0zM5 0h1v1H5zM1 1h1v1H1zM4 1h1v1H4zM2 2h2v2H2zM1 4h1v1H1zM4 4h1v1H4zM0 5h1v1H0zM5 5h1v1H5z"/></svg>';
+  // every dialog gets the red close square in its top right corner
+  function openModal(html) { menuTab = null; $('#modalbox').classList.remove('wide'); $('#modalbox').innerHTML = `<button type="button" class="xbtn corner" aria-label="Close" onclick="AG.UI.closeModal()">${XSVG}</button>` + html; $('#modal').hidden = false; }
   function closeModal() {
     $('#modal').hidden = true; menuTab = null;
     if (menuPaused) { menuPaused = false; if (AG.paused) AG.togglePause(); } // the menu paused the world: carry on
@@ -781,6 +910,7 @@
         <button type="button" class="btn" data-mact="save">Save world…</button>
         <button type="button" class="btn" data-mact="load">Load world…</button>
         <button type="button" class="btn" data-mact="timelapse">Time-lapse of the continents</button>
+        <button type="button" class="btn" data-mact="title">Title screen</button>
       </div>
       <h3>New world</h3><div class="btnrow" style="margin-top:0"><input id="mseed" type="number" class="hudbtn" style="width:140px" placeholder="Random seed" aria-label="World seed"><button type="button" class="btn" data-mact="newworld">Create</button></div>
       <h3>Scenarios</h3><div class="btnrow" style="margin-top:0"><button type="button" class="btn" data-mact="demo-emergence">Emergence: from bands to the first eras</button><button type="button" class="btn" data-mact="demo-sea">Rising sea: a land bridge drowns</button></div>
@@ -790,7 +920,7 @@
   function renderMenu() {
     const box = $('#modalbox'), top = box.scrollTop;
     box.classList.add('wide');
-    box.innerHTML = `<div class="menuhead"><h2>AURA <span>Genesis II</span></h2><button type="button" class="btn" data-mact="resume" aria-label="Close the menu">Close</button></div>
+    box.innerHTML = `<div class="wtitle menuhead"><h2>AURA <span>Genesis</span></h2><button type="button" class="xbtn" data-mact="resume" aria-label="Close the menu">${XSVG}</button></div>
       <div class="menutabs" role="tablist">${[['game', 'Game'], ['settings', 'Settings'], ['graphics', 'Graphics'], ['controls', 'Controls']].map(([k, n]) => `<button type="button" role="tab" data-menu="${k}" aria-selected="${menuTab === k}" class="${menuTab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="menubody">${menuBody(menuTab)}</div>`;
     box.scrollTop = top;
@@ -820,6 +950,18 @@
       case 'demo-sea': done(); AG.Demos.risingSea(); break;
       case 'defaults': AG.Settings.reset(); renderMenu(); UI.toast('Settings restored to their defaults.'); break;
       case 'reload': location.reload(); break;
+      case 'title': done(); AG.Title.show(); break;
+    }
+  }
+  function titleClick(e) {
+    const b = e.target.closest && e.target.closest('[data-title]'); if (!b) return;
+    switch (b.dataset.title) {
+      case 'play': AG.Title.hide(); break;
+      case 'new': $('#ti-btns').hidden = true; $('#ti-new').hidden = false; $('#ti-seed').focus(); break;
+      case 'back': $('#ti-new').hidden = true; $('#ti-btns').hidden = false; break;
+      case 'create': { const sd = parseInt($('#ti-seed').value, 10) || 0; AG.Title.hide(); newWorld(sd); break; }
+      case 'settings': openMenu('graphics'); break;
+      case 'saveload': openMenu('game'); break;
     }
   }
   function newWorld(sd) {
@@ -861,7 +1003,7 @@
       if (isNew) AG.DISEASES.push(nd);
       God.disease = isNew ? AG.DISEASES.length - 1 : idx;
       fillDiseases(); closeModal();
-      showCat('divine'); selectTool('plague');
+      revealTool('plague');
       UI.toast(`${nd.name} is ready. Paint it onto the world with the Plague tool.`);
     });
   }
