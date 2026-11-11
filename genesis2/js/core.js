@@ -17,6 +17,7 @@
       fps: 'auto',        // auto (60) | 30 | 60 | display
       view3d: 'auto',     // auto | on | off
       detail3d: 'auto',   // auto | 0 | 1 | 2 | 3
+      textures: 'auto',   // detailed surface textures in 3D: auto | on | off
       weather: 'auto',    // weather, clouds, sun rays and far trees: auto | on | off
       water: 'auto',      // rippling water: auto | on | off
       shake: 'on', vignette: 'on', showFps: 'off', ticker: 'on', minimap: 'on',

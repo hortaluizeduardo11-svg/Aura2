@@ -51,6 +51,7 @@ js/ai.js       brains for embodied people and creatures, movement, combat
 js/history.js  NEW  cause-linked chronicle, timeline, era maps, save/load, branches
 js/god.js      player powers
 js/render.js   stylized 2D renderer + overlays
+js/textures.js NEW  24 tileable surface textures painted in code (grass, rock, masonry, thatch...)
 js/view3d.js   3D renderer (voxel terrain, cel-shaded models)
 js/disaster3d.js  real-time meteor flights and impacts in the 3D close-up
 js/models3d.js people (regional dress, genetic skin and hair), animals (per-species body plans,
@@ -698,6 +699,7 @@ These follow from the same rules rather than special cases:
 | selection | a cold region raises the mean COLD allele over generations versus a control |
 | tech | no community ever knows a tech without its prerequisites, over long random runs; conditions are honoured (no cultivation without wild cereals); banned techs never appear |
 | LOD | a community simulated aggregated vs. embodied grows at the same expected rate (within tolerance); fold → materialise preserves person records exactly |
+| textures | each of the 24 surfaces averages 118-138 of 255 in brightness, its wrap step (on 4x4 block means) is under 2.5 times its average step, and two builds are identical |
 | sizes | horse, ibex, mammoth, wolf and bear at real shoulder heights; a newborn much smaller; the drawn size follows the SIZE gene |
 | habitat | embodied animals score clearly higher than random spots of their regions (and still do two days later); most social animals have one of their kind within 3 cells; predators stand on more prey than the average place; grazers rest at night; fewer songbirds in a cold winter; a bear in cold country hibernates and burns almost nothing |
 | save/load | serialise → deserialise → state hash equal; continuing both gives identical futures |
@@ -758,6 +760,19 @@ These follow from the same rules rather than special cases:
   picking.
 - A lost WebGL context switches the close-up off until the browser restores it; the 2D map
   carries on.
+- Textures in 3D (`textures.js`, `view3d.js`): 24 layers of 256x256, generated at load (~0.7 s)
+  from periodic value noise, cellular noise and stamped strokes (blades, straw, needles, leaves),
+  each normalised to a mean brightness of 50%. They live in one `DataTexture2DArray` (WebGL 2) with
+  mipmaps and anisotropic filtering. Shaders are patched with `onBeforeCompile`: the land samples
+  by world position (one projection per face: tops by the column's top layer, sides by its side
+  layer under a grass fringe of 0.09 units, with the side colour pulled toward earth or rock),
+  models by object position with a three-axis blend by normal, the layer coming from a per-vertex
+  attribute (`merge()` writes `aMat`; building parts get it from their colour and shape, people
+  and animals from their part list) or from the material. Colour is multiplied by twice the
+  texel; relief bends the normal by the screen-space gradient of a two-mip-coarser sample, so the
+  cel-shaded bands roll over stones instead of flickering. Repeats are set to real sizes (a stone
+  course ~0.45 m, thatch ~0.35 m, a roof tile ~0.3 m). Relief goes at detail 2, textures at 3
+  (unless the setting says on); WebGL 1 keeps the plain colours.
 - Flora in 3D: twenty instanced shapes (conifers, snowy conifers, broadleaf crowns, birches,
   cypresses, acacias, palms, rainforest crowns, willows, bare trees, bushes, grass, reeds, ferns,
   boulders, crags, snow caps and tips, flowers, cacti). A planning pass gives each cell of the

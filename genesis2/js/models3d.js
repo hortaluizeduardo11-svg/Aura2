@@ -68,12 +68,14 @@
   function bank(key, build, shadow) { let b = banks.get(key); if (!b) { b = new Bank(build(), 32, shadow); banks.set(key, b); } return b; }
 
   // a parts list for merge(): add(geoName, rgb, x, y, z, sx, sy, sz, rx, ry, rz)
-  function Parts() { this.a = []; }
+  // (t: the surface texture layer of the parts, unless a part names its own)
+  function Parts(t) { this.a = []; this.t = t || 0; }
   Parts.prototype.add = function (g, c, x, y, z, sx, sy, sz, rx, ry, rz) { this.a.push({ geo: GEO[g], c, x, y, z, sx, sy, sz, rx: rx || 0, ry: ry || 0, rz: rz || 0 }); return this; };
-  Parts.prototype.geo = function () { return merge(this.a); };
+  Parts.prototype.geo = function () { return merge(this.a, this.t); };
+  let TX = {}; // texture layers by name (view3d passes them in)
 
   M.setup = function (lib) {
-    T = lib.THREE; GEO = lib.GEO; merge = lib.merge; scene = lib.scene; mat = lib.material;
+    T = lib.THREE; GEO = lib.GEO; merge = lib.merge; scene = lib.scene; mat = lib.material; TX = lib.TL || {};
     dummy.o = new T.Object3D(); col.c = new T.Color();
     // build every person model now (behind the loading screen), so the shader is compiled once
     for (const s of STYLES) { bank('pc' + s, () => clothesGeo(s), true); bank('ps' + s, () => skinGeo(s), false); }
@@ -138,7 +140,7 @@
     return p.geo();
   }
   function clothesGeo(s) {
-    const p = new Parts();
+    const p = new Parts(s === 'fur' ? TX.FUR : s === 'hide' ? TX.HIDE : TX.CLOTH);
     const boots = (v, h, w) => { for (const sx of [-1, 1]) p.add('box', G(v), sx * 0.036, 0, 0.012, w || 0.052, h || 0.045, 0.078); };
     const trousers = (v) => { for (const sx of [-1, 1]) p.add('box', G(v), sx * 0.035, 0.04, 0, 0.047, 0.12, 0.052); };
     const sleeves = (v, w) => { for (const sx of [-1, 1]) p.add('box', G(v), sx * 0.095, 0.185, 0, w || 0.045, 0.14, (w || 0.045) + 0.005); };
@@ -199,7 +201,7 @@
     return p.geo();
   }
   function hairGeo(h) {
-    const p = new Parts();
+    const p = new Parts(TX.FUR);
     p.add('box', G(200), -0.022, 0.418, 0.0485, 0.022, 0.007, 0.004).add('box', G(200), 0.022, 0.418, 0.0485, 0.022, 0.007, 0.004); // brows
     if (!h) return p.geo();
     const top = () => { p.add('box', G(255), 0, 0.452, -0.004, 0.108, 0.024, 0.103); p.add('box', G(250), 0, 0.44, 0.046, 0.1, 0.016, 0.01); };
@@ -213,7 +215,7 @@
     return p.geo();
   }
   function hatGeo(t) {
-    const p = new Parts();
+    const p = new Parts(t === 'straw' ? TX.THATCH : t === 'cowl' || t === 'turban' ? TX.CLOTH : t === 'feathers' ? TX.FUR : 0);
     switch (t) {
       case 'crown':
         p.add('box', G(255), 0, 0.448, 0, 0.112, 0.026, 0.106);
@@ -403,7 +405,7 @@
       if (m.kind === 'sheep') { const w = [[238, 230, 212], [134, 94, 62], [52, 46, 42]][variant % 3]; C = { coat: w, dark: variant === 2 ? [30, 26, 24] : [60, 50, 44], belly: w, eye: [24, 18, 14] }; pattern = 'plain'; } // wool: cream, brown or black
       else { const d = DOM[variant % DOM.length]; C = { coat: d[0], dark: cl(mul(d[0], 0.6)), belly: d[1], eye: [24, 18, 14] }; pattern = variant === 0 ? 'piebald' : variant === 1 ? 'blaze' : 'plain'; }
     }
-    const p = new Parts(), coat = C.coat, dark = C.dark, belly = C.belly, eye = C.eye, ivory = [232, 222, 196], hoof = [52, 42, 36], nose = [40, 32, 30];
+    const p = new Parts(TX.FUR), coat = C.coat, dark = C.dark, belly = C.belly, eye = C.eye, ivory = [232, 222, 196], hoof = [52, 42, 36], nose = [40, 32, 30];
     const kind = m.kind, male = sex === 1, rs = hash(m.seed, 77);
     // body plan (body length, height, width; leg length and thickness; neck; head), from the kind
     // and nudged by the genes: fast species are leggier, strong ones stockier, cold ones furrier

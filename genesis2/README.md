@@ -186,6 +186,16 @@ Settings take effect at once and are saved in the browser.
       some of it, so related species look related.
     - Each animal's own pigment shades its coat; albinos are white; antlers and big horns are
       male; domestic herds come in several colours.
+  - **Textures.** Every surface in the close-up has a detailed, realistic texture, painted in
+    code when the game loads (nothing is downloaded): grass blades, soil with pebbles and cracks,
+    rippled sand, faceted rock with lichen, snow, leaf litter, furrowed fields, cobbled roads,
+    ice and basalt on the land, with earth strata on terrace sides under a fringe of grass; dry
+    stone with mortar and moss, planks, logs, layered thatch, clay and slate tiles, plaster and
+    stitched hide on buildings; bark, leaves and pine needles on trees; fur on animals; woven
+    cloth, hide and fur on people. Each texture tiles seamlessly and multiplies the surface's own
+    colour (a meadow's season, a realm's roof, an animal's coat), and its brightness adds relief to
+    the lighting. Needs WebGL 2; Menu → Graphics → 3D textures turns it off (Auto drops it at the
+    lowest detail).
   - **Nature** is built per cell from its biome (climate, moisture, height, slope, soil, snow,
     water nearby): spruce and pine in the taiga, oak crowns and birches in temperate woods
     (gold and red in autumn, bare in winter), cypress and olive in dry country, acacias over
@@ -277,7 +287,7 @@ message instead of a frozen screen.
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 19 headless tests, ~70 s
+node genesis2/tests/run.js            # 20 headless tests, ~85 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -297,6 +307,8 @@ The tests cover:
 - **Selection:** cold tolerance tracks the climate.
 - **Technology:** prerequisites, conditions and bans gate every invention.
 - **LOD:** embodying and folding keep every record and feed people alike.
+- **Textures:** every surface tiles without a seam, averages a neutral grey (so it keeps the
+  colour it multiplies), and comes out the same every run.
 - **Sizes:** a horse, ibex, mammoth, wolf and bear come out at their real shoulder heights, a
   newborn is much smaller, and the drawn size follows the size gene.
 - **Habitat:** animals stand on clearly better ground than random spots, social kinds come in

@@ -477,6 +477,32 @@ test('sizes: animals are drawn at real sizes from their own genes, and follow th
   return `horse ${fmt(horse.h)} m, ibex ${fmt(ibex.h)}, mammoth ${fmt(mammoth.h)}, wolf ${fmt(wolf.h)}, bear ${fmt(bear.h)}, foal ${fmt(foal.h)}; size gene 100 -> ${fmt(dwarf)} m, 185 -> ${fmt(giant)} m`;
 });
 
+test('textures: every surface tiles seamlessly, averages a neutral grey, and is the same every run', () => {
+  const AG = load({ W: 64, H: 64, modules: ['core', 'textures'] }), T = AG.Textures, S = 256;
+  T.build(S);
+  const first = hash([T.data]);
+  let worst = '', worstK = 0;
+  for (let li = 0; li < T.NAMES.length; li++) {
+    const d = T.layer(li), lum = (x, y) => { const o = ((y % S) * S + (x % S)) * 4; return d[o] * 0.3 + d[o + 1] * 0.55 + d[o + 2] * 0.15; };
+    let m = 0; for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) m += lum(x, y); m /= S * S;
+    assert(m > 118 && m < 138, `${T.NAMES[li]} averages a neutral grey (${fmt(m)})`);
+    // the step across the wrap should look like any other step (on 4x4 block averages, so a thin crack
+    // line that happens to cross the edge at a slant does not count as a seam)
+    const B = 4, n = S / B, blk = (bx, by) => { let t = 0; for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) t += lum(((bx + n) % n) * B + x, ((by + n) % n) * B + y); return t / (B * B); };
+    let edge = 0, inner = 0;
+    for (let k = 0; k < n; k++) {
+      edge += Math.abs(blk(n - 1, k) - blk(0, k)) + Math.abs(blk(k, n - 1) - blk(k, 0));
+      for (let q = 0; q < n - 1; q++) inner += (Math.abs(blk(q, k) - blk(q + 1, k)) + Math.abs(blk(k, q) - blk(k, q + 1))) / (n - 1);
+    }
+    const ratio = (edge + n) / (inner + n);
+    if (ratio > worstK) { worstK = ratio; worst = T.NAMES[li]; }
+    assert(ratio < 2.5, `${T.NAMES[li]} tiles without a seam (wrap step ${fmt(edge / n / 2)} vs inside ${fmt(inner / n / 2)})`);
+  }
+  T.data = null; T.build(S);
+  assert(hash([T.data]) === first, 'the textures come out the same every run');
+  return `${T.NAMES.length} surfaces of ${S}x${S} in ${fmt(T.ms)} ms; worst seam ratio ${fmt(worstK)} (${worst})`;
+});
+
 // ------------------------------------------------------------------ runner
 const filter = process.argv[2];
 let pass = 0, fail = 0;

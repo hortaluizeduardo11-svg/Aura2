@@ -23,7 +23,7 @@
   const M2U = (0.46 * FIG * 0.92 * 1.02) / 1.7;
   const MAXT = 24000, MAXU = 3000, MAXC = 5000, MAXSMOKE = 900, MAXDROP = 3600;
   let renderer, scene, camera, sun, hemi, el, cw = 1, ch = 1, gradient, toonV, glowV, skyTex, skyCtx;
-  let land, water, hot;
+  let land, water, hot, landTop = null, landSide = null;
   let people, heads, hats, beasts, props, smoke, clouds, rain, snow, bolts;
   let landFine = null, landPlain = null;
   let wx0 = 0, wy0 = 0, ws = 0, roll = 0, needBuild = true, floraClock = 0, bldClock = 0, gTarget = 0, frameN = 0;
@@ -63,12 +63,14 @@
   }
   const _m = THREE ? new THREE.Matrix4() : null, _q = THREE ? new THREE.Quaternion() : null, _e = THREE ? new THREE.Euler() : null;
   const _n = THREE ? new THREE.Matrix3() : null, _v = THREE ? new THREE.Vector3() : null, _p = THREE ? new THREE.Vector3() : null, _s = THREE ? new THREE.Vector3() : null;
-  function merge(parts) {
+  // (each part may name its surface, p.t, a texture layer; otherwise the default layer is used)
+  function merge(parts, defLayer) {
     let count = 0;
     for (const p of parts) count += p.geo.attributes.position.count;
-    const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), col = new Float32Array(count * 3);
+    const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), col = new Float32Array(count * 3), mat = new Float32Array(count);
     let o = 0;
     for (const p of parts) {
+      mat.fill(p.t !== undefined ? p.t : defLayer || 0, o, o + p.geo.attributes.position.count);
       _e.set(p.rx || 0, p.ry || 0, p.rz || 0); _q.setFromEuler(_e);
       _m.compose(_p.set(p.x, p.y, p.z), _q, _s.set(p.sx, p.sy, p.sz));
       _n.getNormalMatrix(_m);
@@ -83,16 +85,149 @@
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aMat', new THREE.BufferAttribute(mat, 1));
     return g;
   }
   // A little builder: kit.box(colour, x, y, z, sx, sy, sz, ry, rx, rz), likewise cyl/cone/prism/ico/...;
   // kit.glow(...) adds unlit parts (windows, braziers) that shine at night.
+  // Each part's surface (stone, planks, logs, thatch, tiles, plaster, turf, snow...) is read from
+  // its colour and shape; a part can also name it: kit.cone({ c: 0xb08a62, t: 'hide' }, ...).
   function Kit() { this.lit = []; this.lamp = []; }
   for (const [name, gk] of [['box', 'box'], ['cbox', 'cbox'], ['cyl', 'cyl'], ['taper', 'taper'], ['cone', 'cone'], ['cone6', 'cone6'], ['ico', 'ico'], ['mound', 'mound'], ['prism', 'prism']]) {
     Kit.prototype[name] = function (hex, x, y, z, sx, sy, sz, ry, rx, rz) {
-      this.lit.push({ geo: GEO[gk], c: Array.isArray(hex) ? hex : rgbOf(hex), x, y, z, sx, sy, sz, ry, rx, rz });
+      let t;
+      if (hex && typeof hex === 'object' && !Array.isArray(hex)) { t = TL[hex.t.toUpperCase()]; hex = hex.c; }
+      const c = Array.isArray(hex) ? hex : rgbOf(hex);
+      this.lit.push({ geo: GEO[gk], c, x, y, z, sx, sy, sz, ry, rx, rz, t: t !== undefined ? t : surfaceOf(hex, c, gk) });
       return this;
     };
+  }
+  const TL = AG.Textures ? AG.Textures.L : {};
+  const KNOWN_SURF = new Map([[0x9c978f, 'MASONRY'], [0x7f7a73, 'MASONRY'], [0x5e4130, 'PLANKS'], [0x8a6440, 'PLANKS'], [0x3a2618, 'PLANKS'], [0xe2d3b0, 'PLASTER'],
+    [0xe2b64c, 'PLAIN'], [0xffd27a, 'PLAIN'], [0x1a1410, 'PLAIN'], [0xc9a85e, 'THATCH'], [0xb3a35a, 'THATCH'], [0x5f8a3e, 'GRASS'], [0xeef3f8, 'SNOW'],
+    [0x7a5534, 'LOGS'], [0x684828, 'LOGS'], [0x4f5864, 'TILES'], [0xd7b47e, 'PLASTER'], [0xcfa56f, 'PLASTER'], [0xdcc08e, 'PLASTER'], [0xb08a62, 'HIDE'], [0xa47c55, 'HIDE'], [0xbf9a70, 'HIDE']]);
+  function surfaceOf(hex, c, gk) {
+    if (!AG.Textures) return 0;
+    if (typeof hex === 'number' && KNOWN_SURF.has(hex)) return TL[KNOWN_SURF.get(hex)];
+    const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]), v = mx / 255, sat = mx ? (mx - mn) / mx : 0;
+    let hue = 0;
+    if (mx > mn) { const d = mx - mn; hue = mx === c[0] ? ((c[1] - c[2]) / d) % 6 : mx === c[1] ? (c[2] - c[0]) / d + 2 : (c[0] - c[1]) / d + 4; hue = (hue * 60 + 360) % 360; }
+    const green = hue >= 70 && hue <= 170 && sat > 0.2;
+    if (gk === 'prism' || gk === 'cone' || gk === 'cone6') { // roofs and spires
+      if (sat < 0.12 && v > 0.85) return TL.SNOW;
+      if (green) return TL.GRASS;
+      if (hue >= 34 && hue <= 62 && sat > 0.3 && v > 0.55) return TL.THATCH;
+      return TL.TILES;
+    }
+    if (gk === 'ico' || gk === 'mound') return green ? TL.LEAVES : sat < 0.16 ? TL.ROCK : TL.PLAIN;
+    if (sat < 0.14) return v > 0.78 ? TL.PLASTER : v > 0.3 ? TL.MASONRY : TL.PLAIN;
+    if (hue >= 12 && hue <= 52) return v < 0.62 ? TL.PLANKS : hue > 32 && sat > 0.3 ? TL.THATCH : TL.PLASTER;
+    if (green) return TL.GRASS;
+    return TL.CLOTH; // banners and awnings in a realm's colours
+  }
+
+  // ------------------------------------------------------------ surface textures
+  // The textures (textures.js) live in one texture array (WebGL 2). They are sampled by position,
+  // so no model needs texture coordinates: the land by world position (its tops, and its sides with
+  // earth strata under a fringe of the top's grass), models by their own position from the three
+  // axes blended by the surface normal (so a texture stays on a walking animal). The texture
+  // multiplies the surface's own colour (it averages a neutral grey) and its brightness bends the
+  // normal a little for relief. Detail levels turn relief and then textures off.
+  const TP = { on: false, u: null, bumpLand: { value: 0.9 } };
+  function setupTextures() {
+    V.textured = false;
+    if (!AG.Textures || !renderer.capabilities.isWebGL2 || !THREE.DataTexture2DArray) return;
+    try {
+      const T = AG.Textures.build(256);
+      const tex = new THREE.DataTexture2DArray(T.data, T.size, T.size, T.NAMES.length);
+      tex.format = THREE.RGBAFormat; tex.type = THREE.UnsignedByteType;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true;
+      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      tex.needsUpdate = true;
+      TP.u = { tpArr: { value: tex }, tpOn: { value: 1 }, tpBump: { value: 0.4 }, tpScale: { value: Float32Array.from(T.SCALE) } };
+      TP.on = true; V.textured = true;
+    } catch (e) { TP.on = false; }
+  }
+  const TP_VS = `
+attribute float aMat; attribute float aTop; attribute float aSide;
+varying vec3 vTpPos; varying vec3 vTpNrm; varying float vTpA; varying float vTpB; varying float vTpTop;`;
+  const TP_FS = `
+uniform mediump sampler2DArray tpArr; uniform float tpOn; uniform float tpBump; uniform float tpScale[${AG.Textures ? AG.Textures.NAMES.length : 1}]; uniform float tpLayer;
+varying vec3 vTpPos; varying vec3 vTpNrm; varying float vTpA; varying float vTpB; varying float vTpTop;
+vec3 tpPerturb(vec3 sp, vec3 sn, vec2 dh, float fd) {
+  vec3 sx = dFdx(sp), sy = dFdy(sp), r1 = cross(sy, sn), r2 = cross(sn, sx);
+  float det = dot(sx, r1) * fd;
+  return normalize(abs(det) * sn - sign(det) * (dh.x * r1 + dh.y * r2));
+}`;
+  const TP_VS_LAND = `
+vec4 tpW = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+tpW = instanceMatrix * tpW;
+vTpTop = instanceMatrix[3][1] + instanceMatrix[1][1];
+#else
+vTpTop = 0.0;
+#endif
+vTpPos = (modelMatrix * tpW).xyz; vTpNrm = objectNormal; vTpA = aTop; vTpB = aSide;`;
+  const TP_VS_MODEL = (attr) => `
+vTpPos = transformed; vTpNrm = objectNormal; vTpA = ${attr ? 'aMat' : '0.0'}; vTpB = 0.0; vTpTop = 0.0;`;
+  const L_ = (n) => (AG.Textures ? AG.Textures.L[n] : 0).toFixed(1);
+  // the land: tops by their surface, sides as earth or rock under a fringe of the top
+  const TP_FS_LAND = () => `
+float tpH = 0.5;
+if (tpOn > 0.5) {
+  vec3 tpN = normalize(vTpNrm), tpAb = abs(tpN);
+  float tpL = vTpA;
+  vec2 tpUV = tpAb.y > 0.5 ? vTpPos.xz : (tpAb.x > tpAb.z ? vTpPos.zy : vTpPos.xy);
+  if (tpN.y < 0.5 && vTpTop - vTpPos.y > 0.09) {
+    tpL = vTpB;
+    vec3 tpG = vec3(dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15)));
+    if (abs(tpL - ${L_('CLIFF')}) < 0.5 || abs(tpL - ${L_('DIRT')}) < 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, tpG * vec3(1.16, 0.94, 0.72), 0.78); // bare earth
+    else if (abs(tpL - ${L_('ROCK')}) < 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, tpG * vec3(0.98, 0.97, 0.96) * 0.85, 0.65);
+  }
+  vec3 tpC = texture(tpArr, vec3(tpUV * tpScale[int(tpL + 0.5)], tpL)).rgb;
+  diffuseColor.rgb *= tpC * 2.0;
+  tpH = dot(texture(tpArr, vec3(tpUV * tpScale[int(tpL + 0.5)], tpL), 1.0).rgb, vec3(0.3333));
+}
+vec2 tpDH = vec2(dFdx(tpH), dFdy(tpH)) * tpBump;`;
+  const TP_FS_MODEL = (attr) => `
+float tpH = 0.5;
+if (tpOn > 0.5) {
+  float tpL = ${attr ? 'vTpA' : 'tpLayer'}, tpS = tpScale[int(tpL + 0.5)];
+  vec3 tpN = normalize(vTpNrm), tpW = pow(abs(tpN), vec3(4.0));
+  tpW /= tpW.x + tpW.y + tpW.z + 1e-5;
+  vec3 tpC = texture(tpArr, vec3(vTpPos.zy * tpS, tpL)).rgb * tpW.x + texture(tpArr, vec3(vTpPos.xz * tpS, tpL)).rgb * tpW.y + texture(tpArr, vec3(vTpPos.xy * tpS, tpL)).rgb * tpW.z;
+  diffuseColor.rgb *= tpC * 2.0;
+  // relief from a softer (two mip levels coarser) sample of the main projection, so the cel-shaded
+  // light rolls over stones and planks instead of flickering pixel by pixel
+  vec2 tpUV = tpW.y > tpW.x && tpW.y > tpW.z ? vTpPos.xz : (tpW.x > tpW.z ? vTpPos.zy : vTpPos.xy);
+  tpH = dot(texture(tpArr, vec3(tpUV * tpS, tpL), 2.0).rgb, vec3(0.3333));
+}
+vec2 tpDH = vec2(dFdx(tpH), dFdy(tpH)) * tpBump;`;
+  const TP_FS_BUMP = `
+if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection);`;
+  // mode: 'land' (per-column top and side layers), 'attr' (a layer per vertex), 'layer' (one layer)
+  function texturize(mat, mode, layer) {
+    if (!TP.on) return mat;
+    const land = mode === 'land', attr = mode === 'attr', bump = !mat.isMeshLambertMaterial;
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, TP.u);
+      if (land) sh.uniforms.tpBump = TP.bumpLand;
+      sh.uniforms.tpLayer = { value: layer || 0 };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + TP_VS)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + (land ? TP_VS_LAND : TP_VS_MODEL(attr)));
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + TP_FS)
+        .replace('#include <color_fragment>', '#include <color_fragment>\n' + (land ? TP_FS_LAND() : TP_FS_MODEL(attr)))
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + (bump ? TP_FS_BUMP : ''));
+    };
+    mat.customProgramCacheKey = () => 'tp-' + mode + (bump ? '-b' : '');
+    return mat;
+  }
+  const layerMats = new Map();
+  function layerMat(name) { // one plain toon material per surface (shared by every mesh of that surface)
+    let m = layerMats.get(name);
+    if (!m) { m = texturize(new THREE.MeshToonMaterial({ gradientMap: gradient }), 'layer', TL[name] || 0); layerMats.set(name, m); }
+    return m;
   }
   Kit.prototype.glow = function (hex, x, y, z, sx, sy, sz, ry) { this.lamp.push({ geo: GEO.box, c: rgbOf(hex), x, y, z, sx, sy, sz, ry }); return this; };
   Kit.prototype.done = function () { return { lit: merge(this.lit), glow: this.lamp.length ? merge(this.lamp) : null }; };
@@ -239,7 +374,7 @@
     far.geometry.computeBoundingSphere();
   }
   V.parts = () => ({ sea, far, scene }); // (for debugging and screenshots)
-  V._lib = () => ({ Kit, merge, GEO, kitFor, gradient }); // (for a model sheet)
+  V._lib = () => ({ Kit, merge, GEO, kitFor, gradient, texturize, TP }); // (for a model sheet)
   // Warm-up during the loading screen: build a window, compile every shader program (including the
   // building and glow materials, through two tiny stand-ins) and draw once off-screen, so the first
   // zoom into 3D does not stall on compiling and uploading.
@@ -297,6 +432,7 @@
     el.addEventListener('webglcontextlost', (e) => { e.preventDefault(); V.ok = false; V.lost = true; V.active = false; V.tilt = 0; el.style.visibility = 'hidden'; }, false);
     el.addEventListener('webglcontextrestored', () => { V.lost = false; V.ok = true; needBuild = true; try { applyQuality(); } catch (e) { /* next frame */ } }, false);
     makeGeos();
+    setupTextures();
     scene = new THREE.Scene();
     const sc = document.createElement('canvas'); sc.width = 2; sc.height = 128; skyCtx = sc.getContext('2d');
     skyTex = new THREE.CanvasTexture(sc); scene.background = skyTex;
@@ -314,7 +450,7 @@
     gradient = new THREE.DataTexture(new Uint8Array([96, 96, 96, 255, 162, 162, 162, 255, 218, 218, 218, 255, 255, 255, 255, 255]), 4, 1, THREE.RGBAFormat);
     gradient.minFilter = gradient.magFilter = THREE.NearestFilter; gradient.generateMipmaps = false; gradient.needsUpdate = true;
     const toon = (o) => new THREE.MeshToonMaterial(Object.assign({ gradientMap: gradient }, o));
-    toonV = toon({ vertexColors: true });
+    toonV = texturize(toon({ vertexColors: true }), 'attr');
     glowV = new THREE.MeshBasicMaterial({ vertexColors: true });
 
     // a tiny noise texture gives every voxel face crisp pixel detail up close
@@ -341,9 +477,18 @@
     { const idx = Array.from(col.index.array); idx.splice(18, 6); col.setIndex(idx); col.clearGroups(); } // no bottom face: never seen
     // The land's fine relief (a bump map, lit per pixel) is drawn at the highest 3D detail only;
     // below it the same texture is lit per vertex, which costs far less on phones and tablets.
-    landFine = new THREE.MeshPhongMaterial({ map: detail, bumpMap: detail, bumpScale: 0.07, shininess: 4, specular: 0x171717 });
-    landPlain = new THREE.MeshLambertMaterial({ map: detail });
-    land = inst(col, landPlain, MAXS * MAXS, false, true);
+    if (TP.on) { // detailed surfaces: grass, soil, sand, rock, snow, ice, litter, furrows, cobbles; strata on the sides
+      landFine = texturize(new THREE.MeshPhongMaterial({ shininess: 4, specular: 0x121212 }), 'land');
+      landPlain = texturize(new THREE.MeshLambertMaterial(), 'land');
+    } else {
+      landFine = new THREE.MeshPhongMaterial({ map: detail, bumpMap: detail, bumpScale: 0.07, shininess: 4, specular: 0x171717 });
+      landPlain = new THREE.MeshLambertMaterial({ map: detail });
+    }
+    const landGeo = col.clone();
+    landTop = new THREE.InstancedBufferAttribute(new Float32Array(MAXS * MAXS), 1); landTop.setUsage(THREE.DynamicDrawUsage);
+    landSide = new THREE.InstancedBufferAttribute(new Float32Array(MAXS * MAXS), 1); landSide.setUsage(THREE.DynamicDrawUsage);
+    landGeo.setAttribute('aTop', landTop); landGeo.setAttribute('aSide', landSide);
+    land = inst(landGeo, landPlain, MAXS * MAXS, false, true);
     water = inst(col, new THREE.MeshPhongMaterial({ map: detail, transparent: true, opacity: 0.9, shininess: 70, specular: 0x3a5068 }), MAXS * MAXS, false, true);
     hot = inst(col, new THREE.MeshBasicMaterial({ map: detail }), MAXS * MAXS, false, false);
     makeSea();
@@ -373,7 +518,7 @@
     ]);
     people = inst(humanGeo, toon({ vertexColors: true }), MAXU, true, false);
     // detailed people, animals and regional houses (models3d.js): instanced, one model per style or species
-    if (AG.Models3D) { AG.Models3D.setup({ THREE, GEO, merge, scene, material: toon({ vertexColors: true }) }); AG.Models3D.m2u = M2U; }
+    if (AG.Models3D) { AG.Models3D.setup({ THREE, GEO, merge, scene, material: texturize(toon({ vertexColors: true }), 'attr'), TL }); AG.Models3D.m2u = M2U; }
     heads = inst(GEO.ico, toon({}), MAXU, true, false);
     hats = inst(GEO.cone, toon({}), MAXU, true, false);
     beasts = inst(beastGeo, toon({ vertexColors: true }), MAXU, true, false);
@@ -454,10 +599,33 @@
   const LIQ_NONE = 0, LIQ_WATER = 1, LIQ_HOT = 2;
   const liq = new Uint8Array(MAXS * MAXS), liqLo = new Float32Array(MAXS * MAXS), liqHi = new Float32Array(MAXS * MAXS), liqCol = new Uint32Array(MAXS * MAXS);
   let liqDirty = true;
+  // a cell's surface: the top's texture and the sides' (earth strata, rock, sand or ice)
+  let sTop = 0, sSide = 0;
+  function surfOf(i, wet) {
+    const e = Wd.elev[i], so = Wd.soil[i], v = Wd.veg[i];
+    if (e < SEA) { sTop = sSide = Wd.frozen[i] ? TL.ICE : TL.SAND; return; } // the sea floor, or the sea frozen over
+    if (wet) { sTop = TL.SAND; sSide = TL.CLIFF; return; }                    // a river or lake bed
+    if (Wd.ice[i]) { sTop = Wd.ice[i] > 120 ? TL.ICE : TL.SNOW; sSide = TL.ICE; return; }
+    const rockSide = e >= AG.HILL ? TL.ROCK : TL.CLIFF;
+    if (Wd.snow[i] > 140) { sTop = TL.SNOW; sSide = rockSide; return; }
+    switch (so) {
+      case SO.ROCK: sTop = sSide = TL.ROCK; return;
+      case SO.BASALT: sTop = sSide = TL.BASALT; return;
+      case SO.SAND: sTop = sSide = TL.SAND; return;
+      case SO.FARM: sTop = TL.FARM; sSide = TL.DIRT; return;
+      case SO.ROAD: sTop = TL.COBBLE; sSide = TL.DIRT; return;
+      case SO.ASH: case SO.BLIGHT: sTop = TL.DIRT; sSide = rockSide; return;
+    }
+    if (e >= AG.MOUNTAIN) { sTop = v >= 60 ? TL.GRASS : TL.ROCK; sSide = TL.ROCK; return; }
+    sTop = v >= 150 ? TL.LITTER : v >= 28 || so === SO.HOLY ? TL.GRASS : TL.DIRT;
+    sSide = rockSide;
+  }
   function refreshRows(r0, r1) {
+    const tops = landTop ? landTop.array : null, sides = landSide ? landSide.array : null;
     for (let ly = r0; ly < r1; ly++) {
       for (let lx = 0; lx < ws; lx++) {
         const n = ly * ws + lx, x = wx0 + lx, y = wy0 + ly, i = y * W + x;
+        if (tops) { surfOf(i, Wd.fl[i] > 0.004 && !Wd.frozen[i]); tops[n] = sTop; sides[n] = sSide; }
         const e = Wd.elev[i], f = Wd.fl[i], typ = Wd.ft[i];
         const c = R.flatColor(i), cr = c & 255, cg = (c >>> 8) & 255, cb = (c >>> 16) & 255;
         const gTop = e < SEA && Wd.frozen[i] && sea ? SEA_Y + 0.06 : colTop(i), wet = f > 0.004 && !Wd.frozen[i]; // a frozen sea is ice on the surface
@@ -486,6 +654,7 @@
     land.instanceMatrix.updateRange.offset = r0 * ws * 16; land.instanceMatrix.updateRange.count = (r1 - r0) * ws * 16;
     land.instanceColor.updateRange.offset = r0 * ws * 3; land.instanceColor.updateRange.count = (r1 - r0) * ws * 3;
     land.instanceMatrix.needsUpdate = true; land.instanceColor.needsUpdate = true;
+    if (landTop) for (const a of [landTop, landSide]) { a.updateRange.offset = r0 * ws; a.updateRange.count = (r1 - r0) * ws; a.needsUpdate = true; }
     liqDirty = true;
   }
   function packLiquids() {
@@ -566,10 +735,10 @@
       for (let k = 0; k < 5; k++) {
         const r = 0.95 - k * 0.17, y = 0.12 + k * 0.17, h = 0.42 - k * 0.04;
         parts.push({ geo: cone6, c: snow ? [52 + k * 3, 96 + k * 4, 72 + k * 3] : grey(205 + k * 12), x: 0, y, z: 0, sx: r, sy: h, sz: r, ry: k * 0.5 });
-        if (snow) parts.push({ geo: cone6, c: [236, 242, 250], x: 0, y: y + h * 0.42, z: 0, sx: r * 0.62, sy: h * 0.58, sz: r * 0.62, ry: k * 0.5 + 0.26 });
+        if (snow) parts.push({ geo: cone6, c: [236, 242, 250], x: 0, y: y + h * 0.42, z: 0, sx: r * 0.62, sy: h * 0.58, sz: r * 0.62, ry: k * 0.5 + 0.26, t: TL.SNOW });
       }
-      parts.push({ geo: stem, c: snow ? [96, 70, 50] : grey(150), x: 0, y: 0, z: 0, sx: 0.12, sy: 0.16, sz: 0.12 });
-      return merge(parts);
+      parts.push({ geo: stem, c: snow ? [96, 70, 50] : grey(150), x: 0, y: 0, z: 0, sx: 0.12, sy: 0.16, sz: 0.12, t: TL.BARK });
+      return merge(parts, TL.NEEDLES);
     };
     const crownGeo = merge([
       { geo: ico, c: W_, x: 0, y: 0.42, z: 0, sx: 0.86, sy: 0.74, sz: 0.86 },
@@ -577,55 +746,55 @@
       { geo: ico, c: grey(214), x: -0.28, y: 0.3, z: -0.16, sx: 0.58, sy: 0.5, sz: 0.58 },
       { geo: ico, c: grey(232), x: -0.06, y: 0.26, z: 0.32, sx: 0.52, sy: 0.46, sz: 0.52 },
       { geo: oct, c: grey(240), x: 0.08, y: 0.72, z: -0.06, sx: 0.5, sy: 0.4, sz: 0.5 },
-    ]);
+    ], TL.LEAVES);
     const birchGeo = merge([
       { geo: ico, c: W_, x: 0, y: 0.45, z: 0, sx: 0.5, sy: 0.8, sz: 0.5 },
       { geo: ico, c: grey(226), x: 0.1, y: 0.15, z: 0.06, sx: 0.42, sy: 0.45, sz: 0.42 },
       { geo: oct, c: grey(238), x: -0.04, y: 0.86, z: 0, sx: 0.32, sy: 0.4, sz: 0.32 },
-    ]);
+    ], TL.LEAVES);
     const cypressGeo = merge([
       { geo: ico, c: W_, x: 0, y: 0.5, z: 0, sx: 0.36, sy: 1.15, sz: 0.36 },
       { geo: GEO.cone, c: grey(236), x: 0, y: 0.95, z: 0, sx: 0.24, sy: 0.4, sz: 0.24 },
-      { geo: stem, c: [96, 72, 52], x: 0, y: 0, z: 0, sx: 0.07, sy: 0.12, sz: 0.07 },
-    ]);
+      { geo: stem, c: [96, 72, 52], x: 0, y: 0, z: 0, sx: 0.07, sy: 0.12, sz: 0.07, t: TL.BARK },
+    ], TL.NEEDLES);
     const acaciaGeo = merge([ // a forked trunk under a flat, wind-pruned crown
-      { geo: stem, c: [112, 86, 62], x: 0, y: 0, z: 0, sx: 0.07, sy: 0.5, sz: 0.07 },
-      { geo: twig, c: [112, 86, 62], x: 0.08, y: 0.42, z: 0, sx: 0.05, sy: 0.42, sz: 0.05, rz: -0.55 },
-      { geo: twig, c: [104, 80, 58], x: -0.08, y: 0.44, z: 0.02, sx: 0.05, sy: 0.38, sz: 0.05, rz: 0.6 },
+      { geo: stem, c: [112, 86, 62], x: 0, y: 0, z: 0, sx: 0.07, sy: 0.5, sz: 0.07, t: TL.BARK },
+      { geo: twig, c: [112, 86, 62], x: 0.08, y: 0.42, z: 0, sx: 0.05, sy: 0.42, sz: 0.05, rz: -0.55, t: TL.BARK },
+      { geo: twig, c: [104, 80, 58], x: -0.08, y: 0.44, z: 0.02, sx: 0.05, sy: 0.38, sz: 0.05, rz: 0.6, t: TL.BARK },
       { geo: ico, c: [118, 146, 66], x: 0.2, y: 0.82, z: 0, sx: 0.9, sy: 0.2, sz: 0.75 },
       { geo: ico, c: [106, 136, 60], x: -0.22, y: 0.8, z: 0.06, sx: 0.7, sy: 0.18, sz: 0.62 },
       { geo: ico, c: [128, 154, 72], x: 0, y: 0.9, z: -0.1, sx: 0.6, sy: 0.15, sz: 0.55 },
-    ]);
+    ], TL.LEAVES);
     const palmParts = [];
-    for (let k = 0; k < 4; k++) palmParts.push({ geo: stem, c: k % 2 ? [150, 122, 84] : [136, 108, 74], x: k * k * 0.018, y: k * 0.26, z: 0, sx: 0.085 - k * 0.008, sy: 0.28, sz: 0.085 - k * 0.008, rz: -k * 0.08 });
+    for (let k = 0; k < 4; k++) palmParts.push({ geo: stem, c: k % 2 ? [150, 122, 84] : [136, 108, 74], x: k * k * 0.018, y: k * 0.26, z: 0, sx: 0.085 - k * 0.008, sy: 0.28, sz: 0.085 - k * 0.008, rz: -k * 0.08, t: TL.BARK });
     for (let k = 0; k < 7; k++) {
       const a = (k / 7) * Math.PI * 2, cx = Math.cos(a), sz = Math.sin(a);
       // a frond: a long flat blade reaching out and drooping (laid along +x, then turned)
       palmParts.push({ geo: blade, c: k % 2 ? [62, 146, 70] : [76, 160, 74], x: 0.16 + cx * 0.04, y: 1.08, z: sz * 0.04, sx: 0.2, sy: 0.62, sz: 0.04, ry: -a, rz: -1.95 });
     }
     palmParts.push({ geo: ico, c: [96, 70, 44], x: 0.16, y: 1.0, z: 0, sx: 0.14, sy: 0.12, sz: 0.14 });
-    const palmGeo = merge(palmParts);
+    const palmGeo = merge(palmParts, TL.LEAVES);
     const jungleGeo = merge([
       { geo: ico, c: W_, x: 0, y: 0.1, z: 0, sx: 1.25, sy: 0.6, sz: 1.25 },
       { geo: ico, c: grey(216), x: 0.36, y: -0.06, z: -0.22, sx: 0.72, sy: 0.42, sz: 0.72 },
       { geo: ico, c: grey(230), x: -0.32, y: -0.04, z: 0.26, sx: 0.74, sy: 0.42, sz: 0.74 },
       { geo: oct, c: grey(244), x: 0.05, y: 0.36, z: 0.05, sx: 0.7, sy: 0.36, sz: 0.7 },
-    ]);
+    ], TL.LEAVES);
     const willowParts = [{ geo: ico, c: W_, x: 0, y: 0.62, z: 0, sx: 0.95, sy: 0.6, sz: 0.95 }];
     for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2; willowParts.push({ geo: blade, c: grey(214 + (k % 3) * 12), x: Math.cos(a) * 0.42, y: 0.72, z: Math.sin(a) * 0.42, sx: 0.2, sy: 0.6, sz: 0.06, ry: -a, rz: Math.PI }); } // hanging strands
-    const willowGeo = merge(willowParts);
+    const willowGeo = merge(willowParts, TL.LEAVES);
     const bareGeo = merge([ // a deciduous tree in winter: trunk and a fan of bare branches
       { geo: stem, c: W_, x: 0, y: 0, z: 0, sx: 0.09, sy: 0.7, sz: 0.09 },
       { geo: twig, c: grey(236), x: 0.1, y: 0.5, z: 0, sx: 0.045, sy: 0.42, sz: 0.045, rz: -0.6 },
       { geo: twig, c: grey(236), x: -0.09, y: 0.55, z: 0.03, sx: 0.04, sy: 0.4, sz: 0.04, rz: 0.55 },
       { geo: twig, c: grey(226), x: 0, y: 0.6, z: 0.09, sx: 0.035, sy: 0.36, sz: 0.035, rx: 0.6 },
       { geo: twig, c: grey(226), x: 0.02, y: 0.62, z: -0.08, sx: 0.035, sy: 0.32, sz: 0.035, rx: -0.55 },
-    ]);
+    ], TL.BARK);
     const bushGeo = merge([
       { geo: ico, c: W_, x: 0, y: 0.32, z: 0, sx: 0.8, sy: 0.6, sz: 0.8 },
       { geo: oct, c: grey(222), x: 0.32, y: 0.22, z: 0.1, sx: 0.5, sy: 0.42, sz: 0.5 },
       { geo: oct, c: grey(232), x: -0.28, y: 0.22, z: -0.14, sx: 0.5, sy: 0.4, sz: 0.5 },
-    ]);
+    ], TL.LEAVES);
     const grassParts = [];
     for (let k = 0; k < 6; k++) { const a = k * 1.05, r = 0.08 + (k % 3) * 0.05; grassParts.push({ geo: blade, c: grey(200 + (k % 3) * 25), x: Math.cos(a) * r, y: 0, z: Math.sin(a) * r, sx: 0.07, sy: 0.55 + (k % 3) * 0.2, sz: 0.04, ry: a, rx: Math.sin(a) * 0.35, rz: -Math.cos(a) * 0.35 }); }
     const grassGeo = merge(grassParts);
@@ -641,7 +810,7 @@
       { geo: pyramid, c: W_, x: 0, y: 0, z: 0, sx: 0.82, sy: 1.2, sz: 0.82 },
       { geo: pyramid, c: grey(218), x: 0.3, y: 0, z: 0.18, sx: 0.6, sy: 0.72, sz: 0.6, ry: 0.7 },
       { geo: oct, c: grey(232), x: -0.28, y: 0.16, z: -0.16, sx: 0.62, sy: 0.55, sz: 0.62, ry: 0.4 },
-    ]);
+    ], TL.ROCK);
     const cactusGeo = merge([
       { geo: drum, c: W_, x: 0, y: 0, z: 0, sx: 0.2, sy: 0.8, sz: 0.2 },
       { geo: GEO.box, c: grey(230), x: 0.16, y: 0.3, z: 0, sx: 0.14, sy: 0.08, sz: 0.12 },
@@ -650,9 +819,9 @@
       { geo: drum, c: grey(220), x: -0.19, y: 0.42, z: 0, sx: 0.09, sy: 0.24, sz: 0.09 },
     ]);
     const k = (n) => (lowEnd ? Math.ceil(n / 2) : n);
-    const solid = toon({}), coloured = toon({ vertexColors: true });
+    const coloured = texturize(toon({ vertexColors: true }), 'attr'), solid = (name) => (TP.on ? layerMat(name) : toon({}));
     const C = PLANT_CAPS;
-    PL.trunks = inst(g6(0.3, 0.5, 6, true), solid, k(C.trunks), true, false);
+    PL.trunks = inst(g6(0.3, 0.5, 6, true), solid('BARK'), k(C.trunks), true, false);
     PL.conifers = inst(tiers(false), coloured, k(C.conifers), true, true);
     PL.snowcon = inst(tiers(true), coloured, k(C.snowcon), true, true);
     PL.crowns = inst(crownGeo, coloured, k(C.crowns), true, true);
@@ -667,10 +836,10 @@
     PL.grass = inst(grassGeo, coloured, k(C.grass), false, false);
     PL.reeds = inst(reedGeo, coloured, k(C.reeds), false, false);
     PL.ferns = inst(fernGeo, coloured, k(C.ferns), false, true);
-    PL.rocks = inst(GEO.mound, solid, k(C.rocks), true, true);
+    PL.rocks = inst(GEO.mound, solid('ROCK'), k(C.rocks), true, true);
     PL.crags = inst(cragGeo, coloured, k(C.crags), true, true);
-    PL.snowcaps = inst(oct, solid, k(C.snowcaps), false, true);
-    PL.tips = inst(pyramid, solid, k(C.tips), false, true); // snow on the crag tops
+    PL.snowcaps = inst(oct, solid('SNOW'), k(C.snowcaps), false, true);
+    PL.tips = inst(pyramid, solid('SNOW'), k(C.tips), false, true); // snow on the crag tops
     PL.flowers = inst(oct, new THREE.MeshLambertMaterial(), k(C.flowers), false, false);
     PL.cacti = inst(cactusGeo, coloured, k(C.cacti), true, false);
     for (const name in PL) PL[name].userData.cap = k(C[name]);
@@ -1053,7 +1222,7 @@
       }
       case BT.TENT: { // hide tent on poles
         const hide = [0xb08a62, 0xa47c55, 0xbf9a70][v];
-        k.cone(hide, 0, 0, 0, 0.9, 0.95, 0.9);
+        k.cone({ c: hide, t: 'hide' }, 0, 0, 0, 0.9, 0.95, 0.9);
         for (const a of [0.4, 2.2, 4.1]) k.box(BEAM, Math.sin(a) * 0.08, 0.85, Math.cos(a) * 0.08, 0.04, 0.3, 0.04, a, 0.3);
         k.box(DOOR, 0, 0, 0.36, 0.22, 0.38, 0.03);
         break;
@@ -1614,8 +1783,18 @@
     if (sun.shadow.mapSize.x !== ms) { sun.shadow.mapSize.set(ms, ms); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
     sun.castShadow = Q.level < 2;                          // level 2+: no shadow pass at all
     PL.flowers.visible = PL.ferns.visible = Q.level < 3;    // level 3: the smallest plants go (and the budget thins the rest)
+    applyTextures();
     if (land && landFine) land.material = Q.level === 0 ? landFine : landPlain; // fine relief at the top level only
   }
+  // textures on unless the settings say off (Auto: off at the lowest detail); relief at detail 0-1
+  function applyTextures() {
+    if (!TP.on) return;
+    const want = V.texturesWanted !== false && !(Q.level >= 3 && AG.Settings && AG.Settings.v.textures !== 'on');
+    TP.u.tpOn.value = want ? 1 : 0;
+    TP.u.tpBump.value = want && Q.level < 2 ? 0.4 : 0;
+    TP.bumpLand.value = want && Q.level < 2 ? 0.9 : 0;
+  }
+  V.applyTextures = () => applyTextures();
   function adaptQuality(t) {
     const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
     if (Q.lock || Q.fixed) return; // (a level chosen in the settings, or pinned by a benchmark)

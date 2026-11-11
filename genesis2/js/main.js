@@ -59,7 +59,7 @@
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     R.setScale(v.resolution === 'auto' ? L.scale : v.resolution === 'native' ? dpr : AG.clamp(+v.resolution || 1, 0.5, 1));
     AG.Physics.farEvery = L.farEvery; AG.Life.bodyK = L.bodyK; Civ.lodBudget = L.lod;
-    if (AG.View3D) { AG.View3D.allowed = pick('view3d', L.allow3D); AG.View3D.minQuality = L.minQ; AG.View3D.fixQuality(v.detail3d === 'auto' ? null : +v.detail3d); }
+    if (AG.View3D) { AG.View3D.allowed = pick('view3d', L.allow3D); AG.View3D.minQuality = L.minQ; AG.View3D.fixQuality(v.detail3d === 'auto' ? null : +v.detail3d); AG.View3D.texturesWanted = pick('textures', true); if (AG.View3D.applyTextures) AG.View3D.applyTextures(); }
     const root = document.documentElement.classList;
     root.toggle('perf-lean', Perf.level >= 2); root.toggle('no-vignette', v.vignette === 'off');
     root.toggle('no-ticker', v.ticker === 'off'); root.toggle('no-minimap', v.minimap === 'off'); root.toggle('show-fps', v.showFps === 'on');
