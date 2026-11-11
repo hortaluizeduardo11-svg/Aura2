@@ -1,0 +1,7 @@
+kokoro-onnx==0.6.1
+onnx
+onnxruntime
+numpy
+scipy
+soundfile
+pillow
