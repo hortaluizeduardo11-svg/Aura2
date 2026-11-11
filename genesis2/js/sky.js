@@ -54,9 +54,11 @@
   };
 
   // ---- per-tick update
+  // the season's warmth or chill on top of the climate (warmest mid-summer, coldest mid-winter)
+  Sky.updateSeason = () => { Sky.seasonT = 0.15 * Math.cos(Math.PI * 2 * (Sky.yearFrac() - 0.375)); };
   Sky.tick = function () {
     const t = AG.tick;
-    Sky.seasonT = 0.15 * Math.cos(Math.PI * 2 * (Sky.yearFrac() - 0.375));
+    Sky.updateSeason();
 
     // wind drifts toward a slowly changing target
     if (t % 900 === 0) { const a = rnd() * Math.PI * 2, m = 0.2 + rnd() * 0.7; Sky.windTarget.x = Math.cos(a) * m; Sky.windTarget.y = Math.sin(a) * m; }

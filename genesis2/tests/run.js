@@ -361,6 +361,85 @@ test('LOD: embodying and folding keeps every person record, and both modes feed 
   return `${before.size} people embodied and folded; trips ${fmt(trips)}/yr vs model ${fmt(expected)}/yr; nutrition ${fmt(n0)} -> ${fmt(n1)}`;
 });
 
+test('habitat: animals are placed where their kind would live, in groups, and winter changes them', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(5, W, H), W, H), Life = AG.Life, Hab = AG.Habitat, U = AG.U, Sim = AG.Sim, Y = AG.YEAR_TICKS; // (a world with wolves)
+  for (let y = 0; y < 20; y += 2) Sim.yearStep(2);
+  Sim.setMode('watch'); // (Watch time always begins on a morning)
+  const wild = [];
+  for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.sid[i] >= 0 && U.pid[i] < 0 && !(U.flags[i] & AG.FL.DOMESTIC)) wild.push(i);
+  assert(wild.length > 50, `enough animals to judge (${wild.length})`);
+  // their spots against random dry spots of the same region squares (the old placement)
+  let rs = 12345;
+  const rand = () => ((rs = (rs * 1103515245 + 12345) >>> 0) / 4294967296);
+  const judge = (ids) => {
+    let got = 0, base = 0, nb = 0;
+    for (const i of ids) {
+      const p = Hab.profile(Life.species[U.sid[i]]);
+      got += Hab.score(p, (U.y[i] | 0) * W + (U.x[i] | 0), null);
+      const r = Life.regionOf(U.x[i], U.y[i]), x0 = (r % Life.RW) * Life.RS, y0 = ((r / Life.RW) | 0) * Life.RS;
+      for (let k = 0; k < 6; k++) {
+        const x = Math.min(W - 1, x0 + ((rand() * Life.RS) | 0)), y = Math.min(H - 1, y0 + ((rand() * Life.RS) | 0)), c = y * W + x;
+        if (p.bird || (AG.World.passLand(c) && !AG.World.ice[c])) { base += Hab.score(p, c, null); nb++; }
+      }
+    }
+    return [got / Math.max(1, ids.length), base / Math.max(1, nb)];
+  };
+  const [got, base] = judge(wild);
+  assert(got > base * 1.3, `animals should stand on clearly better habitat than random spots (${fmt(got)} vs ${fmt(base)})`);
+  // social kinds come in groups: most have one of their own kind close by
+  let social = 0, together = 0;
+  for (const i of wild) {
+    if (U.social[i] < 0.55) continue;
+    social++;
+    for (const j of wild) if (j !== i && U.sid[j] === U.sid[i] && (U.x[j] - U.x[i]) ** 2 + (U.y[j] - U.y[i]) ** 2 < 9) { together++; break; }
+  }
+  assert(social === 0 || together / social > 0.6, `herds, packs and flocks should be together (${together}/${social})`);
+  // predators where the prey is
+  let predPrey = 0, np = 0, anyPrey = 0, na = 0;
+  for (const i of wild) { const b = Hab.blockOf(U.x[i], U.y[i]); if (U.sp[i] === AG.SP.PREDATOR) { predPrey += Hab.prey[b]; np++; } }
+  for (let b = 0; b < Hab.BW * Hab.BH; b++) { anyPrey += Hab.prey[b]; na++; }
+  const pp = np ? predPrey / np : 0, ap = anyPrey / na;
+  assert(np >= 5, `this world has predators (${np})`);
+  assert(pp > ap, `predators should be nearer prey than the average place (${fmt(pp)} vs ${fmt(ap)})`);
+  // a week of watching: they keep to good ground (habitat wandering), and the night puts herds to rest
+  for (let t = 0; t < AG.DAY_TICKS * 2; t++) Sim.tick();
+  const alive = [];
+  for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.sid[i] >= 0 && U.pid[i] < 0 && !(U.flags[i] & AG.FL.DOMESTIC)) alive.push(i);
+  const [later, base2] = judge(alive);
+  assert(later > base2 * 1.2, `after two days they should still be on good ground (${fmt(later)} vs random ${fmt(base2)})`);
+  while (AG.Sky.daylight() > 0.1) Sim.tick();
+  for (let t = 0; t < 40; t++) Sim.tick();
+  let resting = 0, grazers = 0;
+  for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.sp[i] === AG.SP.GRAZER && !(U.flags[i] & AG.FL.DOMESTIC)) { grazers++; if (U.task[i] === AG.TK.REST) resting++; }
+  assert(grazers === 0 || resting / grazers > 0.3, `grazers bed down at night (${resting}/${grazers})`);
+  // winter: songbirds of cold lands have flown south, so fewer are here than in summer
+  const songs = () => { let n = 0; for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.sid[i] >= 0 && Hab.profile(Life.species[U.sid[i]]).migrant) n++; return n; };
+  const summerSongs = songs();
+  Sim.setMode('history');
+  AG.tick = Math.ceil(AG.tick / Y) * Y + Math.round(Y * 0.85); // deep winter (a world loaded in winter embodies like this)
+  AG.mode = 'watch'; Life.embody();
+  assert(AG.Sky.season() === 3, 'the second embodying is in winter');
+  const winterSongs = songs();
+  assert(summerSongs === 0 || winterSongs < summerSongs * 0.8, `fewer songbirds in a cold winter (${summerSongs} -> ${winterSongs})`);
+  // a bear in cold country goes to a den and sleeps through the winter, burning little
+  const m = new Float32Array(Life.NL).fill(128); m[Life.L.SIZE] = 230; m[Life.L.COLD] = 200; m[Life.L.HEAT] = 20; m[Life.L.SOCIAL] = 40;
+  const bear = Life.newSpecies(Life.ARCH.PREDATOR, m, null, Life.when());
+  assert(Life.commonName(bear) === 'bear', 'the test species reads as a bear');
+  let cold = -1;
+  for (let c = W * 20; c < AG.N - W * 20 && cold < 0; c += 7) if (AG.World.passLand(c) && !AG.World.ice[c] && AG.World.T(c) < 0.3 && c % W > 20 && c % W < W - 20) cold = c;
+  assert(cold >= 0, 'a cold place for the bear');
+  const b = AG.Ent.spawnCreature(bear, (cold % W) + 0.5, ((cold / W) | 0) + 0.5, null, { age: 6 });
+  U.energy[b] = 0.9;
+  for (let t = 0; t < 120 && U.task[b] !== AG.TK.HIBERNATE; t++) Sim.tick();
+  assert(U.alive[b] && U.task[b] === AG.TK.HIBERNATE, `the bear hibernates in a cold winter (task ${AG.TASKS[U.task[b]]})`);
+  const e0 = U.energy[b];
+  for (let t = 0; t < 60; t++) Sim.tick();
+  assert(U.energy[b] > e0 - 0.01, `a hibernating bear burns almost nothing (${fmt(e0)} -> ${fmt(U.energy[b])})`);
+  let dens = 0;
+  for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.task[i] === AG.TK.HIBERNATE) dens++;
+  return `habitat ${fmt(got)} vs random ${fmt(base)} (after 2 days ${fmt(later)} vs ${fmt(base2)}); ${together}/${social} in groups; predators on prey ${fmt(pp)} vs ${fmt(ap)}; ${resting}/${grazers} grazers resting at night; songbirds ${summerSongs} in spring, ${winterSongs} in winter; ${dens} bears in dens`;
+});
+
 // ------------------------------------------------------------------ runner
 const filter = process.argv[2];
 let pass = 0, fail = 0;

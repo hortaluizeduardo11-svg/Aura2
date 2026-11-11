@@ -88,6 +88,7 @@
     time('physics', () => AG.Physics.tick());
     time('geo', () => Geo.tick());
     AG.Ent.rebuildGrid();
+    if (AG.Habitat) AG.Habitat.tick();
     time('ai', () => AG.AI.tick());
     AG.Proj.tick();
     time('civ', () => Civ.tick());

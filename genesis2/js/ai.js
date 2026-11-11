@@ -13,7 +13,7 @@
 (function () {
   const AG = window.AG, U = AG.U, Wd = AG.World, Ent = AG.Ent, Civ = AG.Civ, Flow = AG.Flow, People = AG.People, Tech = AG.Tech, Life = AG.Life;
   const { W, H, NG, SP, SPECIES, TK, ST, FL, FT, GT, UG, UF, SO, J, G, BT, TR, SK } = AG;
-  const MK = People.MK, GL = Life.GL, LL = Life.L;
+  const MK = People.MK, GL = Life.GL, LL = Life.L, Hab = AG.Habitat;
   const rnd = AG.rnd, dist2 = AG.dist2;
   const AI = (AG.AI = { stats: { think: 0 } });
   const YEAR = 1 / AG.YEAR_TICKS;
@@ -358,21 +358,28 @@
     }
     return -1;
   }
-  function metabolism(i) {
-    // bigger, faster, hungrier bodies burn more; good insulation in the cold is cheaper
+  function metabolism(i, asleep) {
+    // bigger, faster, hungrier bodies burn more; good insulation in the cold is cheaper; a
+    // hibernating body barely burns anything
     const m = 0.0042 * (0.55 + U.scale[i] * 0.5 + Ent.phen(i, LL.METAB) / 255 * 0.3) * (U.st[i] === ST.MOVE && (U.flags[i] & FL.FLEE) ? 1.6 : 1);
-    U.energy[i] -= m * (U.preg[i] > 0 ? 1.35 : 1);
+    U.energy[i] -= m * (U.preg[i] > 0 ? 1.35 : 1) * (asleep ? 0.1 : 1);
   }
   function thinkAnimal(i, sp) {
-    metabolism(i);
+    const asleep = U.task[i] === TK.HIBERNATE && U.st[i] === ST.WORK;
+    metabolism(i, asleep);
     if (U.energy[i] <= 0) { U.energy[i] = 0; hurt(i, U.mhp[i] * 0.04, 'starvation'); if (!U.alive[i]) return; }
     const s = Life.species[U.sid[i]], arch = s ? s.arch : 0;
     if (U.preg[i] > 0) { U.preg[i] += 8 * YEAR; if (U.preg[i] >= GESTATION[arch]) giveBirth(i, s); if (!U.alive[i]) return; }
     if (U.age[i] < SPECIES[sp].adult && ((AG.tick + i) & 63) === 0) { Ent.deriveStats(i); }
+    if (asleep) { // in the den until spring, unless something wounds it
+      if (U.hp[i] < U.mhp[i] * 0.75 || AG.Sky.season() !== 3) { U.st[i] = ST.IDLE; U.task[i] = TK.NONE; }
+      else return;
+    }
     if (U.st[i] === ST.FIGHT) { const t = U.tgt[i]; if (t < 0 || !U.alive[t]) { U.st[i] = ST.IDLE; U.tgt[i] = -1; } return; }
     const domestic = (U.flags[i] & FL.DOMESTIC) !== 0;
     if (sp === SP.PREDATOR && !domestic) {
-      if (U.energy[i] < 0.6) { const prey = findHostile(i, U.sense[i] + 2); if (prey >= 0) { engage(i, prey); U.task[i] = TK.HUNT; return; } }
+      // hunters work the dark: hungry enough to hunt sooner at night
+      if (U.energy[i] < (AG.Sky.daylight() < 0.3 ? 0.85 : 0.6)) { const prey = findHostile(i, U.sense[i] + 2); if (prey >= 0) { engage(i, prey); U.task[i] = TK.HUNT; return; } }
     } else {
       // prey watch for danger: senses set the range, boldness how close they let it come
       const n = Ent.near(U.x[i], U.y[i], U.sense[i] * (1.1 - U.bold[i] * 0.5), 1, 32);
@@ -384,6 +391,8 @@
     if (U.st[i] === ST.MOVE) return;
     U.flags[i] &= ~FL.FLEE;
     if (U.st[i] !== ST.IDLE) return;
+    // night: grazers and primates bed down together (only the starving keep feeding)
+    if (!domestic && sp !== SP.PREDATOR && U.energy[i] > 0.3 && AG.Sky.daylight() < 0.25 && rnd() < 0.8) { bedDown(i); return; }
     if (sp !== SP.PREDATOR && U.energy[i] < 0.75) { const c = nearVeg(i, 6, sp === SP.APE ? 140 : 50); if (c >= 0) { goCell(i, c, TK.GRAZE); return; } }
     // breeding: well-fed adult females find a compatible mate
     if (U.sex[i] === 0 && U.preg[i] === 0 && U.energy[i] > 0.72 && U.age[i] > SPECIES[sp].adult && AG.Sky.season() < 3 && Ent.count[sp] < CAPS[sp] && rnd() < 0.08) {
@@ -391,13 +400,82 @@
       if (m >= 0) { U.preg[i] = 0.001; U.fgen.set(U.gen.subarray(m * GL, m * GL + GL), i * GL); }
     }
     if (domestic) { const c = Civ.cities[U.home[i]]; const p = c ? Civ.firstBuilding(c, BT.PEN) : null; if (p) { wanderNear(i, p.cx, p.cy, 4); return; } }
-    // herds keep together; loners roam
+    const hp = s && Hab ? Hab.profile(s) : null;
+    if (hp && !domestic && rhythm(i, sp, hp)) return;
+    // herds keep together; loners roam toward better ground
     if (U.social[i] > 0.55 && rnd() < 0.5) {
       const n = Ent.near(U.x[i], U.y[i], 10, 1, 24); let cx = 0, cy = 0, k = 0;
       for (let q = 0; q < n; q++) { const j = Ent.buf[q]; if (U.sid[j] === U.sid[i] && j !== i) { cx += U.x[j]; cy += U.y[j]; k++; } }
       if (k) { wanderNear(i, cx / k, cy / k, 4); return; }
     }
-    if (rnd() < 0.5) wander(i, sp === SP.PREDATOR ? 10 : 6);
+    if (rnd() < 0.5) { if (hp && !domestic) habWander(i, hp, sp === SP.PREDATOR ? 10 : 6, null); else wander(i, sp === SP.PREDATOR ? 10 : 6); }
+  }
+  // ------------------------------------------------------------ habitat, day and season
+  const DEN = { den: true };
+  // the day and the year: dens, sleep, drinking, treks (true when it chose something to do)
+  function rhythm(i, sp, p) {
+    const c = (U.y[i] | 0) * W + (U.x[i] | 0), day = AG.Sky.daylight();
+    // bears of cold lands go to a den on a sheltered slope and sleep through the winter
+    if (p.hibernator && Hab.denWeather(c) && U.energy[i] > 0.2) {
+      if (rnd() < 0.4) { U.task[i] = TK.HIBERNATE; U.st[i] = ST.WORK; U.tm[i] = (1 - AG.Sky.yearFrac()) * AG.YEAR_TICKS + 30 + rnd() * 120; }
+      else habWander(i, p, 8, DEN);
+      return true;
+    }
+    // the heat of the day: well-fed hunters lie up in the shade
+    if (day > 0.85 && sp === SP.PREDATOR && U.energy[i] > 0.55 && rnd() < 0.45) { U.st[i] = ST.WORK; U.task[i] = TK.REST; U.tm[i] = 50 + rnd() * 60; return true; }
+    // dawn and dusk, or any hot spell: down to the water to drink
+    const df = AG.Sky.dayFrac(), twilight = (df > 0.2 && df < 0.3) || (df > 0.7 && df < 0.8), hot = Wd.T(c) > 0.68;
+    if (p.water > 0 && (twilight ? rnd() < 0.25 * p.water : hot && rnd() < 0.06 * p.water)) {
+      const w = Hab.drinkSpot(U.x[i], U.y[i], hot ? 6 : 4, rnd);
+      if (w >= 0) { goCell(i, w, TK.DRINK); return true; }
+    }
+    // too cold or too hot here for the season: trek to better country (herds go together)
+    if (rnd() < 0.08 && Hab.comfort(p, c) < 0.22 && trek(i, p)) return true;
+    return false;
+  }
+  // rest close to the rest of the group, or here
+  function bedDown(i) {
+    if (U.social[i] > 0.45) {
+      const n = Ent.near(U.x[i], U.y[i], 8, 1, 24); let cx = 0, cy = 0, k = 0;
+      for (let q = 0; q < n; q++) { const j = Ent.buf[q]; if (U.sid[j] === U.sid[i] && j !== i) { cx += U.x[j]; cy += U.y[j]; k++; } }
+      if (k && dist2(U.x[i], U.y[i], cx / k, cy / k) > 4) { wanderNear(i, cx / k, cy / k, 1.2, TK.REST); return; }
+    }
+    U.st[i] = ST.WORK; U.task[i] = TK.REST; U.tm[i] = 60 + rnd() * 70;
+  }
+  // the best of a few nearby spots by habitat (staying put if here is better)
+  function habWander(i, p, r, opt) {
+    const c0 = (U.y[i] | 0) * W + (U.x[i] | 0);
+    let bx = -1, by = -1, best = Hab.score(p, c0, opt) * 1.1 * (0.85 + rnd() * 0.3);
+    for (let t = 0; t < 5; t++) {
+      const x = U.x[i] + (rnd() - 0.5) * 2 * r, y = U.y[i] + (rnd() - 0.5) * 2 * r;
+      if (!okCell(i, x, y)) continue;
+      const v = Hab.score(p, (y | 0) * W + (x | 0), opt) * (0.85 + rnd() * 0.3);
+      if (v > best) { best = v; bx = x; by = y; }
+    }
+    if (bx >= 0) goTo(i, bx, by, TK.WANDER);
+    else if (rnd() < 0.5) wander(i, 2); // this is good ground: just mill about
+  }
+  // a long walk to better country: follow a herd-mate already trekking, or pick the best far spot
+  function trek(i, p) {
+    const n = Ent.near(U.x[i], U.y[i], 10, U.layer[i], 24);
+    for (let q = 0; q < n; q++) {
+      const j = Ent.buf[q];
+      if (j !== i && U.sid[j] === U.sid[i] && U.task[j] === TK.TREK && U.st[j] === ST.MOVE) {
+        const x = U.tx[j] + (rnd() - 0.5) * 4, y = U.ty[j] + (rnd() - 0.5) * 4;
+        if (okCell(i, x, y)) { goTo(i, x, y, TK.TREK); return true; }
+      }
+    }
+    const c0 = (U.y[i] | 0) * W + (U.x[i] | 0);
+    let bx = -1, by = -1, best = Hab.score(p, c0, null) * 1.5 + 0.01;
+    for (let t = 0; t < 8; t++) {
+      const a = rnd() * Math.PI * 2, d = 14 + rnd() * 22, x = U.x[i] + Math.cos(a) * d, y = U.y[i] + Math.sin(a) * d;
+      if (!okCell(i, x, y)) continue;
+      const v = Hab.score(p, (y | 0) * W + (x | 0), null);
+      if (v > best) { best = v; bx = x; by = y; }
+    }
+    if (bx < 0) return false;
+    goTo(i, bx, by, TK.TREK);
+    return true;
   }
   function giveBirth(i, s) {
     U.preg[i] = 0;
@@ -414,14 +492,51 @@
     U.energy[i] -= 0.25;
   }
   function thinkBird(i) {
+    const bs = U.sid[i] >= 0 ? Life.species[U.sid[i]] : null, p = bs && Hab ? Hab.profile(bs) : null;
+    if (p) {
+      if (AG.Sky.daylight() < 0.2) { // dusk to dawn: roost in the trees (great birds on the crags)
+        if (U.st[i] === ST.WORK || (U.st[i] === ST.MOVE && U.task[i] === TK.ROOST)) return;
+        const c = roostSpot(i, p);
+        if (c >= 0) { goCell(i, c, TK.ROOST); return; }
+      } else if (U.task[i] === TK.ROOST && U.st[i] === ST.WORK) { U.st[i] = ST.IDLE; U.task[i] = TK.NONE; }
+      // songbirds of cold lands fly south for the winter
+      if (p.migrant && AG.Sky.season() === 3 && rnd() < 0.3 && Wd.T((U.y[i] | 0) * W + (U.x[i] | 0)) < 0.38) {
+        let bx = -1, by = -1, bt = -9;
+        for (let t = 0; t < 6; t++) {
+          const a = rnd() * Math.PI * 2, x = AG.clamp(U.x[i] + Math.cos(a) * 36, 4, W - 4), y = AG.clamp(U.y[i] + Math.sin(a) * 36, 4, H - 4), T = Wd.T((y | 0) * W + (x | 0));
+          if (T > bt) { bt = T; bx = x; by = y; }
+        }
+        goTo(i, bx, by, TK.TREK); return;
+      }
+    }
     if (U.st[i] === ST.MOVE && rnd() < 0.6) return;
     const n = Ent.near(U.x[i], U.y[i], 7, 2, 24);
     let vx = 0, vy = 0, cx = 0, cy = 0, k = 0;
     for (let q = 0; q < n; q++) { const j = Ent.buf[q]; if (j === i || U.sp[j] !== SP.BIRD) continue; vx += U.tx[j] - U.x[j]; vy += U.ty[j] - U.y[j]; cx += U.x[j]; cy += U.y[j]; k++; }
     let tx, ty;
     if (k) { cx /= k; cy /= k; tx = U.x[i] + (vx / k) * 0.8 + (cx - U.x[i]) * 0.3 + (rnd() - 0.5) * 6; ty = U.y[i] + (vy / k) * 0.8 + (cy - U.y[i]) * 0.3 + (rnd() - 0.5) * 6; }
-    else { tx = U.x[i] + (rnd() - 0.5) * 30; ty = U.y[i] + (rnd() - 0.5) * 30; }
+    else if (p) { // a lone bird looks for its kind of country: woods, water, crags or fields
+      let best = -1; tx = U.x[i]; ty = U.y[i];
+      for (let t = 0; t < 4; t++) {
+        const x = AG.clamp(U.x[i] + (rnd() - 0.5) * 30, 4, W - 4), y = AG.clamp(U.y[i] + (rnd() - 0.5) * 30, 4, H - 4);
+        const v = Hab.score(p, (y | 0) * W + (x | 0), null) * (0.8 + rnd() * 0.4);
+        if (v > best) { best = v; tx = x; ty = y; }
+      }
+    } else { tx = U.x[i] + (rnd() - 0.5) * 30; ty = U.y[i] + (rnd() - 0.5) * 30; }
     goTo(i, AG.clamp(tx, 4, W - 4), AG.clamp(ty, 4, H - 4), TK.WANDER);
+  }
+  // a branch for the night: the tallest trees nearby (crags and high ground for the great birds)
+  function roostSpot(i, p) {
+    let best = -1, bv = 0;
+    for (let t = 0; t < 8; t++) {
+      const x = U.x[i] + (rnd() - 0.5) * 16, y = U.y[i] + (rnd() - 0.5) * 16;
+      if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2) continue;
+      const c = (y | 0) * W + (x | 0);
+      if (!Wd.passLand(c) || Wd.fl[c] > 0.006 || Wd.bgrid[c] || Wd.fire[c]) continue;
+      const v = p.climber ? Hab.slope(c) + Wd.elev[c] : Wd.veg[c] >= 140 ? Wd.veg[c] : 0;
+      if (v > bv) { bv = v; best = c; }
+    }
+    return best;
   }
 
   // ============================================================ vehicles
@@ -533,6 +648,9 @@
       case TK.ATTACKB: U.st[i] = ST.WORK; U.tm[i] = 15; return;
       case TK.EAT: U.st[i] = ST.WORK; U.tm[i] = 25; return;
       case TK.REST: U.st[i] = ST.WORK; U.tm[i] = 90 + rnd() * 60; return;
+      case TK.DRINK: U.st[i] = ST.WORK; U.tm[i] = 20 + rnd() * 20; return;
+      case TK.ROOST: U.st[i] = ST.WORK; U.tm[i] = 80 + rnd() * 80; return;
+      case TK.TREK: U.st[i] = ST.IDLE; U.task[i] = TK.NONE; return;
       case TK.SOCIAL: case TK.COURT: U.st[i] = ST.WORK; U.tm[i] = 40; return;
       case TK.PLAY: U.st[i] = ST.WORK; U.tm[i] = 30; return;
       case TK.HUNT: U.st[i] = ST.WORK; U.tm[i] = 40; return; // tracking small game

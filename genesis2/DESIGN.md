@@ -41,6 +41,7 @@ js/sky.js      weather, seasons, day/night (kept)
 js/fx.js       particles (kept)
 js/physics.js  fluids, fire, gas, slow land pass (kept, sea level made dynamic)
 js/life.js     NEW  diploid genomes, species registry, phylogeny, regional evolution
+js/habitat.js  NEW  where an animal would be: species profiles, cell scores, coarse maps
 js/entities.js bodies (structure of arrays) + spatial hash
 js/people.js   NEW  person records: minds, memory, relationships, health, life story
 js/lang.js     NEW  languages: phonology, lexicon, drift, splits, families, naming
@@ -451,6 +452,30 @@ SIZE). This is a fact of evolution, not a flag.
 - **Re-embodiment:** returning to Watch embodies each region's census (capped) with genomes drawn
   by recombining reservoir genomes. Individuals are not persistent across fast time; populations
   and gene pools are.
+- **Habitat** (`habitat.js`): a species profile comes from its mean genes and common name: the
+  temperature it is adapted to (the inverse of the regional optimum: COLD = (0.62 - t) * 520,
+  HEAT = (t - 0.42) * 560), open-ground, forest and edge preference, slope and height
+  preference, water need, snow tolerance, prey dependence and shyness (BOLD). `score(profile,
+  cell)` multiplies thermal comfort at the temperature now (season and weather included), food
+  (grass, forest or edge; cereals for grazers; the prey map for predators; snow and blight cut
+  it), closeness to fresh water (pulled harder in summer heat), slope and height terms,
+  settlements (repelling the shy, drawing crows) and fire. Coarse 4x4-block maps (fresh-water
+  distance, settlement distance, fire distance, blurred grazer density) make it a handful of
+  reads; they are rebuilt on embodying, prey every 120 ticks, the rest every 960.
+- **Placement:** grazers are placed first, then the prey map is refreshed for the others. A
+  species' animals are pooled over its regions: a region is drawn by how many animals it should
+  still hold, a spot in it by squared habitat score over sampled candidates, and a whole group
+  (size by kind and SOCIAL) settles around it inside the region square, so folding stays exact.
+  Songbirds of lands colder than 0.38 in winter are mostly away (fewer bodies; the regional count
+  is kept); bears in lands colder than 0.36 in winter start in dens.
+- **Behaviour** (`ai.js`): wandering takes the best of five nearby spots by score (staying put if
+  here is better); at night grazers and primates bed down by their group; well-fed predators lie
+  up in the midday heat and hunt sooner at night; at dawn and dusk, or in heat, animals walk to a
+  drinking spot beside fresh water; when comfort drops below 0.22 a herd treks 14-36 cells to
+  better ground, following a mate already on the move; bears in cold winters hibernate (a tenth
+  of the energy burn) until spring or a wound; birds roost in the tallest trees nearby (great
+  birds on crags) and songbirds fly toward warmth in cold winters. The god tool releases the
+  nearest species of the kind, weighed by how well it would cope at that spot.
 - **Aggregated human communities** interact with animal bodies by sampling: a far-away band's
   yearly hunt removes real animals from its range, so hunting pressure stays consistent.
 
@@ -673,6 +698,7 @@ These follow from the same rules rather than special cases:
 | selection | a cold region raises the mean COLD allele over generations versus a control |
 | tech | no community ever knows a tech without its prerequisites, over long random runs; conditions are honoured (no cultivation without wild cereals); banned techs never appear |
 | LOD | a community simulated aggregated vs. embodied grows at the same expected rate (within tolerance); fold → materialise preserves person records exactly |
+| habitat | embodied animals score clearly higher than random spots of their regions (and still do two days later); most social animals have one of their kind within 3 cells; predators stand on more prey than the average place; grazers rest at night; fewer songbirds in a cold winter; a bear in cold country hibernates and burns almost nothing |
 | save/load | serialise → deserialise → state hash equal; continuing both gives identical futures |
 
 **Scenario demos** (`tests/demo-*.js`, also in-game under World → Scenarios):
@@ -720,6 +746,18 @@ These follow from the same rules rather than special cases:
   Building models are cached by type, realm, variant, style and era band.
 - A lost WebGL context switches the close-up off until the browser restores it; the 2D map
   carries on.
+- Flora in 3D: twenty instanced shapes (conifers, snowy conifers, broadleaf crowns, birches,
+  cypresses, acacias, palms, rainforest crowns, willows, bare trees, bushes, grass, reeds, ferns,
+  boulders, crags, snow caps and tips, flowers, cacti). A planning pass gives each cell of the
+  window its biome and full-density plant count; one thinning factor (quantised, with
+  hysteresis so plants do not pop) keeps the total within the budget for the detail level
+  (56k, 40k, 26k, 14k). Every part is as few triangles as will do (open 3-6-sided cones and
+  stems, octahedra), so a forest plant averages about 40 triangles. Instance matrices are
+  written directly, and each cell's plants come from its own hash stream, so a rebuild puts
+  every plant back where it was. The periodic rebuild (every 6 s: growth, logging, fire, the
+  season) is spread over about twelve frames; the GPU keeps the old set until it is done.
+  Trees keep off cells beside buildings and are thinner inside a settlement, so villages stand
+  in clearings.
 - Interface (pixel art, `index.html`, `ui.js`, `icons.js`, `screens.js`):
   - One pixel font (Pixelify Sans) and one frame style: a two-pixel dark outline with a light
     upper-left edge and a dark lower-right edge, on olive-slate stone colours.

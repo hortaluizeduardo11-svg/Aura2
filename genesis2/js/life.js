@@ -599,31 +599,103 @@
   Life.bodyK = 1; // AG.Perf lowers it on slow machines
   Life.BODY_SP = null; // filled by entities.js: archetype -> body kind
   // Embody every region's population (capped per archetype) with genomes bred from the reservoir.
+  // Bodies go where their kind would be (habitat.js): candidate cells of the region are scored for
+  // the species now (season, weather, food, water, slope, snow, people, fire), groups of a size that
+  // fits the species gather around the better ones, grazers first so predators can follow the prey.
+  // Songbirds of cold lands are away in winter and bears there are in their dens. Bodies stay
+  // inside their region square, so folding them back keeps the regional numbers exact.
   Life.embody = function () {
-    const Ent = AG.Ent, U = AG.U;
+    const Hab = AG.Habitat;
     const tot = [0, 0, 0, 0];
     for (const s of Life.alive()) if (!s.sapient && !s.domestic) for (const R of s.regions.values()) tot[s.arch] += R.n;
     const k = tot.map((t, a) => (t > BODY_CAP[a] * Life.bodyK ? (BODY_CAP[a] * Life.bodyK) / t : 1));
-    for (const s of Life.alive()) {
-      if (s.sapient || s.domestic) continue;
+    if (Hab) Hab.refresh();
+    const list = Life.alive().filter((s) => !s.sapient && !s.domestic);
+    list.sort((a, b) => (a.arch === ARCH.GRAZER ? 0 : 1) - (b.arch === ARCH.GRAZER ? 0 : 1) || a.id - b.id);
+    let preyDone = false;
+    for (const s of list) {
+      if (Hab && !preyDone && s.arch !== ARCH.GRAZER) { Hab.refreshPrey(); preyDone = true; }
+      const wants = [];
       for (const [r, R] of s.regions) {
         R.emb = 0;
-        let want = R.n * k[s.arch]; want = Math.floor(want) + (rr() < want % 1 ? 1 : 0);
-        const x0 = (r % RW) * RS, y0 = ((r / RW) | 0) * RS;
-        let m = 0;
-        for (let tries = 0; m < want && tries < want * 12; tries++) {
-          const x = x0 + rr() * RS, y = y0 + rr() * RS;
-          if (x >= W || y >= H) continue;
-          const i = (y | 0) * W + (x | 0);
-          if (s.arch !== ARCH.BIRD && (!Wd.passLand(i) || Wd.ice[i])) continue;
-          const b = Ent.spawnCreature(s, x, y, R);
-          if (b < 0) return;
-          m++;
-        }
-        R.emb = m;
+        const want = R.n * k[s.arch], n = Math.floor(want) + (rr() < want % 1 ? 1 : 0);
+        if (n > 0) wants.push({ r, R, n });
       }
+      slotsOut = false;
+      if (Hab) placeByHabitat(s, Hab.profile(s), wants); else for (const w of wants) w.R.emb = placeAnywhere(s, w.r, w.R, w.n);
+      if (slotsOut) return; // every body slot is taken
     }
   };
+  // Each sets R.emb (or returns how many it placed); slotsOut is set when no body slot is left.
+  let slotsOut = false;
+  function placeAnywhere(s, r, R, want) {
+    const Ent = AG.Ent, x0 = (r % RW) * RS, y0 = ((r / RW) | 0) * RS;
+    let m = 0;
+    for (let tries = 0; m < want && tries < want * 12; tries++) {
+      const x = x0 + rr() * RS, y = y0 + rr() * RS;
+      if (x >= W || y >= H) continue;
+      const i = (y | 0) * W + (x | 0);
+      if (s.arch !== ARCH.BIRD && (!Wd.passLand(i) || Wd.ice[i])) continue;
+      if (Ent.spawnCreature(s, x, y, R) < 0) { slotsOut = true; break; }
+      m++;
+    }
+    return m;
+  }
+  // A species' animals over all its regions, in groups: a region is picked by how many animals it
+  // should still hold, a spot in it by habitat (candidates scored, squared so good ground wins
+  // clearly), and a whole herd, pack or flock settles around that spot inside the region square.
+  // Many thinly spread animals so become fewer, real herds in the best places nearby.
+  function placeByHabitat(s, p, wants) {
+    const Hab = AG.Habitat, Ent = AG.Ent, U = AG.U;
+    let left = 0;
+    for (const w of wants) {
+      const x0 = (w.r % RW) * RS, y0 = ((w.r / RW) | 0) * RS;
+      w.x0 = x0; w.y0 = y0; w.x1 = Math.min(W, x0 + RS); w.y1 = Math.min(H, y0 + RS);
+      const mid = Math.min(H - 1, (y0 + w.y1) >> 1) * W + Math.min(W - 1, (x0 + w.x1) >> 1);
+      if (p.migrant && Hab.migrated(mid)) w.n = Math.floor(w.n * 0.3 + rr() * 0.99); // most have flown south
+      w.den = p.hibernator && Hab.denWeather(mid) ? { den: true } : null;
+      w.cand = null;
+      left += w.n;
+    }
+    const total = left;
+    for (let guard = 0; left > 0 && guard < total * 2 + 8; guard++) {
+      let sum = 0;
+      for (const w of wants) if (w.n > 0) sum += w.n;
+      if (sum <= 0) break;
+      let t = rr() * sum, w = null;
+      for (const q of wants) { if (q.n <= 0) continue; w = q; if ((t -= q.n) < 0) break; }
+      if (!w.cand) sampleRegion(Hab, p, w);
+      if (!w.tw) { left -= w.n; w.n = 0; continue; } // nowhere here an animal of this kind could stand
+      let u = rr() * w.tw, q = 0;
+      while (q < w.cand.length - 1 && u >= w.cw[q]) { u -= w.cw[q]; q++; }
+      const c = w.cand[q], cx = (c % W) + 0.5, cy = ((c / W) | 0) + 0.5;
+      const g = Math.min(Hab.groupSize(p, rr), left), spread = (0.6 + Math.sqrt(g) * 0.55) * (p.bird ? 1.5 : 1);
+      for (let k = 0; k < g; k++) {
+        let x = cx + (rr() - 0.5) * 0.6, y = cy + (rr() - 0.5) * 0.6;
+        for (let t2 = 0; t2 < 6; t2++) {
+          const ax = AG.clamp(cx + gauss() * spread, w.x0, w.x1 - 0.01), ay = AG.clamp(cy + gauss() * spread, w.y0, w.y1 - 0.01);
+          if (Hab.score(p, (ay | 0) * W + (ax | 0), w.den) > 0) { x = ax; y = ay; break; }
+        }
+        const b = Ent.spawnCreature(s, x, y, w.R);
+        if (b < 0) { slotsOut = true; return; }
+        w.R.emb++;
+        if (w.den) { U.task[b] = AG.TK.HIBERNATE; U.st[b] = AG.ST.WORK; U.tm[b] = (1 - AG.Sky.yearFrac()) * AG.YEAR_TICKS + 30 + rr() * 200; }
+      }
+      left -= g; w.n -= g;
+      w.tw -= w.cw[q] * 0.85; w.cw[q] *= 0.15; // the next group settles somewhere else
+    }
+  }
+  function sampleRegion(Hab, p, w) {
+    const C = Math.min(64, 20 + w.n * 4), cand = [], cw = [];
+    let tw = 0;
+    for (let q = 0; q < C; q++) {
+      const x = w.x0 + ((rr() * (w.x1 - w.x0)) | 0), y = w.y0 + ((rr() * (w.y1 - w.y0)) | 0), i = y * W + x;
+      const v = Hab.score(p, i, w.den);
+      if (v <= 0) continue;
+      cand.push(i); cw.push(v * v); tw += v * v;
+    }
+    w.cand = cand; w.cw = cw; w.tw = tw;
+  }
 
   // ------------------------------------------------------------ queries for the UI
   Life.tree = function () { // phylogeny rows: depth-first from the founders

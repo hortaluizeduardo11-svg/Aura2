@@ -89,12 +89,13 @@
     DEPOSIT: 9, BUILD: 10, PATROL: 11, WORSHIP: 12, SETTLE: 13, TRADE: 14, FLEE: 15, MARCH: 16,
     HUNT: 17, GRAZE: 18, SIEGE: 19, RAID: 20, ATTACKB: 21, FISH: 22, HERD: 23, CRAFT: 24, EAT: 25,
     REST: 26, SOCIAL: 27, MIGRATE: 28, TEND: 29, MOURN: 30, EXPLORE: 31, COURT: 32, PLAY: 33,
+    DRINK: 34, HIBERNATE: 35, ROOST: 36, TREK: 37,
   };
   AG.TASKS = ['Idle', 'Wandering', 'Gathering', 'Felling trees', 'Farming', 'Quarrying', 'Heading to the mine',
     'Digging', 'Climbing out', 'Bringing food home', 'Building', 'Keeping watch', 'Worshipping', 'Settling new land',
     'Trading', 'Fleeing', 'Marching to war', 'Hunting', 'Grazing', 'Bombarding', 'Raiding', 'Breaching walls',
     'Fishing', 'Tending the herd', 'Crafting', 'Eating', 'Resting', 'Talking with friends', 'Moving camp', 'Caring for a child',
-    'Mourning', 'Exploring', 'Courting', 'Playing'];
+    'Mourning', 'Exploring', 'Courting', 'Playing', 'Drinking', 'Hibernating', 'Roosting', 'Migrating'];
   AG.FL = { BLESSED: 1, CURSED: 2, POSSESSED: 4, KING: 8, HERO: 16, SETTLER: 32, FLANKL: 64, FLANKR: 128, FLEE: 256, MAD: 512, FOLLOW: 1024, DOMESTIC: 2048 };
   AG.J = { CHILD: 0, GATHER: 1, FARM: 2, WOOD: 3, MINE: 4, BUILD: 5, SOLDIER: 6, PRIEST: 7, ELDER: 8, HUNT: 9, FISH: 10, HERD: 11, CRAFT: 12, TRADE: 13 };
   AG.JOBS = ['Child', 'Forager', 'Farmer', 'Woodcutter', 'Miner', 'Builder', 'Warrior', 'Shaman', 'Elder', 'Hunter', 'Fisher', 'Herder', 'Crafter', 'Trader'];

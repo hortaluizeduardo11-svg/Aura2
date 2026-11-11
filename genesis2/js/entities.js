@@ -146,11 +146,17 @@
     if (SPECIES[sp].kind === 'vehicle') return Ent.spawnVehicle(sp, x, y, o);
     const arch = sp === SP.GRAZER ? Life.ARCH.GRAZER : sp === SP.PREDATOR ? Life.ARCH.PREDATOR : sp === SP.BIRD ? Life.ARCH.BIRD : sp === SP.APE ? Life.ARCH.PRIMATE : -1;
     if (arch < 0) return -1;
-    const r = Life.regionOf(x, y);
+    const r = Life.regionOf(x, y), Hab = AG.Habitat, c = AG.clamp(y | 0, 0, AG.H - 1) * AG.W + AG.clamp(x | 0, 0, AG.W - 1);
+    // the species of this kind living nearest, weighed by how well it would cope here right now
+    // (a snow-country species in the snow, a desert one in the desert)
     let best = null, bd = 1e18;
     for (const s of Life.byArch(arch)) {
       if (s.sapient || s.domestic) continue;
-      for (const [q] of s.regions) { const d = AG.dist2(q % Life.RW, (q / Life.RW) | 0, r % Life.RW, (r / Life.RW) | 0); if (d < bd) { bd = d; best = s; } }
+      let d = 1e18;
+      for (const [q] of s.regions) d = Math.min(d, AG.dist2(q % Life.RW, (q / Life.RW) | 0, r % Life.RW, (r / Life.RW) | 0));
+      if (d >= 1e18) continue;
+      const cost = Math.sqrt(d) + (Hab ? (1 - Hab.comfort(Hab.profile(s), c)) * 6 : 0);
+      if (cost < bd) { bd = cost; best = s; }
     }
     if (!best) {
       const m = new Float32Array(Life.NL).fill(128); m[L.HUE] = 110;

@@ -483,7 +483,9 @@
   // the instanced model for an animal: one per species (and sex where antlers or horns differ,
   // and colour morph for domestic herds), built when the species is first seen
   const DIMORPH = new Set(['deer', 'elk', 'ibex', 'cat', 'ape']);
-  M.animal = function (i, x, y, z, k, ry, roll) {
+  // leg length of each body plan (model units), so a resting animal can lie with its legs folded
+  const LEG = { deer: 0.17, elk: 0.19, gazelle: 0.19, ibex: 0.13, bovine: 0.13, bison: 0.12, mammoth: 0.2, horse: 0.2, sheep: 0.09, wolf: 0.14, cat: 0.12, bear: 0.12, hyena: 0.15, ape: 0.12, monkey: 0.1 };
+  M.animal = function (i, x, y, z, k, ry, roll, lie) {
     const U = AG.U, Life = AG.Life, sid = U.sid[i], sp = sid >= 0 ? Life.species[sid] : null;
     if (!sp) return false;
     const m = morphOf(sp), o = i * Life.GL, albino = Life.isAlbino(U.gen, o), sex = DIMORPH.has(m.kind) ? U.sex[i] : 0;
@@ -495,7 +497,8 @@
     const size = (0.78 + (sp.mean[L.SIZE] / 255) * 0.5) * (SCALE[m.kind] || 1) * (sex && !DIMORPH.has(m.kind) ? 1 : sex ? 1.06 : 1);
     const ks = k * size;
     drawn++;
-    b.add(x, y, z, ks, ks, ks, ry, roll, f, f, f);
+    // lying down: the body sinks onto the ground and the legs fold away under it
+    b.add(x, lie ? y - (LEG[m.kind] || 0.14) * ks * 0.8 : y, z, ks, ks, ks, ry, lie ? 0 : roll, f, f, f);
     return true;
   };
 

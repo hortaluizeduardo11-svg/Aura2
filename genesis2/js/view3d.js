@@ -8,7 +8,7 @@
 'use strict';
 (function () {
   const AG = window.AG, Wd = AG.World, U = AG.U, Civ = AG.Civ, Sky = AG.Sky, R = AG.Render;
-  const { W, H, SEA, FT, SO, BT, SP, SPECIES, FL, J, NG, G } = AG;
+  const { W, H, SEA, FT, SO, BT, SP, SPECIES, FL, J, NG, G, ST, TK } = AG;
   const THREE = window.THREE;
   const V = (AG.View3D = { ok: false, active: false, tilt: 0, yaw: 0, yawTarget: null, pitchBias: 0, stats: {} });
   const ENTER = 8;          // zoom at which 3D takes over
@@ -20,7 +20,7 @@
   const FIG = 1.4; // figures are drawn a little larger than life so they read at a glance
   const MAXT = 24000, MAXU = 3000, MAXC = 5000, MAXSMOKE = 900, MAXDROP = 3600;
   let renderer, scene, camera, sun, hemi, el, cw = 1, ch = 1, gradient, toonV, glowV, skyTex, skyCtx;
-  let land, water, hot, trunks, pines, leaves, jungle, rocks, cacti, bushes, flowers;
+  let land, water, hot;
   let people, heads, hats, beasts, props, smoke, clouds, rain, snow, bolts;
   let landFine = null, landPlain = null;
   let wx0 = 0, wy0 = 0, ws = 0, roll = 0, needBuild = true, floraClock = 0, bldClock = 0, gTarget = 0, frameN = 0;
@@ -346,37 +346,8 @@
     makeSea();
     makeFarLand();
 
-    // flora: layered pines, puffy broadleaf clusters, jungle canopies, cacti with arms
-    const pineGeo = merge([
-      { geo: GEO.cone6, c: [255, 255, 255], x: 0, y: 0.0, z: 0, sx: 0.95, sy: 0.55, sz: 0.95 },
-      { geo: GEO.cone6, c: [236, 236, 236], x: 0, y: 0.3, z: 0, sx: 0.75, sy: 0.5, sz: 0.75 },
-      { geo: GEO.cone6, c: [222, 222, 222], x: 0, y: 0.58, z: 0, sx: 0.52, sy: 0.48, sz: 0.52 },
-    ]);
-    const leafGeo = merge([
-      { geo: GEO.ico, c: [255, 255, 255], x: 0, y: 0.05, z: 0, sx: 0.92, sy: 0.84, sz: 0.92 },
-      { geo: GEO.ico, c: [214, 214, 214], x: 0.24, y: -0.12, z: 0.1, sx: 0.58, sy: 0.54, sz: 0.58 },
-      { geo: GEO.ico, c: [226, 226, 226], x: -0.22, y: -0.08, z: -0.14, sx: 0.6, sy: 0.55, sz: 0.6 },
-    ]);
-    const jungleGeo = merge([
-      { geo: GEO.ico, c: [255, 255, 255], x: 0, y: 0, z: 0, sx: 1.25, sy: 0.6, sz: 1.25 },
-      { geo: GEO.ico, c: [220, 220, 220], x: 0.3, y: -0.12, z: -0.2, sx: 0.7, sy: 0.4, sz: 0.7 },
-      { geo: GEO.ico, c: [235, 235, 235], x: -0.28, y: -0.1, z: 0.24, sx: 0.7, sy: 0.4, sz: 0.7 },
-    ]);
-    const cactusGeo = merge([
-      { geo: GEO.box, c: [255, 255, 255], x: 0, y: 0, z: 0, sx: 0.2, sy: 0.8, sz: 0.2 },
-      { geo: GEO.box, c: [230, 230, 230], x: 0.16, y: 0.3, z: 0, sx: 0.14, sy: 0.08, sz: 0.12 },
-      { geo: GEO.box, c: [230, 230, 230], x: 0.2, y: 0.3, z: 0, sx: 0.1, sy: 0.32, sz: 0.1 },
-      { geo: GEO.box, c: [220, 220, 220], x: -0.15, y: 0.42, z: 0, sx: 0.12, sy: 0.07, sz: 0.11 },
-      { geo: GEO.box, c: [220, 220, 220], x: -0.18, y: 0.42, z: 0, sx: 0.09, sy: 0.24, sz: 0.09 },
-    ]);
-    trunks = inst(GEO.box, toon({}), MAXT, true, false);
-    pines = inst(pineGeo, toon({ vertexColors: true }), MAXT, true, true);
-    leaves = inst(leafGeo, toon({ vertexColors: true }), MAXT, true, true);
-    jungle = inst(jungleGeo, toon({ vertexColors: true }), 8000, true, true);
-    rocks = inst(GEO.mound, toon({}), MAXT, true, true);
-    cacti = inst(cactusGeo, toon({ vertexColors: true }), 4000, true, false);
-    bushes = inst(GEO.ico, toon({}), 12000, true, true);
-    flowers = inst(GEO.cbox, new THREE.MeshLambertMaterial(), 8000, false, false);
+    // flora: twenty instanced plant and rock shapes (see makeFlora)
+    makeFlora(inst, toon);
 
     // figures: a jointed humanoid, a quadruped, heads, hats and a generic prop box
     const humanGeo = merge([
@@ -555,9 +526,7 @@
     return Wd.fl[i] > 0.004 && Wd.elev[i] < SEA ? 0 : colTop(i);
   };
 
-  // ------------------------------------------------------------ flora
-  const LEAF = [[106, 172, 76], [74, 146, 64], [222, 128, 54]]; // spring, summer, autumn (a little less neon)
-  const PETALS = [[244, 92, 116], [252, 224, 92], [184, 124, 244], [252, 252, 252], [255, 152, 64]];
+  // ------------------------------------------------------------ placing instances
   const dummy = THREE ? new THREE.Object3D() : null, tint = THREE ? new THREE.Color() : null;
   function place(mesh, n, x, y, z, sx, sy, sz, ry, rgb, vary, roll) {
     dummy.position.set(x, y, z); dummy.rotation.set(0, ry, roll || 0); dummy.scale.set(sx, sy, sz); dummy.updateMatrix();
@@ -566,53 +535,428 @@
     tint.setRGB(Math.min(1, (rgb[0] / 255) * k), Math.min(1, (rgb[1] / 255) * k), Math.min(1, (rgb[2] / 255) * k));
     mesh.setColorAt(n, tint);
   }
-  function buildFlora() {
-    let nt = 0, np = 0, nl = 0, nj = 0, nr = 0, nc = 0, nb = 0, nf = 0;
-    const season = Sky.season(), leafC = LEAF[season === 0 ? 0 : season === 2 ? 2 : 1];
-    for (let ly = 0; ly < ws; ly++) for (let lx = 0; lx < ws; lx++) {
-      const x = wx0 + lx, y = wy0 + ly, i = y * W + x;
-      if (Wd.bgrid[i] || Wd.fire[i] || Wd.fl[i] > 0.004) continue;
-      const h = hash(x, y), v = Wd.veg[i], s = Wd.soil[i], T = Wd.tbase[i], snowy = Wd.snow[i] > 120;
-      let kind = 0; // 1 pine, 2 broadleaf, 3 jungle, 4 dead, 5 rock, 6 cactus, 7 bush, 8 flower
-      const tree = () => (snowy || T < 0.3 ? 1 : T > 0.68 ? 3 : season === 3 && T < 0.48 ? 4 : 2);
-      if (s === SO.DIRT || s === SO.HOLY) {
-        if (v >= 165) { if ((h & 3) !== 0) kind = tree(); else if ((h & 12) === 0) kind = 7; }
-        else if (v >= 110) { if (h % 9 === 0) kind = tree(); else if (h % 4 === 0) kind = 7; }
-        else if (v >= 60 && season <= 1 && h % 11 === 0) kind = 8;
-        if (s === SO.HOLY && !kind && h % 4 === 0) kind = 8;
-      } else if (s === SO.ROCK) { if (h % 13 === 0) kind = 5; else if (v > 60 && h % 9 === 0) kind = 1; }
-      else if (s === SO.SAND) { if (T > 0.55 && Wd.elev[i] > SEA + 0.02 && h % 29 === 0) kind = 6; else if (Wd.veg[i] > 20 && h % 17 === 0) kind = 7; }
-      else if (s === SO.ASH) { if (h % 11 === 0) kind = 4; }
-      else if (s === SO.BASALT) { if (h % 15 === 0) kind = 5; }
-      if (!kind || nt >= MAXT - 2) continue;
-      const px = x + 0.5 + (((h >>> 4) % 5) - 2) * 0.09, pz = y + 0.5 + (((h >>> 7) % 5) - 2) * 0.09, base = top[ly * ws + lx];
-      const sc = 0.8 + ((h >>> 10) % 8) * 0.06, ry = ((h >>> 13) % 16) * 0.39, vary = (((h >>> 17) % 7) - 3) * 0.035;
-      switch (kind) {
-        case 1: {
-          const white = snowy || (season === 3 && T < 0.4);
-          place(trunks, nt++, px, base, pz, 0.12, 0.35 * sc, 0.12, ry, [104, 72, 46], 0);
-          place(pines, np++, px, base + 0.22 * sc, pz, sc, 1.15 * sc, sc, ry, white ? [222, 234, 244] : [56, 124, 88], vary);
-          break;
-        }
-        case 2: case 3: {
-          place(trunks, nt++, px, base, pz, 0.12, (kind === 3 ? 0.75 : 0.5) * sc, 0.12, ry, [118, 84, 54], 0);
-          if (kind === 3 && nj < 7999) place(jungle, nj++, px, base + 0.85 * sc, pz, sc, sc, sc, ry, [34, 136, 66], vary);
-          else if (kind === 2) place(leaves, nl++, px, base + 0.5 * sc + 0.36 * sc, pz, sc, sc, sc, ry, leafC, vary);
-          break;
-        }
-        case 4:
-          place(trunks, nt++, px, base, pz, 0.1, 0.85 * sc, 0.1, ry, [96, 76, 58], 0);
-          place(trunks, nt++, px + 0.08, base + 0.5 * sc, pz, 0.06, 0.32 * sc, 0.06, ry, [96, 76, 58], 0, 0.7);
-          break;
-        case 5: place(rocks, nr++, px, base + 0.06, pz, sc * 0.75, sc * 0.48, sc * 0.65, ry, s === SO.BASALT ? [62, 58, 66] : snowy ? [226, 232, 240] : [150, 144, 138], vary); break;
-        case 6: if (nc < 3999) place(cacti, nc++, px, base, pz, sc, sc, sc, ry, [86, 168, 90], vary); break;
-        case 7: if (nb < 11999) place(bushes, nb++, px, base + 0.12, pz, 0.42 * sc, 0.32 * sc, 0.42 * sc, ry, s === SO.SAND ? [176, 160, 92] : leafC.map((c) => c * 0.85), vary); break;
-        case 8: if (nf < 7999) place(flowers, nf++, px, base + 0.06, pz, 0.09, 0.09, 0.09, ry, s === SO.HOLY ? [255, 236, 140] : PETALS[(h >>> 8) % PETALS.length], 0); break;
+
+  // ------------------------------------------------------------ flora
+  // Every land cell gets a biome from its climate (temperature, moisture), height, slope, soil,
+  // snow and nearby water, and the biome its plants: spruce and pine in the taiga, oak crowns and
+  // birches in temperate woods (gold and red in autumn, bare in winter), cypress and olive in dry
+  // country, acacias over savanna grass, cacti in the desert, layered rainforest with palms and
+  // ferns, reeds and willows at the water, heather on the tundra, and crags, scree and snow caps
+  // on the mountains with the trees thinning toward a treeline. Forests hold several trees a cell
+  // at their own jittered spots (a stable hash, so nothing jumps when the scene is rebuilt), with
+  // an understorey and ground cover. The total is held to a budget per detail level: the cells are
+  // planned first, then thinned evenly so the count fits.
+  const PL = {};
+  const PLANT_CAPS = { trunks: 26000, conifers: 20000, snowcon: 10000, crowns: 14000, birches: 6000, cypress: 4000, acacias: 3000, palms: 4000, jungle: 9000, willows: 2500, bare: 8000, bushes: 14000, grass: 36000, reeds: 8000, ferns: 12000, rocks: 12000, crags: 6000, snowcaps: 8000, tips: 6000, flowers: 9000, cacti: 4000 };
+  const BUDGET = [56000, 40000, 26000, 14000]; // plants in the window at each detail level (0 best)
+  function makeFlora(inst, toon) {
+    const lowEnd = !!AG.LOW_END;
+    const g6 = (rt, rb, seg, open) => { const g = new THREE.CylinderGeometry(rt, rb, 1, seg, 1, !!open); g.translate(0, 0.5, 0); return g.toNonIndexed(); };
+    // light pieces: plants come by the ten thousand, so every part is as few triangles as will do
+    const blade = g6(0, 0.5, 3, true), cone6 = GEO.cone6, ico = GEO.ico, oct = new THREE.OctahedronGeometry(0.5, 0);
+    const stem = g6(0.5, 0.5, 5, true), twig = g6(0.5, 0.5, 4, true), drum = g6(0.5, 0.5, 6, false);
+    const W_ = [255, 255, 255];
+    const grey = (v) => [v, v, v];
+    // conifer: five tiers, the lower ones a touch darker
+    const tiers = (snow) => {
+      const parts = [];
+      for (let k = 0; k < 5; k++) {
+        const r = 0.95 - k * 0.17, y = 0.12 + k * 0.17, h = 0.42 - k * 0.04;
+        parts.push({ geo: cone6, c: snow ? [52 + k * 3, 96 + k * 4, 72 + k * 3] : grey(205 + k * 12), x: 0, y, z: 0, sx: r, sy: h, sz: r, ry: k * 0.5 });
+        if (snow) parts.push({ geo: cone6, c: [236, 242, 250], x: 0, y: y + h * 0.42, z: 0, sx: r * 0.62, sy: h * 0.58, sz: r * 0.62, ry: k * 0.5 + 0.26 });
+      }
+      parts.push({ geo: stem, c: snow ? [96, 70, 50] : grey(150), x: 0, y: 0, z: 0, sx: 0.12, sy: 0.16, sz: 0.12 });
+      return merge(parts);
+    };
+    const crownGeo = merge([
+      { geo: ico, c: W_, x: 0, y: 0.42, z: 0, sx: 0.86, sy: 0.74, sz: 0.86 },
+      { geo: ico, c: grey(222), x: 0.3, y: 0.28, z: 0.12, sx: 0.56, sy: 0.5, sz: 0.56 },
+      { geo: ico, c: grey(214), x: -0.28, y: 0.3, z: -0.16, sx: 0.58, sy: 0.5, sz: 0.58 },
+      { geo: ico, c: grey(232), x: -0.06, y: 0.26, z: 0.32, sx: 0.52, sy: 0.46, sz: 0.52 },
+      { geo: oct, c: grey(240), x: 0.08, y: 0.72, z: -0.06, sx: 0.5, sy: 0.4, sz: 0.5 },
+    ]);
+    const birchGeo = merge([
+      { geo: ico, c: W_, x: 0, y: 0.45, z: 0, sx: 0.5, sy: 0.8, sz: 0.5 },
+      { geo: ico, c: grey(226), x: 0.1, y: 0.15, z: 0.06, sx: 0.42, sy: 0.45, sz: 0.42 },
+      { geo: oct, c: grey(238), x: -0.04, y: 0.86, z: 0, sx: 0.32, sy: 0.4, sz: 0.32 },
+    ]);
+    const cypressGeo = merge([
+      { geo: ico, c: W_, x: 0, y: 0.5, z: 0, sx: 0.36, sy: 1.15, sz: 0.36 },
+      { geo: GEO.cone, c: grey(236), x: 0, y: 0.95, z: 0, sx: 0.24, sy: 0.4, sz: 0.24 },
+      { geo: stem, c: [96, 72, 52], x: 0, y: 0, z: 0, sx: 0.07, sy: 0.12, sz: 0.07 },
+    ]);
+    const acaciaGeo = merge([ // a forked trunk under a flat, wind-pruned crown
+      { geo: stem, c: [112, 86, 62], x: 0, y: 0, z: 0, sx: 0.07, sy: 0.5, sz: 0.07 },
+      { geo: twig, c: [112, 86, 62], x: 0.08, y: 0.42, z: 0, sx: 0.05, sy: 0.42, sz: 0.05, rz: -0.55 },
+      { geo: twig, c: [104, 80, 58], x: -0.08, y: 0.44, z: 0.02, sx: 0.05, sy: 0.38, sz: 0.05, rz: 0.6 },
+      { geo: ico, c: [118, 146, 66], x: 0.2, y: 0.82, z: 0, sx: 0.9, sy: 0.2, sz: 0.75 },
+      { geo: ico, c: [106, 136, 60], x: -0.22, y: 0.8, z: 0.06, sx: 0.7, sy: 0.18, sz: 0.62 },
+      { geo: ico, c: [128, 154, 72], x: 0, y: 0.9, z: -0.1, sx: 0.6, sy: 0.15, sz: 0.55 },
+    ]);
+    const palmParts = [];
+    for (let k = 0; k < 4; k++) palmParts.push({ geo: stem, c: k % 2 ? [150, 122, 84] : [136, 108, 74], x: k * k * 0.018, y: k * 0.26, z: 0, sx: 0.085 - k * 0.008, sy: 0.28, sz: 0.085 - k * 0.008, rz: -k * 0.08 });
+    for (let k = 0; k < 7; k++) {
+      const a = (k / 7) * Math.PI * 2, cx = Math.cos(a), sz = Math.sin(a);
+      // a frond: a long flat blade reaching out and drooping (laid along +x, then turned)
+      palmParts.push({ geo: blade, c: k % 2 ? [62, 146, 70] : [76, 160, 74], x: 0.16 + cx * 0.04, y: 1.08, z: sz * 0.04, sx: 0.2, sy: 0.62, sz: 0.04, ry: -a, rz: -1.95 });
+    }
+    palmParts.push({ geo: ico, c: [96, 70, 44], x: 0.16, y: 1.0, z: 0, sx: 0.14, sy: 0.12, sz: 0.14 });
+    const palmGeo = merge(palmParts);
+    const jungleGeo = merge([
+      { geo: ico, c: W_, x: 0, y: 0.1, z: 0, sx: 1.25, sy: 0.6, sz: 1.25 },
+      { geo: ico, c: grey(216), x: 0.36, y: -0.06, z: -0.22, sx: 0.72, sy: 0.42, sz: 0.72 },
+      { geo: ico, c: grey(230), x: -0.32, y: -0.04, z: 0.26, sx: 0.74, sy: 0.42, sz: 0.74 },
+      { geo: oct, c: grey(244), x: 0.05, y: 0.36, z: 0.05, sx: 0.7, sy: 0.36, sz: 0.7 },
+    ]);
+    const willowParts = [{ geo: ico, c: W_, x: 0, y: 0.62, z: 0, sx: 0.95, sy: 0.6, sz: 0.95 }];
+    for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2; willowParts.push({ geo: blade, c: grey(214 + (k % 3) * 12), x: Math.cos(a) * 0.42, y: 0.72, z: Math.sin(a) * 0.42, sx: 0.2, sy: 0.6, sz: 0.06, ry: -a, rz: Math.PI }); } // hanging strands
+    const willowGeo = merge(willowParts);
+    const bareGeo = merge([ // a deciduous tree in winter: trunk and a fan of bare branches
+      { geo: stem, c: W_, x: 0, y: 0, z: 0, sx: 0.09, sy: 0.7, sz: 0.09 },
+      { geo: twig, c: grey(236), x: 0.1, y: 0.5, z: 0, sx: 0.045, sy: 0.42, sz: 0.045, rz: -0.6 },
+      { geo: twig, c: grey(236), x: -0.09, y: 0.55, z: 0.03, sx: 0.04, sy: 0.4, sz: 0.04, rz: 0.55 },
+      { geo: twig, c: grey(226), x: 0, y: 0.6, z: 0.09, sx: 0.035, sy: 0.36, sz: 0.035, rx: 0.6 },
+      { geo: twig, c: grey(226), x: 0.02, y: 0.62, z: -0.08, sx: 0.035, sy: 0.32, sz: 0.035, rx: -0.55 },
+    ]);
+    const bushGeo = merge([
+      { geo: ico, c: W_, x: 0, y: 0.32, z: 0, sx: 0.8, sy: 0.6, sz: 0.8 },
+      { geo: oct, c: grey(222), x: 0.32, y: 0.22, z: 0.1, sx: 0.5, sy: 0.42, sz: 0.5 },
+      { geo: oct, c: grey(232), x: -0.28, y: 0.22, z: -0.14, sx: 0.5, sy: 0.4, sz: 0.5 },
+    ]);
+    const grassParts = [];
+    for (let k = 0; k < 6; k++) { const a = k * 1.05, r = 0.08 + (k % 3) * 0.05; grassParts.push({ geo: blade, c: grey(200 + (k % 3) * 25), x: Math.cos(a) * r, y: 0, z: Math.sin(a) * r, sx: 0.07, sy: 0.55 + (k % 3) * 0.2, sz: 0.04, ry: a, rx: Math.sin(a) * 0.35, rz: -Math.cos(a) * 0.35 }); }
+    const grassGeo = merge(grassParts);
+    const reedParts = [];
+    for (let k = 0; k < 7; k++) { const a = k * 0.9, r = 0.05 + (k % 3) * 0.06; reedParts.push({ geo: blade, c: k % 2 ? [104, 146, 66] : [122, 160, 78], x: Math.cos(a) * r, y: 0, z: Math.sin(a) * r, sx: 0.05, sy: 0.9 + (k % 3) * 0.18, sz: 0.035, ry: a, rx: Math.sin(a) * 0.12, rz: -Math.cos(a) * 0.12 }); }
+    for (const [x, z, h] of [[0.04, 0.02, 0.86], [-0.06, -0.05, 0.98]]) { reedParts.push({ geo: twig, c: [104, 70, 44], x, y: h, z, sx: 0.045, sy: 0.16, sz: 0.045 }); }
+    const reedGeo = merge(reedParts);
+    const fernParts = [];
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; fernParts.push({ geo: blade, c: grey(206 + (k % 2) * 40), x: 0, y: 0, z: 0, sx: 0.22, sy: 0.55, sz: 0.05, ry: -a, rz: -1.1 }); } // fronds arching out
+    const fernGeo = merge(fernParts);
+    const pyramid = g6(0, 0.5, 4, true);
+    const cragGeo = merge([ // a cluster of broken rock spires
+      { geo: pyramid, c: W_, x: 0, y: 0, z: 0, sx: 0.82, sy: 1.2, sz: 0.82 },
+      { geo: pyramid, c: grey(218), x: 0.3, y: 0, z: 0.18, sx: 0.6, sy: 0.72, sz: 0.6, ry: 0.7 },
+      { geo: oct, c: grey(232), x: -0.28, y: 0.16, z: -0.16, sx: 0.62, sy: 0.55, sz: 0.62, ry: 0.4 },
+    ]);
+    const cactusGeo = merge([
+      { geo: drum, c: W_, x: 0, y: 0, z: 0, sx: 0.2, sy: 0.8, sz: 0.2 },
+      { geo: GEO.box, c: grey(230), x: 0.16, y: 0.3, z: 0, sx: 0.14, sy: 0.08, sz: 0.12 },
+      { geo: drum, c: grey(230), x: 0.21, y: 0.3, z: 0, sx: 0.1, sy: 0.32, sz: 0.1 },
+      { geo: GEO.box, c: grey(220), x: -0.15, y: 0.42, z: 0, sx: 0.12, sy: 0.07, sz: 0.11 },
+      { geo: drum, c: grey(220), x: -0.19, y: 0.42, z: 0, sx: 0.09, sy: 0.24, sz: 0.09 },
+    ]);
+    const k = (n) => (lowEnd ? Math.ceil(n / 2) : n);
+    const solid = toon({}), coloured = toon({ vertexColors: true });
+    const C = PLANT_CAPS;
+    PL.trunks = inst(g6(0.3, 0.5, 6, true), solid, k(C.trunks), true, false);
+    PL.conifers = inst(tiers(false), coloured, k(C.conifers), true, true);
+    PL.snowcon = inst(tiers(true), coloured, k(C.snowcon), true, true);
+    PL.crowns = inst(crownGeo, coloured, k(C.crowns), true, true);
+    PL.birches = inst(birchGeo, coloured, k(C.birches), true, true);
+    PL.cypress = inst(cypressGeo, coloured, k(C.cypress), true, true);
+    PL.acacias = inst(acaciaGeo, coloured, k(C.acacias), true, true);
+    PL.palms = inst(palmGeo, coloured, k(C.palms), true, false);
+    PL.jungle = inst(jungleGeo, coloured, k(C.jungle), true, true);
+    PL.willows = inst(willowGeo, coloured, k(C.willows), true, true);
+    PL.bare = inst(bareGeo, coloured, k(C.bare), true, false);
+    PL.bushes = inst(bushGeo, coloured, k(C.bushes), true, true);
+    PL.grass = inst(grassGeo, coloured, k(C.grass), false, false);
+    PL.reeds = inst(reedGeo, coloured, k(C.reeds), false, false);
+    PL.ferns = inst(fernGeo, coloured, k(C.ferns), false, true);
+    PL.rocks = inst(GEO.mound, solid, k(C.rocks), true, true);
+    PL.crags = inst(cragGeo, coloured, k(C.crags), true, true);
+    PL.snowcaps = inst(oct, solid, k(C.snowcaps), false, true);
+    PL.tips = inst(pyramid, solid, k(C.tips), false, true); // snow on the crag tops
+    PL.flowers = inst(oct, new THREE.MeshLambertMaterial(), k(C.flowers), false, false);
+    PL.cacti = inst(cactusGeo, coloured, k(C.cacti), true, false);
+    for (const name in PL) PL[name].userData.cap = k(C[name]);
+  }
+
+  // colours (instance tints; the vertex colours above give each shape its own shading)
+  const BROAD = [[124, 182, 86], [72, 142, 64], null, null]; // spring, summer (autumn picks per tree; winter is bare)
+  const AUTUMN = [[212, 118, 48], [232, 176, 64], [186, 72, 42], [168, 148, 58], [204, 92, 44]];
+  const BIRCH = [[150, 196, 98], [120, 176, 84], [238, 198, 76]];
+  const GRASS = [[118, 176, 76], [104, 158, 66], [168, 150, 82], [150, 136, 96]];
+  const PETALS = [[244, 92, 116], [252, 224, 92], [184, 124, 244], [252, 252, 252], [255, 152, 64]];
+  const BIOME = { NONE: 0, ICE: 1, TUNDRA: 2, BOREAL: 3, TEMPERATE: 4, DRY: 5, SAVANNA: 6, DESERT: 7, RAIN: 8, MOUNTAIN: 9, DEAD: 10, BASALT: 11, HOLY: 12, BEACH: 13 };
+  // a cell's own little random stream (stable from build to build)
+  let hs = 1;
+  const hr = () => { hs = (Math.imul(hs, 1103515245) + 12345) | 0; return ((hs >>> 8) & 0xffff) / 65536; };
+  const isWater = (i) => Wd.fl[i] > 0.004 && Wd.ft[i] === FT.WATER && !Wd.frozen[i];
+  function slopeAt(i, x, y) {
+    const e = Wd.elev, a = x > 0 ? e[i - 1] : e[i], b = x < W - 1 ? e[i + 1] : e[i], c = y > 0 ? e[i - W] : e[i], d = y < H - 1 ? e[i + W] : e[i];
+    return Math.min(1, (Math.abs(b - a) + Math.abs(d - c)) / 0.06);
+  }
+  function biomeOf(i, x, y) {
+    const s = Wd.soil[i], T = Wd.Tc(i), m = Wd.moist[i], e = Wd.elev[i];
+    if (Wd.ice[i] || (Wd.snow[i] > 200 && T < 0.2)) return BIOME.ICE;
+    if (s === SO.ROAD || s === SO.FARM) return BIOME.NONE;
+    if (s === SO.BASALT) return BIOME.BASALT;
+    if (s === SO.ASH || s === SO.BLIGHT) return BIOME.DEAD;
+    if (s === SO.HOLY) return BIOME.HOLY;
+    if (s === SO.ROCK || e >= AG.MOUNTAIN) return BIOME.MOUNTAIN;
+    if (s === SO.SAND) return T > 0.55 && m < 0.45 ? BIOME.DESERT : BIOME.BEACH;
+    if (T < 0.24) return BIOME.TUNDRA;
+    if (T < 0.4) return BIOME.BOREAL;
+    if (T > 0.64 && m > 0.52) return BIOME.RAIN;
+    if (T > 0.6 && m < 0.22) return BIOME.DESERT;
+    if (T > 0.6 && m < 0.5) return BIOME.SAVANNA;
+    if (T > 0.52 && m < 0.38) return BIOME.DRY;
+    return BIOME.TEMPERATE;
+  }
+  // How many plants a cell holds at full density (the planning pass); the same rules emit them.
+  const plan = new Uint8Array(MAXS * MAXS), planN = new Float32Array(MAXS * MAXS);
+  const floraK = { k: 1 };
+  function cellPlan(b, v) {
+    switch (b) {
+      case BIOME.ICE: return 0.1;
+      case BIOME.TUNDRA: return v >= 60 ? 3.2 : v >= 20 ? 1.4 : 0.3;
+      case BIOME.BOREAL: return v >= 150 ? 5.3 : v >= 100 ? 3.6 : v >= 30 ? 2.3 : 0.3;
+      case BIOME.TEMPERATE: return v >= 150 ? 5.5 : v >= 100 ? 4 : v >= 30 ? 3.6 : 0.4;
+      case BIOME.DRY: return v >= 100 ? 4 : v >= 30 ? 2.5 : 0.5;
+      case BIOME.SAVANNA: return v >= 110 ? 4.4 : v >= 40 ? 3.3 : 1.2;
+      case BIOME.DESERT: return 0.5;
+      case BIOME.RAIN: return v >= 150 ? 7.7 : v >= 100 ? 4.5 : v >= 30 ? 3.4 : 0.4;
+      case BIOME.MOUNTAIN: return 1.6 + (v >= 60 ? 1.4 : 0);
+      case BIOME.DEAD: return 0.45;
+      case BIOME.BASALT: return 0.2;
+      case BIOME.HOLY: return 4.2;
+      case BIOME.BEACH: return 1;
+    }
+    return 0;
+  }
+  // Instances are written straight into the buffers: position, a turn about the vertical, an
+  // optional lean, and scale (cheaper than an Object3D per plant when there are tens of thousands).
+  const cnt = {};
+  function put(name, x, y, z, s, sy, ry, lean, r, g, b) {
+    const m = PL[name], n = cnt[name];
+    if (n >= m.userData.cap) return;
+    cnt[name] = n + 1;
+    const a = m.instanceMatrix.array, o = n * 16, c = Math.cos(ry), sn = Math.sin(ry);
+    if (!lean) {
+      a[o] = c * s; a[o + 1] = 0; a[o + 2] = -sn * s; a[o + 3] = 0;
+      a[o + 4] = 0; a[o + 5] = sy; a[o + 6] = 0; a[o + 7] = 0;
+      a[o + 8] = sn * s; a[o + 9] = 0; a[o + 10] = c * s; a[o + 11] = 0;
+    } else { // rotation Ry * Rz(lean)
+      const ca = Math.cos(lean), sa = Math.sin(lean);
+      a[o] = c * ca * s; a[o + 1] = sa * s; a[o + 2] = -sn * ca * s; a[o + 3] = 0;
+      a[o + 4] = -c * sa * sy; a[o + 5] = ca * sy; a[o + 6] = sn * sa * sy; a[o + 7] = 0;
+      a[o + 8] = sn * s; a[o + 9] = 0; a[o + 10] = c * s; a[o + 11] = 0;
+    }
+    a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
+    const col = m.instanceColor.array, q = n * 3;
+    col[q] = r > 255 ? 1 : r / 255; col[q + 1] = g > 255 ? 1 : g / 255; col[q + 2] = b > 255 ? 1 : b / 255;
+  }
+  // A rebuild runs in two passes over the window's rows (plan, then emit). When the scene is
+  // rebuilt it runs at once; the periodic refresh (growth, logging, fire, the season) is spread
+  // over a dozen frames instead. The new instances are written into the buffers as it goes, but
+  // the GPU keeps drawing the old set until the last row is done and the buffers are flagged.
+  let fj = null;
+  function floraBegin() {
+    for (const name in PL) cnt[name] = 0;
+    fj = { phase: 0, row: 0, total: 0, K: 1, season: Sky.season(), ms: 0 };
+  }
+  function floraRows(rows) {
+    const t0 = performance.now(), j = fj, r1 = Math.min(ws, j.row + rows);
+    if (j.phase === 0) { // plan: biome and full-density count per cell
+      for (let ly = j.row; ly < r1; ly++) for (let lx = 0; lx < ws; lx++) {
+        const n0 = ly * ws + lx, x = wx0 + lx, y = wy0 + ly, i = y * W + x;
+        if (Wd.bgrid[i] || Wd.fire[i] || Wd.fl[i] > 0.004) { plan[n0] = 0; planN[n0] = 0; continue; }
+        const b = biomeOf(i, x, y), n = cellPlan(b, Wd.veg[i]);
+        plan[n0] = b; planN[n0] = n; j.total += n;
+      }
+      j.row = r1;
+      if (j.row >= ws) { // one thinning factor for the budget
+        const Q = V.quality ? V.quality.level : 0;
+        const want = Math.min(1.25, BUDGET[Q] / Math.max(1, j.total)), kq = Math.max(0.12, Math.round(want * 16) / 16);
+        if (Math.abs(kq - floraK.k) / floraK.k > 0.1 || floraK.q !== Q) { floraK.k = kq; floraK.q = Q; } // (small swings would make plants pop)
+        j.K = Math.min(1, floraK.k); lush = floraK.k > 1 ? Math.min(1.12, floraK.k) : 1; // zoomed in: everything, a little lusher
+        j.phase = 1; j.row = 0;
+      }
+    } else {
+      for (let ly = j.row; ly < r1; ly++) for (let lx = 0; lx < ws; lx++) {
+        const n0 = ly * ws + lx, b = plan[n0];
+        if (!b) continue;
+        const x = wx0 + lx, y = wy0 + ly;
+        hs = hash(x, y) | 1;
+        emitCell(b, y * W + x, x, y, top[n0], j.K, j.season);
+      }
+      j.row = r1;
+      if (j.row >= ws) {
+        for (const name in PL) { PL[name].count = cnt[name]; flag(PL[name]); }
+        let n = 0; for (const name in cnt) n += cnt[name];
+        V.stats.plants = n; V.stats.floraMs = j.ms + performance.now() - t0;
+        fj = null; floraClock = 0;
+        return true;
       }
     }
-    trunks.count = nt; pines.count = np; leaves.count = nl; jungle.count = nj; rocks.count = nr; cacti.count = nc; bushes.count = nb; flowers.count = nf;
-    for (const m of [trunks, pines, leaves, jungle, rocks, cacti, bushes, flowers]) flag(m);
-    floraClock = 0;
+    j.ms += performance.now() - t0;
+    return false;
+  }
+  function buildFlora() { floraBegin(); while (!floraRows(MAXS)); }
+  function floraTick(dt) {
+    if (!fj && (floraClock += dt) > 6) floraBegin();
+    if (fj) floraRows(Math.max(8, Math.ceil(ws / 6)));
+  }
+
+  // ---- one cell's plants (the cell's state lives here while it is emitted: no allocation per plant)
+  let cTree = 1, cX = 0, cY = 0, cBase = 0, cK = 1, cSeason = 0, cWinter = false, cSnowy = false, cT = 0, cSn = 0, cCapped = false, PX = 0, PZ = 0, lush = 1;
+  let cGrass = GRASS[0], cRock = null;
+  const ROCK = [146, 140, 134], BASALT_C = [62, 58, 66], SANDSTONE = [196, 160, 112], DRYGRASS = [192, 172, 98], TUNDRAGRASS = [146, 140, 98];
+  const SPRUCE = [46, 98, 74], PINE = [62, 118, 78], OLIVE = [128, 148, 104], WILLOW = [[150, 190, 92], [110, 160, 80], [196, 180, 80]];
+  const BARK = [112, 82, 56], BIRCHBARK = [228, 224, 216], BARE = [104, 86, 70], BAREBIRCH = [222, 218, 210];
+  const FERN = [76, 140, 66], FERN_AUT = [170, 124, 62], FERN_WIN = [118, 108, 70], HOLYGOLD = [255, 236, 140];
+  const HEATH = [148, 92, 104], HEATH2 = [128, 104, 74], SCRUB = [150, 140, 88], BLIGHT = [124, 104, 128];
+  const B_BOREAL = [70, 116, 66], B_BOREAL2 = [80, 124, 70], B_MEADOW = [86, 130, 72], B_WOOD = [70, 126, 62], B_WOOD2 = [80, 136, 66], B_FIELD = [86, 140, 70];
+  const B_SAV = [138, 132, 70], B_SAV2 = [150, 140, 80], B_SAV3 = [160, 146, 90], B_DES = [168, 150, 96], B_RAIN = [44, 120, 56], B_RAIN2 = [60, 130, 62];
+  const spot = () => { PX = cX + 0.08 + hr() * 0.84; PZ = cY + 0.08 + hr() * 0.84; };
+  const vary = () => 0.88 + hr() * 0.24;
+  const many = (n) => { const f = n * cK; return Math.floor(f) + (hr() < f % 1 ? 1 : 0); };
+  const trees = (n) => many(n * cTree); // trees give way around houses: a clearing by the buildings, thinner woods on village land
+  function conifer(n, small) {
+    for (let k = trees(n); k > 0; k--) {
+      spot();
+      const s = ((small ? 0.42 : 0.62) + hr() * 0.34) * lush, tall = 1.15 + hr() * 0.55, ry = hr() * 6.28, slim = hr() < 0.5 ? 0.78 : 1;
+      if (cSnowy) { const w = 228 + hr() * 27; put('snowcon', PX, cBase, PZ, s * slim, s * tall, ry, 0, w, w, w); }
+      else { const c = hr() < 0.5 ? SPRUCE : PINE, v = vary(); put('conifers', PX, cBase, PZ, s * slim, s * tall, ry, 0, c[0] * v, c[1] * v, c[2] * v); }
+    }
+  }
+  function broadleaf(n, kind) { // kind: 0 oak-like, 1 birch, 2 willow, 3 olive
+    for (let k = trees(n); k > 0; k--) {
+      spot();
+      const s = (0.5 + hr() * 0.32) * lush, ry = hr() * 6.28, v = vary();
+      if (cWinter && cT < 0.55 && kind !== 3) { // bare branches
+        const c = kind === 1 ? BAREBIRCH : BARE;
+        put('bare', PX, cBase, PZ, s * 1.1, s * 1.5, ry, 0, c[0] * v, c[1] * v, c[2] * v);
+        continue;
+      }
+      const th = kind === 1 ? 0.62 : kind === 3 ? 0.3 : 0.42, tb = kind === 1 ? BIRCHBARK : BARK;
+      put('trunks', PX, cBase, PZ, 0.18 * s, th * s * 1.6, ry, 0, tb[0], tb[1], tb[2]);
+      let c;
+      if (kind === 1) c = BIRCH[cSeason === 2 ? 2 : cSeason === 0 ? 0 : 1];
+      else if (kind === 3) c = OLIVE;
+      else if (kind === 2) c = WILLOW[cSeason === 0 ? 0 : cSeason === 2 ? 2 : 1];
+      else if (cSeason === 2) c = AUTUMN[(hr() * AUTUMN.length) | 0];
+      else c = BROAD[cSeason] || BROAD[1];
+      const y0 = cBase + th * s * 1.6 * 0.82;
+      if (kind === 1) put('birches', PX, y0, PZ, s * 1.05, s * 1.25, ry, 0, c[0] * v, c[1] * v, c[2] * v);
+      else if (kind === 2) put('willows', PX, cBase + 0.3 * s, PZ, s * 1.25, s * 1.3, ry, 0, c[0] * v, c[1] * v, c[2] * v);
+      else if (kind === 3) put('crowns', PX, y0, PZ, s * 0.85, s * 0.7, ry, 0, c[0] * v, c[1] * v, c[2] * v);
+      else put('crowns', PX, y0, PZ, s * 1.15, s * 1.05, ry, 0, c[0] * v, c[1] * v, c[2] * v);
+    }
+  }
+  function jungle(n, emergent) {
+    for (let k = trees(n); k > 0; k--) {
+      spot();
+      const s = ((emergent ? 0.85 : 0.55) + hr() * 0.3) * lush, ry = hr() * 6.28, v = vary(), th = emergent ? 1.5 : 0.85;
+      put('trunks', PX, cBase, PZ, 0.17 * s, th * s, ry, 0, 118, 92, 64);
+      if (emergent) put('jungle', PX, cBase + th * s * 0.92, PZ, s, s, ry, 0, 48 * v, 142 * v, 60 * v);
+      else put('jungle', PX, cBase + th * s * 0.92, PZ, s, s, ry, 0, 32 * v, 124 * v, 62 * v);
+    }
+  }
+  function palm(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = (0.75 + hr() * 0.4) * lush, w = 230 + hr() * 25; put('palms', PX, cBase, PZ, s, s * (1 + hr() * 0.35), hr() * 6.28, 0, w, w, w); } }
+  function acacia(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = (0.85 + hr() * 0.45) * lush, w = 225 + hr() * 30; put('acacias', PX, cBase, PZ, s * 1.2, s, hr() * 6.28, 0, w, w * (0.95 + hr() * 0.08), w * 0.9); } }
+  function cypress(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = 0.45 + hr() * 0.25, v = vary(); put('cypress', PX, cBase, PZ, s, s * (2 + hr() * 0.8), hr() * 6.28, 0, 52 * v, 92 * v, 62 * v); } }
+  function dead(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = 0.55 + hr() * 0.35; put('bare', PX, cBase, PZ, s, s * 1.5, hr() * 6.28, (hr() - 0.5) * 0.3, 92, 80, 70); } }
+  function bush(n, c) { for (let k = many(n); k > 0; k--) { spot(); const s = 0.28 + hr() * 0.2, v = vary(); put('bushes', PX, cBase, PZ, s, s * 0.85, hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
+  function grass(n) { if (cSn > 80) return; const c = cGrass; for (let k = many(n); k > 0; k--) { spot(); const s = 0.2 + hr() * 0.13, v = vary(); put('grass', PX, cBase, PZ, s, s * (0.7 + hr() * 0.45), hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
+  function fern(n) { if (cSn > 80) return; const c = cSeason === 2 ? FERN_AUT : cWinter ? FERN_WIN : FERN; for (let k = many(n); k > 0; k--) { spot(); const s = 0.35 + hr() * 0.2, v = vary(); put('ferns', PX, cBase, PZ, s, s, hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
+  function flower(n, gold) { if (!gold && cSeason > 1) return; for (let k = many(n); k > 0; k--) { spot(); const c = gold ? HOLYGOLD : PETALS[(hr() * PETALS.length) | 0]; put('flowers', PX, cBase + 0.06, PZ, 0.08, 0.08, 0, 0, c[0], c[1], c[2]); } }
+  function rock(n, flat) {
+    const c = cRock;
+    for (let k = many(n); k > 0; k--) {
+      spot();
+      const s = (flat ? 0.22 : 0.32) + hr() * 0.3, v = vary();
+      put('rocks', PX, cBase, PZ, s, s * (flat ? 0.35 : 0.7), hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v);
+      if (cCapped && !flat) put('snowcaps', PX, cBase + s * 0.3, PZ, s * 0.75, s * 0.3, hr() * 6.28, 0, 238, 244, 250);
+    }
+  }
+  function crag(n) {
+    const c = cRock;
+    for (let k = many(n); k > 0; k--) {
+      spot();
+      const s = 0.5 + hr() * 0.35, h = s * (0.7 + hr() * 0.8), v = vary() * 0.95, ry = hr() * 6.28;
+      put('crags', PX, cBase, PZ, s, h, ry, 0, c[0] * v, c[1] * v, c[2] * v);
+      if (cCapped) put('tips', PX, cBase + 1.2 * h * 0.58, PZ, s * 0.82 * 0.45, 1.2 * h * 0.43, ry, 0, 238, 244, 250); // the snowy upper part of the main spire
+    }
+  }
+  function emitCell(b, i, x, y, base, K, season) {
+    const v = Wd.veg[i], T = Wd.Tc(i), m = Wd.moist[i], sn = Wd.snow[i], e = Wd.elev[i];
+    cX = x; cY = y; cBase = base; cK = K; cSeason = season; cWinter = season === 3; cT = T; cSn = sn;
+    const bg = Wd.bgrid;
+    cTree = (x > 0 && bg[i - 1]) || (x < W - 1 && bg[i + 1]) || (y > 0 && bg[i - W]) || (y < H - 1 && bg[i + W]) ? 0 : 1;
+    if (cTree && Wd.owner[i] >= 0) { // inside a settlement (not the whole realm) the woods are thinner
+      const c = Civ.cities[Wd.owner[i]];
+      if (c && c.alive && (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y) < c.radius * c.radius * 0.7) cTree = 0.45;
+    }
+    cSnowy = sn > 60 || (cWinter && T < 0.42);
+    cCapped = sn > 100 || e > AG.PEAK || (cWinter && T < 0.3);
+    cGrass = m < 0.3 || b === BIOME.SAVANNA || b === BIOME.DRY ? DRYGRASS : b === BIOME.TUNDRA ? TUNDRAGRASS : GRASS[season];
+    cRock = Wd.soil[i] === SO.BASALT ? BASALT_C : b === BIOME.DESERT ? SANDSTONE : ROCK;
+    switch (b) {
+      case BIOME.ICE: if (hr() < 0.1 * K) rock(1 / K); break;
+      case BIOME.TUNDRA:
+        if (v >= 20) { bush(v >= 60 ? 1.8 : 0.8, hr() < 0.5 ? HEATH : HEATH2); grass(v >= 60 ? 1 : 0.5); }
+        if (T > 0.2 && v >= 60) conifer(0.18, true);
+        rock(0.15, hr() < 0.5);
+        break;
+      case BIOME.BOREAL:
+        if (v >= 150) { conifer(3); if (m > 0.45) broadleaf(0.35, 1); fern(0.6); bush(0.35, B_BOREAL); }
+        else if (v >= 100) { conifer(1.6); grass(1); bush(0.3, B_BOREAL2); if (m > 0.45) broadleaf(0.2, 1); }
+        else if (v >= 30) { grass(1.8); flower(0.15); conifer(0.12); bush(0.1, B_MEADOW); }
+        else rock(0.2);
+        break;
+      case BIOME.TEMPERATE:
+        if (v >= 150) { broadleaf(1.9, 0); if (T < 0.5) broadleaf(0.4, 1); if (e > AG.HILL) conifer(0.5); fern(1); bush(0.6, B_WOOD); flower(0.15); }
+        else if (v >= 100) { broadleaf(0.9, 0); bush(0.8, B_WOOD2); grass(1.8); flower(0.2); }
+        else if (v >= 30) { grass(2.9); flower(0.35); bush(0.15, B_FIELD); broadleaf(0.07, 0); }
+        else { grass(0.3); rock(0.1, true); }
+        break;
+      case BIOME.DRY:
+        if (v >= 100) { cypress(0.5); broadleaf(0.9, 3); bush(1.6, SCRUB); grass(1); }
+        else if (v >= 30) { grass(1.9); bush(0.4, SCRUB); cypress(0.08); flower(0.1); }
+        else { grass(0.3); rock(0.15); }
+        break;
+      case BIOME.SAVANNA:
+        if (v >= 110) { acacia(0.45); grass(3.2); bush(0.35, B_SAV); }
+        else if (v >= 40) { grass(3); acacia(0.1); bush(0.15, B_SAV2); }
+        else { grass(1); bush(0.15, B_SAV3); }
+        break;
+      case BIOME.DESERT: {
+        const r = hr();
+        if (T > 0.6 && r < 0.07 * K) put('cacti', x + 0.5, base, y + 0.5, 0.9 + hr() * 0.4, 0.9 + hr() * 0.5, hr() * 6.28, 0, 86, 168, 90);
+        else if (r < 0.17 * K) put('cacti', x + 0.3 + hr() * 0.4, base, y + 0.3 + hr() * 0.4, 0.9, 0.28, hr() * 6.28, 0, 96, 158, 84); // a squat barrel cactus
+        bush(0.16, B_DES); rock(0.08); if (v > 20) grass(0.12);
+        break;
+      }
+      case BIOME.RAIN:
+        if (v >= 150) { jungle(0.35, true); jungle(1.8, false); palm(0.35); fern(3); bush(1, B_RAIN); }
+        else if (v >= 100) { jungle(1, false); palm(0.5); fern(2); grass(1); }
+        else if (v >= 30) { grass(2.8); palm(0.18); bush(0.25, B_RAIN2); fern(0.2); }
+        else grass(0.4);
+        break;
+      case BIOME.MOUNTAIN: {
+        const st = slopeAt(i, x, y);
+        if (st > 0.5 || e > AG.PEAK) crag(st > 0.8 || e > AG.PEAK ? 0.7 : 0.35);
+        rock(0.45); rock(0.45, true);
+        if (T > 0.3 && v >= 60 && e < AG.PEAK) conifer(v >= 150 ? 1.6 : 0.8);
+        if (T > 0.26 && v >= 40) grass(0.8);
+        break;
+      }
+      case BIOME.DEAD: dead(0.3); rock(0.12); if (Wd.soil[i] === SO.BLIGHT) bush(0.2, BLIGHT); break;
+      case BIOME.BASALT: rock(0.18); break;
+      case BIOME.HOLY: flower(2, true); grass(1.8); broadleaf(0.15, 0); break;
+      case BIOME.BEACH: grass(0.6); if (T > 0.62) palm(0.3); rock(0.08, true); break;
+    }
+    // steep hillsides show some bare rock through the plants
+    if (b !== BIOME.MOUNTAIN && b !== BIOME.ICE && hr() < 0.5 && slopeAt(i, x, y) > 0.7) { rock(0.4); if (hr() < 0.1) crag(1); }
+    // at the water's edge: reeds, willows in the temperate lands, palms in the warm
+    if (b === BIOME.ICE || b === BIOME.MOUNTAIN || b === BIOME.BASALT || sn >= 120) return;
+    if (!((x > 0 && isWater(i - 1)) || (x < W - 1 && isWater(i + 1)) || (y > 0 && isWater(i - W)) || (y < H - 1 && isWater(i + W)))) return;
+    if (T > 0.25) for (let k = many(1.6); k > 0; k--) { spot(); const s = 0.35 + hr() * 0.2, w = 255 * vary(); put('reeds', PX, base, PZ, s, s * (0.9 + hr() * 0.4), hr() * 6.28, 0, w, w, w); }
+    if (T > 0.35 && T < 0.6 && v >= 60) broadleaf(0.22, 2);
+    else if (T >= 0.62 && b !== BIOME.RAIN) palm(0.25);
   }
 
   // ------------------------------------------------------------ buildings
@@ -989,19 +1333,22 @@
           break;
         }
         case 'animal': {
-          if (M3 && M3.ready && M3.animal(i, x, g + bob * 0.5, y, FIG, ry, wob * 0.5)) break; // its own species' body, coat and markings
+          const lie = U.st[i] === ST.WORK && (U.task[i] === TK.REST || U.task[i] === TK.HIBERNATE); // bedded down for the night, or asleep in a den
+          if (M3 && M3.ready && M3.animal(i, x, g + bob * 0.5, y, FIG, ry, wob * 0.5, lie)) break; // its own species' body, coat and markings
           const k = FIG * (sp === SP.WOLF ? 0.9 : 1.05);
           place(beasts, nb++, x, g + bob * 0.5, y, k, k, k, ry, d.fur, 0, wob * 0.5);
           if (sp === SP.DEER && U.sex[i]) for (const side of [-1, 1]) prop(x + fx * 0.25 * k + rx * side * 0.04, g + 0.36 * k, y + fz * 0.25 * k + rz * side * 0.04, 0.02, 0.14, 0.02, ry, [214, 196, 160], side * 0.4);
           break;
         }
         case 'ambient': {
-          const flap = Math.sin(t * 12 + i), lift = g + 4 + Math.sin(t + i) * 0.4, bs = U.sid[i] >= 0 ? AG.Life.species[U.sid[i]] : null;
+          const perched = U.task[i] === TK.ROOST && U.st[i] === ST.WORK; // sitting in a treetop for the night, wings folded
+          const flap = perched ? 0 : Math.sin(t * 12 + i), lift = perched ? g + 1.15 : g + 4 + Math.sin(t + i) * 0.4, bs = U.sid[i] >= 0 ? AG.Life.species[U.sid[i]] : null;
           const fc = bs ? bs.color : d.fur, big = bs && bs.mean[AG.Life.L.SIZE] > 130 ? 1.6 : 1; // the species' own colours and size
           prop(x, lift, y, 0.06 * big, 0.05 * big, 0.14 * big, ry, fc);
           prop(x + fx * 0.09 * big, lift + 0.02 * big, y + fz * 0.09 * big, 0.045 * big, 0.045 * big, 0.045 * big, ry, fc.map((c) => c * 0.8));
           prop(x + fx * 0.125 * big, lift + 0.025 * big, y + fz * 0.125 * big, 0.016 * big, 0.016 * big, 0.03 * big, ry, [230, 170, 60]);
-          for (const side of [-1, 1]) prop(x + rx * side * 0.1 * big, lift + flap * 0.04, y + rz * side * 0.1 * big, 0.16 * big, 0.015, 0.08 * big, ry, fc, -side * flap * 0.6);
+          if (perched) for (const side of [-1, 1]) prop(x + rx * side * 0.035 * big, lift + 0.01, y + rz * side * 0.035 * big, 0.03 * big, 0.04 * big, 0.12 * big, ry, fc.map((c) => c * 0.85));
+          else for (const side of [-1, 1]) prop(x + rx * side * 0.1 * big, lift + flap * 0.04, y + rz * side * 0.1 * big, 0.16 * big, 0.015, 0.08 * big, ry, fc, -side * flap * 0.6);
           break;
         }
         case 'vehicle': {
@@ -1263,7 +1610,7 @@
     const ms = Q.level >= 1 ? 1024 : 2048;
     if (sun.shadow.mapSize.x !== ms) { sun.shadow.mapSize.set(ms, ms); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
     sun.castShadow = Q.level < 2;                          // level 2+: no shadow pass at all
-    bushes.visible = flowers.visible = Q.level < 3;        // level 3: the smallest plants go
+    PL.flowers.visible = PL.ferns.visible = Q.level < 3;    // level 3: the smallest plants go (and the budget thins the rest)
     if (land && landFine) land.material = Q.level === 0 ? landFine : landPlain; // fine relief at the top level only
   }
   function adaptQuality(t) {
@@ -1291,7 +1638,7 @@
       // keep the window fresh: a band of rows per frame, flora and buildings now and then
       const rows = Math.max(2, Math.ceil(ws / 30)), r0 = roll % ws, r1 = Math.min(ws, r0 + rows);
       refreshRows(r0, r1); roll = r1 % ws;
-      if ((floraClock += dt) > 6) buildFlora();
+      floraTick(dt);
       if ((bldClock += dt) > 0.4) { syncBuildings(); bldClock = 0; if (liqDirty) packLiquids(); }
     }
     for (const g of groups.values()) if (g.userData.blades) g.userData.blades.rotation.z = t * 1.4;

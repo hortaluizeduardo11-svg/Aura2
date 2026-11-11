@@ -7,7 +7,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', 'js');
-const SIM = ['core', 'world', 'geo', 'sky', 'fx', 'physics', 'life', 'entities', 'people', 'lang', 'tech', 'history', 'civ', 'war', 'ai', 'god', 'sim'];
+const SIM = ['core', 'world', 'geo', 'sky', 'fx', 'physics', 'life', 'habitat', 'entities', 'people', 'lang', 'tech', 'history', 'civ', 'war', 'ai', 'god', 'sim'];
 const cache = {};
 
 function load(opts) {

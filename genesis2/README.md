@@ -127,6 +127,22 @@ Settings take effect at once and are saved in the browser.
     its mate signal until it can no longer interbreed: a new species, with a parent link in the
     tree of life
   - predators and prey, competition and mass extinctions
+- **Habitats** (`habitat.js`): animals live where their kind would.
+  - Each species reads its needs from its genes and kind: the temperature it is built for, open
+    plains or forest or the edge between, slopes and heights (ibex up on the crags, mammoths and
+    bison down on the flats), water, snow, prey, and how shy it is of people (crows come to the
+    fields).
+  - When time slows, each species' animals are placed by habitat, grazers first so the hunters
+    can follow them: whole herds of horses and bison, small groups of deer, packs of wolves, lone
+    bears and great cats, flocks of songbirds and troops of monkeys, settled on the best ground
+    of their range.
+  - Time and conditions: winter pushes them down to warmer, lower ground; in cold winters bears
+    sleep in dens on sheltered slopes and most songbirds fly south; summer heat and dry spells
+    send animals to the water; fire drives them off.
+  - Day and night: herds bed down together at night (lying with their legs folded under them),
+    hunters prowl in the dark and lie up in the heat of the day, birds roost in the treetops,
+    and everything walks down to drink at dawn and dusk. Herds trek to better country when the
+    season turns against them, and wandering animals drift toward good ground.
 - **People** (`people.js`):
   - personality from genes and upbringing; 24 tastes; beliefs; skills learned from parents and
     by doing
@@ -161,6 +177,14 @@ Settings take effect at once and are saved in the browser.
       some of it, so related species look related.
     - Each animal's own pigment shades its coat; albinos are white; antlers and big horns are
       male; domestic herds come in several colours.
+  - **Nature** is built per cell from its biome (climate, moisture, height, slope, soil, snow,
+    water nearby): spruce and pine in the taiga, oak crowns and birches in temperate woods
+    (gold and red in autumn, bare in winter), cypress and olive in dry country, acacias over
+    savanna grass, cacti in the desert, layered rainforest with emergent trees, palms and ferns,
+    reeds and willows at the water, heather on the tundra. Mountains get crags, scree and
+    boulders with snow on the peaks, and their forests thin toward a treeline. Forests hold
+    several trees a cell with an understorey and ground cover, held to a plant budget for each
+    detail level; villages stand in clearings.
   - **Houses** follow the climate and terrain of their community:
     - log cabins with snow on the roof, and earth lodges, in the snow
     - turf-roofed longhouses and carved poles in the cold
@@ -194,7 +218,8 @@ Settings take effect at once and are saved in the browser.
   - Person records are canonical. Near the camera (watch speeds) they get bodies; far away or
     in history they live on records alone. Folding back keeps every record, and the food model
     is the same either way.
-  - Animals are embodied from their regional gene pool and folded back into it.
+  - Animals are embodied from their regional gene pool, placed by habitat in herds, packs and
+    flocks, and folded back into it.
 
 ## Performance
 
@@ -243,7 +268,7 @@ message instead of a frozen screen.
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 15 headless tests, ~55 s
+node genesis2/tests/run.js            # 18 headless tests, ~70 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -263,6 +288,9 @@ The tests cover:
 - **Selection:** cold tolerance tracks the climate.
 - **Technology:** prerequisites, conditions and bans gate every invention.
 - **LOD:** embodying and folding keep every record and feed people alike.
+- **Habitat:** animals stand on clearly better ground than random spots, social kinds come in
+  groups, predators are near prey, grazers bed down at night, fewer songbirds stay for a cold
+  winter, and a bear in cold country hibernates and burns almost nothing.
 
 Both demos are also in-game under World → Scenarios.
 
