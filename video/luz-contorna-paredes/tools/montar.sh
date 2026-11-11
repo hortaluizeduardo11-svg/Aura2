@@ -17,7 +17,7 @@ AF="loudnorm=I=-14:TP=-1.5:LRA=11:measured_I=$(val input_i):measured_TP=$(val in
 
 ffmpeg -v error -y -i build/video_sem_audio.mp4 -i build/mix.wav \
   -map 0:v:0 -map 1:a:0 \
-  -c:v libx264 -preset slow -crf 19 -profile:v high -level 4.2 -pix_fmt yuv420p -r 30 \
+  -c:v libx264 -preset slow -crf 20 -profile:v high -level 4.2 -pix_fmt yuv420p -r 30 \
   -af "$AF,aresample=48000" -c:a aac -b:a 192k \
   -movflags +faststart -shortest \
   -metadata title="E se a luz contornasse paredes como o som?" \

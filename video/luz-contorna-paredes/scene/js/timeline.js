@@ -118,6 +118,7 @@ const C = {
   s5fim2: look([-1.8, 12.9, 11.0], [-1.3, 0.0, 2.3], 44),
   s6A: look([0.95, 1.6, 1.35], [-2.2, 1.35, 2.2], 40),
   s6B: look([0.6, 1.58, 1.5], [-2.2, 1.38, 2.2], 38),
+  s6volta: look([-3.35, 2.05, 4.75], [-0.6, 1.1, -0.1], 42),
   s6fim: look([-4.7, 2.7, 5.1], [-0.4, 1.0, -0.4], 40),
   s7A: look([-3.4, 2.02, 6.4], [-0.87, 1.0, 0.17], 44),
   s7B: look([-3.1, 1.95, 5.8], [-0.87, 1.0, 0.17], 43),
@@ -177,11 +178,8 @@ export function camera(t, ctx) {
     const pos = e.clone().add(f.clone().multiplyScalar(0.14));
     return look(pos.toArray(), [0.1, 1.0 + 0.03 * Math.sin(t * 0.8), -0.2], 50);
   }
-  if (t < 78.0) {
-    const e = ctx.olho(75.4), f = ctx.frente(75.4);
-    const s = look(e.clone().add(f.clone().multiplyScalar(0.14)).toArray(), [0.1, 1.0, -0.2], 50);
-    return blend(s, C.s6fim, easeIO(ss(75.4, 78.0, t)));
-  }
+  // corte para trás do ombro e recuo até o plano aberto
+  if (t < 78.0) return blend(C.s6volta, C.s6fim, easeIO(ss(75.4, 78.0, t)));
   if (t < 84.6) return { split: true, cam: C.split };
   if (t < 90.0) return blend(C.s7A, C.s7B, easeIO(ss(84.6, 90.0, t)));
   return blend(C.s7B, C.s7C, easeIO(ss(90.0, DURACAO, t)));
@@ -293,7 +291,7 @@ export function painel(t) {
 export const EVENTOS = {
   trocas: TROCAS.map((x) => x.t),
   transicoes: [10.0, 23.0, 36.0, 49.0, 63.0, 78.0, 84.6],
-  cortes: [3.4, 6.6, 39.4, 42.6, 66.6],
+  cortes: [3.4, 6.6, 39.4, 42.6, 66.6, 75.4],
   painelEntra: 23.3,
   pilula: 38.35,
   creditos: 90.0,

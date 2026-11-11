@@ -262,6 +262,12 @@ window.renderAt = (t) => {
   // personagem: no plano em primeira pessoa a cabeça some (câmera dentro dela)
   const pov = (t >= 39.4 && t < 42.6) || (t >= 66.6 && t < 75.4);
   prot.head.visible = !pov;
+  // ao sair da visão em primeira pessoa, a câmera não pode atravessar a cabeça
+  prot.root.visible = true;
+  if (!pov && !c.split) {
+    const cabeca = prot.head.localToWorld(new THREE.Vector3(0, 0.12, 0));
+    if (c.pos.distanceTo(cabeca) < 0.55) prot.root.visible = false;
+  }
 
   if (c.split) {
     const S = T.ondasSplit(t);
