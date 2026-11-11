@@ -440,6 +440,43 @@ test('habitat: animals are placed where their kind would live, in groups, and wi
   return `habitat ${fmt(got)} vs random ${fmt(base)} (after 2 days ${fmt(later)} vs ${fmt(base2)}); ${together}/${social} in groups; predators on prey ${fmt(pp)} vs ${fmt(ap)}; ${resting}/${grazers} grazers resting at night; songbirds ${summerSongs} in spring, ${winterSongs} in winter; ${dens} bears in dens`;
 });
 
+test('sizes: animals are drawn at real sizes from their own genes, and follow them as they evolve', () => {
+  const { SIM } = require('./harness');
+  const W = 224, H = 144, AG = load({ W, H, modules: SIM.concat(['models3d']) }), Life = AG.Life, U = AG.U, M = AG.Models3D, L = Life.L;
+  AG.Sim.newWorld(3);
+  const body = (arch, size, extra, age) => {
+    const m = new Float32Array(Life.NL).fill(128); m[L.SIZE] = size; Object.assign(m, extra || {});
+    const s = Life.newSpecies(arch, m, null, Life.when());
+    const i = AG.Ent.spawnCreature(s, 50, 50, null, { age: age === undefined ? 20 : age });
+    U.gen[i * Life.GL + L.SIZE * 2] = U.gen[i * Life.GL + L.SIZE * 2 + 1] = size; // both alleles at the chosen size
+    AG.Ent.deriveStats(i);
+    return { i, s, h: M.heightOf(i, s, Life.commonName(s), 0) };
+  };
+  const horse = body(Life.ARCH.GRAZER, 150, { [L.SPEED]: 200, [L.SOCIAL]: 200 });
+  const ibex = body(Life.ARCH.GRAZER, 60);
+  const mammoth = body(Life.ARCH.GRAZER, 240, { [L.COLD]: 220 });
+  const wolf = body(Life.ARCH.PREDATOR, 120, { [L.SOCIAL]: 200 });
+  const bear = body(Life.ARCH.PREDATOR, 210);
+  const foal = body(Life.ARCH.GRAZER, 150, { [L.SPEED]: 200, [L.SOCIAL]: 200 }, 0.1);
+  const person = 1.7;
+  assert(Life.commonName(horse.s) === 'wild horse' && Life.commonName(mammoth.s) === 'mammoth' && Life.commonName(bear.s) === 'bear', 'the test bodies read as their kinds');
+  assert(horse.h > 1.2 && horse.h < 1.65, `a horse stands 1.2-1.65 m at the shoulder (${fmt(horse.h)})`);
+  assert(ibex.h > 0.5 && ibex.h < 0.9, `an ibex stands 0.5-0.9 m (${fmt(ibex.h)})`);
+  assert(mammoth.h > 2.8 && mammoth.h < 3.8, `a mammoth stands 2.8-3.8 m (${fmt(mammoth.h)})`);
+  assert(wolf.h > 0.65 && wolf.h < 0.95, `a wolf stands 0.65-0.95 m (${fmt(wolf.h)})`);
+  assert(bear.h > 1.1 && bear.h < 1.6, `a bear stands 1.1-1.6 m on all fours (${fmt(bear.h)})`);
+  assert(foal.h < horse.h * 0.6, `a newborn foal is much smaller than its parents (${fmt(foal.h)} vs ${fmt(horse.h)})`);
+  assert(horse.h < person && mammoth.h > person * 1.6 && wolf.h < person / 2 + 0.1, 'against a person of 1.7 m: a horse is shorter at the shoulder, a mammoth towers, a wolf is knee-to-hip high');
+  // evolution: the same body with a bigger SIZE gene is drawn bigger, a smaller one smaller
+  const g = horse.i * Life.GL + L.SIZE * 2;
+  U.gen[g] = U.gen[g + 1] = 100; AG.Ent.deriveStats(horse.i);
+  const dwarf = M.heightOf(horse.i, horse.s, 'horse', 0);
+  U.gen[g] = U.gen[g + 1] = 185; AG.Ent.deriveStats(horse.i);
+  const giant = M.heightOf(horse.i, horse.s, 'horse', 0);
+  assert(dwarf < horse.h && giant > horse.h, `the drawn size follows the size gene (${fmt(dwarf)} < ${fmt(horse.h)} < ${fmt(giant)})`);
+  return `horse ${fmt(horse.h)} m, ibex ${fmt(ibex.h)}, mammoth ${fmt(mammoth.h)}, wolf ${fmt(wolf.h)}, bear ${fmt(bear.h)}, foal ${fmt(foal.h)}; size gene 100 -> ${fmt(dwarf)} m, 185 -> ${fmt(giant)} m`;
+});
+
 // ------------------------------------------------------------------ runner
 const filter = process.argv[2];
 let pass = 0, fail = 0;

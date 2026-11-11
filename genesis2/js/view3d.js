@@ -18,6 +18,9 @@
   const BOTTOM = -6;        // columns extend down to here (the diorama's base)
   const CLOUD_Y = 24;       // cloud base height
   const FIG = 1.4; // figures are drawn a little larger than life so they read at a glance
+  // World units per metre: an adult of 1.7 m, as drawn (0.46 model units at FIG scale). Animals and
+  // birds are drawn to this scale at their real sizes (models3d.js).
+  const M2U = (0.46 * FIG * 0.92 * 1.02) / 1.7;
   const MAXT = 24000, MAXU = 3000, MAXC = 5000, MAXSMOKE = 900, MAXDROP = 3600;
   let renderer, scene, camera, sun, hemi, el, cw = 1, ch = 1, gradient, toonV, glowV, skyTex, skyCtx;
   let land, water, hot;
@@ -370,7 +373,7 @@
     ]);
     people = inst(humanGeo, toon({ vertexColors: true }), MAXU, true, false);
     // detailed people, animals and regional houses (models3d.js): instanced, one model per style or species
-    if (AG.Models3D) AG.Models3D.setup({ THREE, GEO, merge, scene, material: toon({ vertexColors: true }) });
+    if (AG.Models3D) { AG.Models3D.setup({ THREE, GEO, merge, scene, material: toon({ vertexColors: true }) }); AG.Models3D.m2u = M2U; }
     heads = inst(GEO.ico, toon({}), MAXU, true, false);
     hats = inst(GEO.cone, toon({}), MAXU, true, false);
     beasts = inst(beastGeo, toon({ vertexColors: true }), MAXU, true, false);
@@ -1343,7 +1346,7 @@
         case 'ambient': {
           const perched = U.task[i] === TK.ROOST && U.st[i] === ST.WORK; // sitting in a treetop for the night, wings folded
           const flap = perched ? 0 : Math.sin(t * 12 + i), lift = perched ? g + 1.15 : g + 4 + Math.sin(t + i) * 0.4, bs = U.sid[i] >= 0 ? AG.Life.species[U.sid[i]] : null;
-          const fc = bs ? bs.color : d.fur, big = bs && bs.mean[AG.Life.L.SIZE] > 130 ? 1.6 : 1; // the species' own colours and size
+          const fc = bs ? bs.color : d.fur, big = M3 ? (M3.birdLength(U.genes[i * NG + G.STAT]) * M2U) / 0.14 : 1; // its own colours, and its real size from its own genes
           prop(x, lift, y, 0.06 * big, 0.05 * big, 0.14 * big, ry, fc);
           prop(x + fx * 0.09 * big, lift + 0.02 * big, y + fz * 0.09 * big, 0.045 * big, 0.045 * big, 0.045 * big, ry, fc.map((c) => c * 0.8));
           prop(x + fx * 0.125 * big, lift + 0.025 * big, y + fz * 0.125 * big, 0.016 * big, 0.016 * big, 0.03 * big, ry, [230, 170, 60]);

@@ -292,9 +292,13 @@
     const layers = R.view === 0 ? [0] : [2, 1];
     for (const L of layers) {
       const off = R.cam.z >= 3 ? (L === 2 ? 4.6 : 0.8) : 0;
-      const n = Ent.near(x, y + off, r, L, 64);
+      const n = Ent.near(x, y + off, r, L, 64), map2d = !(R.wildShown ? R.wildShown() : true);
       let best = -1, bd = 1e9;
-      for (let q = 0; q < n; q++) { const j = Ent.buf[q], d = AG.dist2(U.x[j], U.y[j], x, y + off); if (d < bd) { bd = d; best = j; } }
+      for (let q = 0; q < n; q++) {
+        const j = Ent.buf[q];
+        if (map2d && R.WILD && R.WILD[U.sp[j]]) continue; // animals are only seen (and picked) close up
+        const d = AG.dist2(U.x[j], U.y[j], x, y + off); if (d < bd) { bd = d; best = j; }
+      }
       if (best >= 0) return best;
     }
     return -1;

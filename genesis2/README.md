@@ -165,6 +165,15 @@ Settings take effect at once and are saved in the browser.
     Hairstyles are a fashion of their people. Hats show the role: crown, helmet (leather, bronze,
     then iron), priest's cowl, straw hat, feathers. Soldiers carry spears and shields in their
     realm's colours.
+  - **Animals live in the 3D close-up.** The 2D map leaves them out (at map scale a deer would be
+    the size of a house); zoom in and they are there, at their real sizes beside people of 1.7 m:
+    a wild horse about 1.3-1.5 m at the shoulder, deer 0.9, wolves 0.8, bears 1.2-1.4, bison
+    1.75, mammoths 3.4, songbirds a speck. Each animal's size comes from its own SIZE gene, sex
+    and age, so herds vary, foals are small, island lines dwarf and cold lines grow, and the
+    bodies on the ground follow the genes as they evolve. A species' model is rebuilt when its
+    genes drift far enough (a deer line that grows big and cold-built becomes an elk). Where
+    the close-up is off (Minimum level, no WebGL) the 2D map shows them at the same zoom,
+    scaled the same way.
   - **Animals** get a body plan per species from their gene-derived kind: deer, elk, gazelle,
     ibex, aurochs, bison, mammoth, wild horse; wolf, great cat, bear, hyena; great ape, monkey;
     and, once tamed, cattle, horses, goats and sheep. Each has its own antlers, horns, tusks,
@@ -228,7 +237,7 @@ steps through four levels. Menu → Graphics can fix one instead, or override si
 - **High:** everything.
 - **Medium:** no cosmetic weather, god rays or far trees; a smaller simulation slice per frame.
 - **Low:** the canvas at 75% resolution (the pixel art is stretched up crisply); no water
-  ripples; wild animals as dots until zoomed in close; off-screen fluids rest longer; fewer
+  ripples; off-screen fluids rest longer; fewer
   bodies near the camera; the 3D close-up at reduced quality.
 - **Minimum:** the canvas at 50%; the 3D close-up off (the map zooms in as 2D pixel art); the
   fewest bodies.
@@ -268,7 +277,7 @@ message instead of a frozen screen.
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 18 headless tests, ~70 s
+node genesis2/tests/run.js            # 19 headless tests, ~70 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -288,6 +297,8 @@ The tests cover:
 - **Selection:** cold tolerance tracks the climate.
 - **Technology:** prerequisites, conditions and bans gate every invention.
 - **LOD:** embodying and folding keep every record and feed people alike.
+- **Sizes:** a horse, ibex, mammoth, wolf and bear come out at their real shoulder heights, a
+  newborn is much smaller, and the drawn size follows the size gene.
 - **Habitat:** animals stand on clearly better ground than random spots, social kinds come in
   groups, predators are near prey, grazers bed down at night, fewer songbirds stay for a cold
   winter, and a bear in cold country hibernates and burns almost nothing.

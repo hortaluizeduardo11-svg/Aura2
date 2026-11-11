@@ -334,15 +334,37 @@
     wolf: 'wolf', 'great cat': 'cat', bear: 'bear', hyena: 'hyena', 'great ape': 'ape', hominin: 'ape', monkey: 'monkey' };
   const COAT = { deer: [170, 106, 62], elk: [138, 96, 64], gazelle: [208, 154, 96], ibex: [150, 128, 100], bovine: [92, 60, 40], bison: [104, 72, 46], mammoth: [132, 88, 56], horse: [146, 90, 52], sheep: [228, 220, 202],
     wolf: [134, 130, 124], cat: [206, 156, 88], bear: [108, 74, 48], hyena: [180, 152, 108], ape: [70, 56, 46], monkey: [132, 108, 84] };
-  const SCALE = { deer: 1, elk: 1.2, gazelle: 0.88, ibex: 0.9, bovine: 1.15, bison: 1.25, mammoth: 1.9, horse: 1.15, sheep: 0.85, wolf: 0.9, cat: 1, bear: 1.2, hyena: 0.95, ape: 1, monkey: 0.7 };
   const PATTERNS = { deer: ['belly', 'spots', 'belly', 'saddle'], elk: ['belly', 'saddle'], gazelle: ['side', 'side', 'belly'], ibex: ['belly', 'saddle', 'dorsal'], bovine: ['plain', 'blaze', 'dorsal'], bison: ['plain'], mammoth: ['plain'],
     horse: ['points', 'dorsal', 'stripes', 'plain'], sheep: ['plain'], wolf: ['saddle', 'belly', 'plain'], cat: ['spots', 'stripes', 'plain', 'spots'], bear: ['plain', 'blaze'], hyena: ['spots', 'stripes'], ape: ['plain', 'pale'], monkey: ['pale', 'ring'] };
   const kindOf = (sp) => KIND[sp.common || AG.Life.commonName(sp)] || ({ 0: 'deer', 1: 'wolf', 3: 'ape' }[sp.arch] || 'deer');
   // A species' markings pass down its lineage: a daughter species keeps most of its parent's look.
+  // Its body follows its genes as they evolve: every couple of seconds the species' shape signature
+  // (kind, speed, strength, cold and heat build, pigment) is checked, and when it has moved its model
+  // is rebuilt (a deer line that grows big and cold-built becomes an elk, then perhaps a mammoth).
   const morphs = new Map();
+  const shapeSig = (sp, kind) => { const g = sp.mean, L = AG.Life.L; return kind + ((g[L.SPEED] / 20) | 0) + ',' + ((g[L.STR] / 20) | 0) + ',' + ((g[L.COLD] / 24) | 0) + ',' + ((g[L.HEAT] / 24) | 0) + ',' + ((g[L.HUE] / 20) | 0); };
+  function dropModels(sid) { // an animal bank key is ((sid * 12 + variant * 4 + albino * 2 + sex) * 64 + version)
+    for (const [key, b] of banks) {
+      if (typeof key !== 'number' || Math.floor(key / 768) !== sid) continue;
+      if (b.mesh) { scene.remove(b.mesh); if (b.mesh.dispose) b.mesh.dispose(); }
+      if (b.geo.dispose) b.geo.dispose();
+      banks.delete(key);
+    }
+  }
   function morphOf(sp) {
     let m = morphs.get(sp.id);
-    if (m) return m;
+    if (m) {
+      const now = performance.now();
+      if (now - m.seen >= 2000) {
+        m.seen = now;
+        const kind = kindOf(sp), sig = shapeSig(sp, kind);
+        if (sig !== m.sig) {
+          if (kind !== m.kind) { m.kind = kind; const pats = PATTERNS[kind] || ['plain']; if (!pats.includes(m.pattern)) m.pattern = pats[hash(sp.id, 2) % pats.length]; }
+          m.sig = sig; m.ver = (m.ver + 1) & 63; dropModels(sp.id);
+        }
+      }
+      return m;
+    }
     const kind = kindOf(sp), parent = sp.parent >= 0 ? AG.Life.species[sp.parent] : null;
     const pm = parent && parent.arch === sp.arch ? morphOf(parent) : null, pats = PATTERNS[kind] || ['plain'];
     const keep = (k) => pm && rnd01(sp.id, k) < 0.6;
@@ -353,6 +375,7 @@
       hue: (keep(5) ? pm.hue : 0) + (rnd01(sp.id, 6) - 0.5) * 0.16, // a small shift of the coat colour along the lineage
       ear: (keep(7) ? pm.ear : 1) * (0.85 + rnd01(sp.id, 8) * 0.3),
       seed: keep(9) ? pm.seed : hash(sp.id, 10),
+      sig: shapeSig(sp, kind), ver: 0, seen: performance.now(),
     };
     morphs.set(sp.id, m);
     return m;
@@ -478,27 +501,56 @@
       case 'monkey': for (let q = 0; q < 5; q++) p.add('cbox', pattern === 'ring' && q % 2 ? dark : coat, 0, ty + q * 0.03, tz - 0.03 - q * 0.012, 0.018, 0.035, 0.018, -0.3 - q * 0.2); break;
       case 'sheep': case 'bear': case 'mammoth': p.add('cbox', coat, 0, ty - 0.02, tz - 0.01, 0.03, 0.04, 0.03); break;
     }
-    return p.geo();
+    const built = p.geo();
+    built.userData.withers = yTop; built.userData.leg = y0; // (model units: the size is set per animal, in metres)
+    return built;
   }
   // the instanced model for an animal: one per species (and sex where antlers or horns differ,
   // and colour morph for domestic herds), built when the species is first seen
   const DIMORPH = new Set(['deer', 'elk', 'ibex', 'cat', 'ape']);
-  // leg length of each body plan (model units), so a resting animal can lie with its legs folded
-  const LEG = { deer: 0.17, elk: 0.19, gazelle: 0.19, ibex: 0.13, bovine: 0.13, bison: 0.12, mammoth: 0.2, horse: 0.2, sheep: 0.09, wolf: 0.14, cat: 0.12, bear: 0.12, hyena: 0.15, ape: 0.12, monkey: 0.1 };
+  // Real sizes. Everything in the close-up shares one scale, set by people (a person of 1.7 m):
+  // M.m2u is world units per metre. An animal is drawn at its real shoulder height, read from its
+  // own SIZE gene (so a herd varies, island lines dwarf and cold lines grow, and the bodies on the
+  // ground follow the genes as they evolve), its sex and its age. Heights in metres against the
+  // gene: grazers from a 0.6 m ibex to a 3.4 m mammoth (deer about 0.9, horses 1.3-1.5, bison and
+  // aurochs 1.75), hunters from a 0.6 m small cat to a 1.2-1.5 m bear (wolves 0.8), primates from a
+  // 0.45 m monkey to a 1.3 m great ape. Tamed forms are a little smaller than their wild kin.
+  M.m2u = 0.35;
+  const WITHERS = [
+    [[0, 0.5], [40, 0.6], [70, 0.75], [100, 0.9], [130, 1.1], [150, 1.3], [165, 1.45], [180, 1.6], [190, 1.75], [205, 2.2], [220, 2.8], [240, 3.4], [255, 3.8]],
+    [[0, 0.3], [40, 0.4], [80, 0.6], [120, 0.8], [150, 0.95], [170, 1.05], [190, 1.2], [220, 1.4], [255, 1.6]],
+    null,
+    [[0, 0.25], [40, 0.3], [90, 0.45], [140, 0.75], [170, 1.0], [210, 1.3], [255, 1.6]],
+  ];
+  const TAME = { sheep: 0.8, ibex: 0.85, bovine: 0.85, horse: 1 };
+  function tableAt(t, v) {
+    for (let k = 1; k < t.length; k++) if (v <= t[k][0]) { const a = t[k - 1], b = t[k]; return a[1] + ((v - a[0]) / (b[0] - a[0])) * (b[1] - a[1]); }
+    return t[t.length - 1][1];
+  }
+  // shoulder height in metres of body i (its genes, sex and age)
+  M.heightOf = function (i, sp, kind, sex) {
+    const U = AG.U, d = AG.SPECIES[U.sp[i]], gene = U.genes[i * AG.NG + AG.G.STAT];
+    let h = tableAt(WITHERS[sp.arch] || WITHERS[0], gene);
+    if (sp.domestic) h *= TAME[kind] || 1;
+    if (DIMORPH.has(kind)) h *= sex ? 1.05 : 0.95;
+    if (U.age[i] < d.adult) h *= 0.4 + 0.6 * Math.max(0, U.age[i] / d.adult); // the young grow into it
+    return h;
+  };
+  // A bird's body length in metres from its SIZE gene (a songbird ~15 cm, a crow ~45, an eagle ~80).
+  M.birdLength = (gene) => tableAt([[0, 0.1], [60, 0.16], [100, 0.3], [130, 0.45], [180, 0.8], [255, 1.1]], gene);
   M.animal = function (i, x, y, z, k, ry, roll, lie) {
     const U = AG.U, Life = AG.Life, sid = U.sid[i], sp = sid >= 0 ? Life.species[sid] : null;
     if (!sp) return false;
     const m = morphOf(sp), o = i * Life.GL, albino = Life.isAlbino(U.gen, o), sex = DIMORPH.has(m.kind) ? U.sex[i] : 0;
     const variant = sp.domestic ? U.uid[i] % 3 : 0;
-    const key = ((sid * 3 + variant) * 2 + (albino ? 1 : 0)) * 2 + sex; // (a number: no string built per animal per frame)
+    const key = ((sid * 12 + variant * 4 + (albino ? 2 : 0) + sex) * 64) + m.ver; // (a number: no string built per animal per frame)
     const b = bank(key, () => animalGeo(sp, sex, albino, variant), true);
     // this animal's own pigment shades the species' coat a little lighter or darker
     const L = Life.L, own = Life.express(U.gen, o, L.HUE), f = albino ? 1 : AG.clamp(1 + (sp.mean[L.HUE] - own) / 255, 0.72, 1.3);
-    const size = (0.78 + (sp.mean[L.SIZE] / 255) * 0.5) * (SCALE[m.kind] || 1) * (sex && !DIMORPH.has(m.kind) ? 1 : sex ? 1.06 : 1);
-    const ks = k * size;
+    const ud = b.geo.userData, ks = (M.heightOf(i, sp, m.kind, U.sex[i]) * M.m2u) / (ud.withers || 0.3);
     drawn++;
     // lying down: the body sinks onto the ground and the legs fold away under it
-    b.add(x, lie ? y - (LEG[m.kind] || 0.14) * ks * 0.8 : y, z, ks, ks, ks, ry, lie ? 0 : roll, f, f, f);
+    b.add(x, lie ? y - (ud.leg || 0.14) * ks * 0.85 : y, z, ks, ks, ks, ry, lie ? 0 : roll, f, f, f);
     return true;
   };
 

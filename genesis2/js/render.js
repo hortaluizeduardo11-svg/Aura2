@@ -41,7 +41,7 @@
   // Performance knobs, set by AG.Perf (main.js): the canvas can hold fewer pixels than the screen
   // (drawing stays in screen coordinates through a scale transform, and the browser stretches the
   // pixel art up crisply); cosmetic layers can be switched off; the minimap redraws less often.
-  R.perf = { scale: 1, cosmetics: true, minimapEvery: 12, animate: true, wildZ: 4 };
+  R.perf = { scale: 1, cosmetics: true, minimapEvery: 12, animate: true };
   R.setScale = function (k) { if (Math.abs(k - R.perf.scale) > 0.01) { R.perf.scale = k; R.resize(); plates.clear(); for (const d in digits) delete digits[d]; } };
   R.resize = function () {
     const r = cv.getBoundingClientRect();
@@ -853,13 +853,19 @@
     if (any || cloudOn) { cctx.putImageData(cimg, 0, 0); shctx.putImageData(shimg, 0, 0); }
     cloudOn = any;
   }
+  // Animals and birds are not drawn on the 2D map: at map scale a sprite of a deer would be the size
+  // of a house. They are seen in the 3D close-up, at their real sizes. (Where the close-up is off,
+  // as on the Minimum level or without WebGL, the 2D map shows them from the same zoom, scaled to
+  // their real heights.)
   const WILD = SPECIES.map((d) => (d.kind === 'animal' || d.kind === 'ambient' ? 1 : 0));
-  let wildDots = false;
-  function updateDots(alpha, wildOnly) {
+  R.WILD = WILD;
+  R.wildShown = () => R.is3D() || R.cam.z > 8.001;
+  let hideWild = true;
+  function updateDots(alpha) {
     dpix.fill(0);
     const under = R.view === 0;
     for (let i = 0; i < U.hi; i++) {
-      if (!U.alive[i] || (wildOnly && !WILD[U.sp[i]])) continue;
+      if (!U.alive[i] || WILD[U.sp[i]]) continue;
       const L = U.layer[i];
       if (under ? L !== 0 : L === 0) continue;
       const x = (U.px[i] + (U.x[i] - U.px[i]) * alpha) | 0, y = (U.py[i] + (U.y[i] - U.py[i]) * alpha) | 0;
@@ -1147,20 +1153,20 @@
     if (!under && z >= 3) drawBuildings(ox, oy, z, s, vx0, vy0, vx1, vy1);
     if (!under && R.showTrade) drawRoutes(ox, oy, z);
     if (!under) drawArmies(ox, oy, z);
-    // level of detail: people, monsters and vehicles get sprites from zoom 3, wildlife from
-    // zoom 4; anything else (or any crowd past SPRITE_LIMIT) is one pixel per creature
-    wildDots = z < R.perf.wildZ; // wild animals are dots until zoomed in (closer on slow machines)
+    // level of detail: people, monsters and vehicles get sprites from zoom 3; below that (or for any
+    // crowd past SPRITE_LIMIT) one pixel per creature. Animals are left to the 3D close-up.
     let sprites = z >= 3;
+    hideWild = !R.wildShown();
     if (sprites) {
       let n = 0;
       for (let i = 0; i < U.hi && sprites; i++) {
-        if (!U.alive[i] || (U.layer[i] === 0) !== under || (wildDots && WILD[U.sp[i]])) continue;
+        if (!U.alive[i] || (U.layer[i] === 0) !== under || (hideWild && WILD[U.sp[i]])) continue;
         const x = U.x[i], y = U.y[i];
         if (x >= vx0 && x <= vx1 && y >= vy0 && y <= vy1 && ++n > SPRITE_LIMIT) sprites = false;
       }
     }
     R.stats.sprites = sprites;
-    if ((!sprites || wildDots) && U.count > 0) { updateDots(alpha, sprites); blit(dotsC, ox, oy, z); }
+    if (!sprites && U.count > 0) { updateDots(alpha); blit(dotsC, ox, oy, z); }
     if (sprites) drawUnits(ox, oy, z, s, alpha, vx0, vy0, vx1, vy1, under);
     else R._sky = [];
     drawProjectiles(ox, oy, z, under);
@@ -1310,17 +1316,24 @@
       if (under ? L !== 0 : L === 0) continue;
       const x = U.px[i] + (U.x[i] - U.px[i]) * alpha, y = U.py[i] + (U.y[i] - U.py[i]) * alpha;
       if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-      if (wildDots && WILD[U.sp[i]]) continue;
+      if (hideWild && WILD[U.sp[i]]) continue;
       if (L === 2) { sky.push(i); continue; }
       drawUnit(i, x, y, ox, oy, z, s, 0);
     }
     R._sky = sky;
   }
+  // an animal sprite at its real height beside a person's (1.7 m)
+  function wildScale(i) {
+    const M = AG.Models3D, sp = AG.Life.species[U.sid[i]];
+    if (!M || !M.heightOf || !sp) return AG.clamp(U.scale[i], 0.6, 1.7);
+    if (U.sp[i] === SP.BIRD) return AG.clamp(M.birdLength(U.genes[i * AG.NG + AG.G.STAT]) * 1.5, 0.25, 1.2);
+    return AG.clamp(M.heightOf(i, sp, AG.Life.commonName(sp), U.sex[i]) / 1.5, 0.3, 2.4);
+  }
   function drawUnit(i, x, y, ox, oy, z, s, lift) {
     const moving = U.st[i] === 1 || U.st[i] === 3 || (U.flags[i] & FL.POSSESSED);
     const frame = moving ? (U.anim[i] | 0) & 1 : 0;
     const spr = unitSprite(i, frame);
-    const sc = U.pid[i] < 0 && U.sid[i] >= 0 ? AG.clamp(U.scale[i], 0.6, 1.7) : U.pid[i] >= 0 ? AG.clamp(U.scale[i], 0.75, 1.25) : 1;
+    const sc = U.pid[i] < 0 && U.sid[i] >= 0 ? wildScale(i) : U.pid[i] >= 0 ? AG.clamp(U.scale[i], 0.75, 1.25) : 1;
     const sw = spr.width * s * sc, sh = spr.height * s * sc;
     const sx = Math.round(ox + x * z - sw / 2), sy = Math.round(oy + y * z - sh - lift * z);
     const f = U.flags[i];

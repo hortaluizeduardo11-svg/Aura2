@@ -56,8 +56,10 @@
       if (type === FT.WATER && rnd() < 0.3) Civ.experience(x, y, 'water', 0.05);
     };
   }
+  let toldAnimals3D = false;
   function spawnIn(sp, layer, chance) {
     return (x, y, k) => {
+      if (!toldAnimals3D && !(AG.View3D && AG.View3D.active)) { toldAnimals3D = true; toast('Animals are seen in the 3D close-up: zoom in to watch them'); }
       if (rnd() > chance * k) return;
       for (let t = 0; t < 8; t++) {
         const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * God.brush.r;
@@ -161,10 +163,10 @@
     { id: 'bolt', cat: 'sky', name: 'Lightning', mode: 'click', color: '#fff59d', desc: 'Strike a single bolt where you tap.', click: (x, y) => God.lightning(x, y, false) },
     // life
     { id: 'people', cat: 'life', name: 'People', mode: 'click', color: '#d9a77a', desc: 'Set down a band of people here (after the Dawn).', click: (x, y) => { if (!Civ.godBand || !Civ.godBand(x, y)) toast('People can only be placed on open, dry land after the Dawn'); } },
-    { id: 'grazers', cat: 'life', name: 'Grazers', mode: 'brush', color: '#c49a6c', desc: 'Release grazers of the nearest living species.', apply: spawnIn(SP.GRAZER, 1, 0.5) },
-    { id: 'hunters', cat: 'life', name: 'Predators', mode: 'brush', color: '#9e9e9e', desc: 'Release predators of the nearest living species.', apply: spawnIn(SP.PREDATOR, 1, 0.25) },
-    { id: 'birds', cat: 'life', name: 'Birds', mode: 'brush', color: '#455a64', desc: 'Release a flock.', apply: spawnIn(SP.BIRD, 2, 0.6) },
-    { id: 'apes', cat: 'life', name: 'Apes', mode: 'brush', color: '#8d6e63', desc: 'Release apes of the nearest primate species.', apply: spawnIn(SP.APE, 1, 0.3) },
+    { id: 'grazers', cat: 'life', name: 'Grazers', mode: 'brush', color: '#c49a6c', desc: 'Release grazers of the nearest living species that suits the spot (seen in the 3D close-up).', apply: spawnIn(SP.GRAZER, 1, 0.5) },
+    { id: 'hunters', cat: 'life', name: 'Predators', mode: 'brush', color: '#9e9e9e', desc: 'Release predators of the nearest living species that suits the spot (seen in the 3D close-up).', apply: spawnIn(SP.PREDATOR, 1, 0.25) },
+    { id: 'birds', cat: 'life', name: 'Birds', mode: 'brush', color: '#455a64', desc: 'Release a flock (seen in the 3D close-up).', apply: spawnIn(SP.BIRD, 2, 0.6) },
+    { id: 'apes', cat: 'life', name: 'Apes', mode: 'brush', color: '#8d6e63', desc: 'Release apes of the nearest primate species (seen in the 3D close-up).', apply: spawnIn(SP.APE, 1, 0.3) },
     { id: 'geneup', cat: 'life', name: 'Gene +', mode: 'brush', color: '#4dd0e1', desc: 'Raise the chosen gene (both alleles) in creatures under the brush. It is inherited.', apply: locusEdit(1), locus: true },
     { id: 'genedown', cat: 'life', name: 'Gene −', mode: 'brush', color: '#26a69a', desc: 'Lower the chosen gene in creatures under the brush.', apply: locusEdit(-1), locus: true },
     { id: 'mutate', cat: 'life', name: 'Mutate', mode: 'brush', color: '#80cbc4', desc: 'Scramble genomes at random (rare large mutations included).',

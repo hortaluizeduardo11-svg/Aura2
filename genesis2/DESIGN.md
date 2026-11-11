@@ -698,6 +698,7 @@ These follow from the same rules rather than special cases:
 | selection | a cold region raises the mean COLD allele over generations versus a control |
 | tech | no community ever knows a tech without its prerequisites, over long random runs; conditions are honoured (no cultivation without wild cereals); banned techs never appear |
 | LOD | a community simulated aggregated vs. embodied grows at the same expected rate (within tolerance); fold → materialise preserves person records exactly |
+| sizes | horse, ibex, mammoth, wolf and bear at real shoulder heights; a newborn much smaller; the drawn size follows the SIZE gene |
 | habitat | embodied animals score clearly higher than random spots of their regions (and still do two days later); most social animals have one of their kind within 3 cells; predators stand on more prey than the average place; grazers rest at night; fewer songbirds in a cold winter; a bear in cold country hibernates and burns almost nothing |
 | save/load | serialise → deserialise → state hash equal; continuing both gives identical futures |
 
@@ -744,6 +745,17 @@ These follow from the same rules rather than special cases:
   where antlers or horns differ, per colour morph for domestic herds); an animal's own pigment
   only scales its brightness. Models are built when first seen and dropped with the world.
   Building models are cached by type, realm, variant, style and era band.
+- Scale in 3D: one metre is `M2U` world units, set by an average adult (1.7 m) as drawn. An
+  animal's model is scaled so its withers (leg + body height of the built geometry) reach its real
+  shoulder height: a table per archetype against the body's own SIZE phenotype (grazers 0.6 m at
+  gene 40 to 3.4 m at 240; hunters 0.4 to 1.6 m; primates 0.3 to 1.6 m), x1.05 / x0.95 for the
+  sexes of dimorphic kinds, smaller for tamed sheep, goats and cattle, and 0.4 + 0.6 * age/adult
+  for the young. Birds' body length comes from the same gene (15 cm to 1.1 m). A species' model is
+  keyed by a version: every 2 seconds its shape signature (kind, speed, strength, cold, heat,
+  pigment, bucketed) is checked against its current mean, and a change drops its old models.
+- Animals and birds are drawn only in the 3D close-up (or, where it is off, in the 2D map past
+  the same zoom, sprites scaled to real height); the 2D map skips them in sprites, dots and
+  picking.
 - A lost WebGL context switches the close-up off until the browser restores it; the 2D map
   carries on.
 - Flora in 3D: twenty instanced shapes (conifers, snowy conifers, broadleaf crowns, birches,

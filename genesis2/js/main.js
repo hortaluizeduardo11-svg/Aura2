@@ -55,7 +55,7 @@
     Perf.frameMs = v.fps === 'display' ? 0 : 1000 / Perf.target;
     BUDGET_MS = L.budget * (60 / Perf.target); // fewer, longer frames: the same share of each for the simulation
     R.perf.cosmetics = pick('weather', L.cosmetics); R.perf.animate = pick('water', Perf.level < 2);
-    R.perf.minimapEvery = L.minimap; R.perf.wildZ = Perf.level < 2 ? 4 : 7; R.perf.shake = v.shake !== 'off';
+    R.perf.minimapEvery = L.minimap; R.perf.shake = v.shake !== 'off';
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     R.setScale(v.resolution === 'auto' ? L.scale : v.resolution === 'native' ? dpr : AG.clamp(+v.resolution || 1, 0.5, 1));
     AG.Physics.farEvery = L.farEvery; AG.Life.bodyK = L.bodyK; Civ.lodBudget = L.lod;
