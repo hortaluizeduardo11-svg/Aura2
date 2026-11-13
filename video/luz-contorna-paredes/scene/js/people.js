@@ -138,8 +138,8 @@ export class Person {
       bun.castShadow = true;
       head.add(bun);
       for (const s of [-1, 1]) {
-        const side = box(0.03, 0.12, 0.12, M.cabelo);
-        side.position.set(0.105 * s, 0.12, -0.02);
+        const side = box(0.03, 0.08, 0.1, M.cabelo);
+        side.position.set(0.106 * s, 0.18, -0.04);
         head.add(side);
       }
     } else {

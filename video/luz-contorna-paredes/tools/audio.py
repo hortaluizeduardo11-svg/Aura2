@@ -16,10 +16,18 @@ from scipy.signal import butter, fftconvolve, resample_poly, sosfilt
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 B = os.path.join(ROOT, "build")
 SR = 48000
-DUR = 95.0
+EV = json.load(open(os.path.join(B, "eventos.json")))
+DUR = float(EV["duracao"])
 N = int(DUR * SR)
 rng = np.random.default_rng(42)
 t = np.arange(N) / SR
+_MS = np.array([m[0] for m in EV["mapa"]])
+_MV = np.array([m[1] for m in EV["mapa"]])
+
+
+def V(s):
+    """tempo do roteiro visual -> tempo do vídeo final"""
+    return float(np.interp(s, _MS, _MV))
 
 
 def bp(x, lo, hi, order=2):
@@ -128,6 +136,7 @@ def musica():
     mus = np.zeros((N, 2))
     xf = int(1.2 * SR)
     for (a, b, notes, br) in PROG:
+        a, b = V(a), V(b)
         i0 = max(0, int(a * SR) - xf // 2)
         i1 = min(N, int(b * SR) + xf // 2)
         n = i1 - i0
@@ -137,7 +146,7 @@ def musica():
     # sub-grave na fundamental
     sub = np.zeros(N)
     for (a, b, notes, _) in PROG:
-        i0, i1 = int(a * SR), min(N, int(b * SR))
+        i0, i1 = int(V(a) * SR), min(N, int(V(b) * SR))
         f = midi(notes[0] - 12)
         tt = np.arange(i1 - i0) / SR
         sub[i0:i1] += np.sin(2 * np.pi * f * tt) * env_ar(i1 - i0, 0.4 * SR, 0.4 * SR)
@@ -148,39 +157,39 @@ def musica():
     step = 60 / bpm / 2
     pl = np.zeros((N, 2))
     k = 0
-    tk = 36.0
-    while tk < 78.0:
-        chord = next(p for p in PROG if p[0] <= tk < p[1])[2]
-        dens = 0.55 if tk < 49 else (0.95 if tk < 63 else 0.35)
+    tk = V(36.0)
+    while tk < V(78.0):
+        chord = next(p for p in PROG if V(p[0]) <= tk < V(p[1]))[2]
+        dens = 0.55 if tk < V(49) else (0.95 if tk < V(63) else 0.35)
         if (k % 2 == 0) or rng.random() < dens:
             m = chord[1 + (k * 3) % (len(chord) - 1)] + 12
             n = int(0.5 * SR)
             tt = np.arange(n) / SR
             f = midi(m)
             y = (np.sin(2 * np.pi * f * tt + 1.2 * np.sin(2 * np.pi * f * 2 * tt) * np.exp(-tt * 18)) * np.exp(-tt * 7.5))
-            g = 0.055 * (0.6 + 0.4 * smooth(36, 60, tk)) * (0.7 if 63 <= tk < 78 else 1.0)
+            g = 0.055 * (0.6 + 0.4 * smooth(V(36), V(60), tk)) * (0.7 if V(63) <= tk < V(78) else 1.0)
             place(pl, y, tk, g, pan=0.35 if k % 2 else -0.35)
         k += 1
         tk += step
     mus += pl
 
     # batida grave (tensão) na cena 5
-    for tb in np.arange(49.0, 63.0, 60 / bpm):
+    for tb in np.arange(V(49.0), V(63.0), 60 / bpm):
         n = int(0.35 * SR)
         tt = np.arange(n) / SR
         f = 55 * np.exp(-tt * 9) + 42
         y = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 10)
-        place(mus, y, tb, 0.16 * smooth(49, 54, tb))
+        place(mus, y, tb, 0.16 * smooth(V(49), V(54), tb))
 
     # nuvem alta cintilante (curiosidade) nas cenas 2–3
     sh = rng.standard_normal(N)
-    sh = bp(sh, 5000, 9000) * (smooth(10, 14, t) * (1 - smooth(33, 37, t))) * 0.012
+    sh = bp(sh, 5000, 9000) * (smooth(V(10), V(14), t) * (1 - smooth(V(33), V(37), t))) * 0.012
     mus[:, 0] += sh; mus[:, 1] += np.roll(sh, 300)
 
     # envelope global: tensão crescente, queda na reviravolta, resolução e fade nos créditos
-    g = (0.55 + 0.25 * smooth(10, 23, t) + 0.2 * smooth(36, 60, t)) \
-        * (1 - 0.35 * smooth(62.5, 64, t) * (1 - smooth(76, 79, t))) \
-        * smooth(0.0, 1.6, t) * (1 - smooth(93.0, 95.0, t))
+    g = (0.55 + 0.25 * smooth(V(10), V(23), t) + 0.2 * smooth(V(36), V(60), t)) \
+        * (1 - 0.35 * smooth(V(62.5), V(64), t) * (1 - smooth(V(76), V(79), t))) \
+        * smooth(0.0, 1.6, t) * (1 - smooth(DUR - 2.0, DUR, t))
     mus *= g[:, None]
     mus = reverb(mus, wet=0.35, decay=3.0, seed=3)
     return mus
@@ -241,11 +250,11 @@ def ambiente():
     x = rng.standard_normal((N, 2))
     x[:, 0] = lp(x[:, 0], 700, 3); x[:, 1] = lp(x[:, 1], 700, 3)
     x /= np.abs(x).max()
-    esquema = smooth(10.3, 11.9, t) * (1 - smooth(23.0, 24.3, t)) + ((t >= 78.0) & (t < 84.6)) * 1.0
-    g = 0.05 * (1 - 0.8 * esquema) * smooth(0, 1.0, t) * (1 - smooth(90, 93, t))
+    esquema = smooth(V(10.3), V(11.9), t) * (1 - smooth(V(23.0), V(24.3), t)) + ((t >= V(78.0)) & (t < V(84.6))) * 1.0
+    g = 0.05 * (1 - 0.8 * esquema) * smooth(0, 1.0, t) * (1 - smooth(V(90), V(93), t))
     out = x * g[:, None]
     # carros passando ao longe
-    for tc in (2.0, 27.5, 46.0, 57.0, 66.0, 86.0):
+    for tc in [V(x) for x in (2.0, 27.5, 46.0, 57.0, 66.0, 86.0)]:
         d = 3.5
         n = int(d * SR)
         tt = np.arange(n) / SR
@@ -255,7 +264,7 @@ def ambiente():
 
 
 def main():
-    ev = json.load(open(os.path.join(B, "eventos.json")))
+    ev = EV
     narr, sr = sf.read(os.path.join(B, "narracao.wav"), dtype="float64")
     narr = resample_poly(narr, SR // 8000, sr // 8000)
     narr = np.pad(narr, (0, max(0, N - narr.size)))[:N]
@@ -264,7 +273,7 @@ def main():
 
     fx = np.zeros((N, 2))
     # passos (último é o de parada)
-    for i, tp in enumerate(ev["passos"] + [3.12]):
+    for i, tp in enumerate(ev["passos"] + [V(3.12)]):
         place(fx, passo(), tp, 0.16 * (0.85 + 0.3 * rng.random()), pan=-0.15 if i % 2 else 0.15)
     # chamado vindo de trás do muro: levemente abafado, com ambiência
     c = lp(hp(cham, 160), 3800)
@@ -284,12 +293,12 @@ def main():
     place(fx, chime((79, 86)), ev["pilula"] + 0.15, 0.05)
     # cliques do controle fictício
     for k in range(7):
-        place(fx, tick(3200), 37.7 + k * 0.11, 0.07)
+        place(fx, tick(3200), ev["cliques"] + k * 0.1, 0.07)
     # aparecimento da tela ilustrativa e da fórmula
-    place(fx, blip(520, 780, 0.25), 66.85, 0.07)
-    place(fx, blip(880, 1170, 0.2), 70.45, 0.05)
+    place(fx, blip(520, 780, 0.25), ev["tela"], 0.07)
+    place(fx, blip(880, 1170, 0.2), ev["formula"], 0.05)
     # créditos: acorde final suave já está na música; um "chime" discreto
-    place(fx, chime((74, 81, 86), 0.12), 90.2, 0.05)
+    place(fx, chime((74, 81, 86), 0.12), ev["creditos"] + 0.2, 0.05)
     fx = reverb(fx, wet=0.15, decay=1.2, seed=9)
 
     mus = musica()
@@ -307,18 +316,18 @@ def main():
         acc += (alvo - acc) * (1 - (1 - k) ** 480)
         env[i0:i0 + 480] = acc
     env = lp(env, 8, 1)
-    duck = 1 - 0.72 * np.clip(env, 0, 1)
+    duck = 1 - 0.6 * np.clip(env, 0, 1)
     mus *= duck[:, None]
 
     voz = np.stack([narr, narr], 1)
-    mix = voz * 1.0 + mus * 0.46 + fx * 1.0 + amb * 1.0
+    mix = voz * 1.0 + mus * 0.2 + fx * 1.0 + amb * 1.0
     mix = np.stack([hp(mix[:, 0], 30), hp(mix[:, 1], 30)], 1)
     pk = np.abs(mix).max()
     mix *= 0.9 / pk
     sf.write(os.path.join(B, "mix.wav"), mix.astype(np.float32), SR)
     # também separados, com o mesmo ganho da mixagem (para revisão)
     k = 0.9 / pk
-    for nome, x in (("stem_voz", voz), ("stem_musica", mus * 0.46), ("stem_fx", fx), ("stem_amb", amb)):
+    for nome, x in (("stem_voz", voz), ("stem_musica", mus * 0.2), ("stem_fx", fx), ("stem_amb", amb)):
         sf.write(os.path.join(B, nome + ".wav"), (x * k).astype(np.float32), SR)
     print("ok", mix.shape, "pico", pk)
 

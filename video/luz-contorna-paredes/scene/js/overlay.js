@@ -80,7 +80,8 @@ export class Overlay {
     vb.style.transform = `translateY(${((1 - P.mix) * 40).toFixed(1)}px)`;
     vb.style.filter = `blur(${((1 - P.mix) * 8).toFixed(1)}px)`;
     vb.style.display = P.mix > 0.001 ? 'block' : 'none';
-    $('pill').style.opacity = P.pilula.toFixed(3);
+    // durante a tela ilustrativa a indicação fica no cabeçalho do cartão
+    $('pill').style.opacity = (P.pilula * (1 - st.detector.op)).toFixed(3);
     $('pill').style.transform = `translateX(${((1 - P.pilula) * -24).toFixed(1)}px)`;
 
     // ---- etiqueta "Representação das ondas" ----
@@ -102,13 +103,12 @@ export class Overlay {
     const D = st.detector;
     $('detector').style.opacity = D.op.toFixed(3);
     $('detector').style.transform = `translateY(${((1 - D.op) * 20).toFixed(1)}px) scale(${(0.97 + 0.03 * D.op).toFixed(3)})`;
-    $('rowSinal').style.opacity = D.sinal.toFixed(3);
-    $('rowImagem').style.opacity = D.imagem.toFixed(3);
+    $('col1m').style.opacity = D.c1m.toFixed(3);
+    $('col10cm').style.opacity = (0.12 + 0.88 * D.c10).toFixed(3);
+    $('col1cm').style.opacity = (0.12 + 0.88 * D.c1).toFixed(3);
+    $('col10cm').style.transform = `translateY(${((1 - D.c10) * 18).toFixed(1)}px)`;
+    $('col1cm').style.transform = `translateY(${((1 - D.c1) * 18).toFixed(1)}px)`;
     $('rowFormula').style.opacity = D.formula.toFixed(3);
-    const blob = $('blob');
-    const pulse = 1 + 0.05 * Math.sin(t * 3.1);
-    blob.setAttribute('rx', (92 * pulse).toFixed(1));
-    blob.setAttribute('ry', (120 * pulse).toFixed(1));
 
     // ---- legenda do mapa de intensidade ----
     $('legend').style.opacity = st.legenda.toFixed(3);

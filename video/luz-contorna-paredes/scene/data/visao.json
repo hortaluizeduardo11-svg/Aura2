@@ -1,0 +1,27 @@
+{
+ "D_m": 1.0,
+ "rad_por_px": 0.0005126904677733343,
+ "casos": {
+  "1cm": {
+   "lambda_m": 0.01,
+   "theta_rad": 0.0122,
+   "borrao_na_pessoa_m": 0.0732,
+   "raio_px": 23.79603438500781,
+   "realce_contraste": 1.0
+  },
+  "10cm": {
+   "lambda_m": 0.1,
+   "theta_rad": 0.122,
+   "borrao_na_pessoa_m": 0.732,
+   "raio_px": 237.96034385007806,
+   "realce_contraste": 1.0
+  },
+  "1m": {
+   "lambda_m": 1.0,
+   "theta_rad": 1.22,
+   "borrao_na_pessoa_m": 7.32,
+   "raio_px": 2379.6034385007806,
+   "realce_contraste": 13.398225158451297
+  }
+ }
+}

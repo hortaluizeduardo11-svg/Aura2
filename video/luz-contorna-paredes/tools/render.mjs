@@ -3,6 +3,7 @@
 //   node tools/render.mjs --preview 1.5,4,8          -> build/preview/t_XXXX.png
 //   node tools/render.mjs --full [--from 0 --to 95]  -> build/frames_<from>_<to>.mp4 (sem áudio)
 //   node tools/render.mjs --eventos                  -> build/eventos.json (tempos para o áudio)
+//   node tools/render.mjs --retrato                  -> build/retrato.png (pessoa escondida vista da abertura)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,7 +56,12 @@ const srv = await serve();
 const { browser, page, cdp } = await abrir(srv);
 fs.mkdirSync(BUILD, { recursive: true });
 
-if (args.includes('--eventos')) {
+if (args.includes('--retrato')) {
+  const r = await page.evaluate(() => window.renderRetrato());
+  fs.writeFileSync(path.join(BUILD, 'retrato.png'), Buffer.from(r.url.split(',')[1], 'base64'));
+  fs.writeFileSync(path.join(BUILD, 'retrato.json'), JSON.stringify({ fovVertGraus: r.fovVertGraus, distancia: r.distancia }));
+  console.log('retrato ok');
+} else if (args.includes('--eventos')) {
   const ev = await page.evaluate(() => window.eventos());
   fs.writeFileSync(path.join(BUILD, 'eventos.json'), JSON.stringify(ev, null, 1));
   console.log('eventos ok');
@@ -76,7 +82,8 @@ if (args.includes('--eventos')) {
     console.log(f, Date.now() - t0, 'ms');
   }
 } else if (args.includes('--full')) {
-  const from = Number(arg('--from', 0)), to = Number(arg('--to', 95));
+  const dur = await page.evaluate(() => window.duracao());
+  const from = Number(arg('--from', 0)), to = Math.min(Number(arg('--to', dur)), dur);
   const out = path.join(BUILD, `frames_${String(from).padStart(5, '0')}_${String(to).padStart(5, '0')}.mp4`);
   const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'png', '-i', '-',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '14', '-pix_fmt', 'yuv420p', '-r', String(FPS), out], { stdio: ['pipe', 'inherit', 'inherit'] });

@@ -78,6 +78,7 @@ class TTS:
         # Usamos o objeto Kokoro só pelo fonemizador, tokenizador e vozes.
         self.k = Kokoro(os.path.join(pasta, "kokoro-v1.0-dur.onnx"), os.path.join(pasta, "voices-v1.0.bin"))
         self.sess = ort.InferenceSession(os.path.join(pasta, "kokoro-v1.0-dur.onnx"))
+        self.voz_chamado = "pf_dora"
 
     def falar(self, texto, voz=VOZ, velocidade=VELOCIDADE):
         fon = self.k.tokenizer.phonemize(texto, "pt-br")
@@ -132,63 +133,99 @@ def aparar(audio, limiar=0.008, margem=0.03):
     return audio[a:b], a / SR
 
 
+# Intervalo entre cenas: curto, proporcional à transição visual que acontece ali.
+GAP_FATOR, GAP_MIN, GAP_MAX = 0.4, 0.55, 1.5
+CAUDA_FINAL = 1.5  # legenda final na tela antes dos créditos
+CREDITOS = 5.0
+
+
+def calcular_warp(saida, ref, fim_conteudo):
+    """Mapa suave e monótono do tempo do vídeo (t) para o tempo do roteiro visual (s),
+    ancorado no início de cada trecho de legenda e no fim da fala de cada cena."""
+    from scipy.interpolate import PchipInterpolator
+    nov = [l for c in saida["cenas"] for sg in c["segmentos"] for l in sg["legendas"]]
+    old = [l for c in ref["cenas"] for sg in c["segmentos"] for l in sg["legendas"]]
+    assert [l["txt"] for l in nov] == [l["txt"] for l in old], "trechos de legenda diferentes do roteiro"
+    kt, ks = [0.0], [0.0]
+    for ln, lo in zip(nov, old):
+        kt.append(ln["t0"]); ks.append(lo["t0"])
+    for cn, co in zip(saida["cenas"], ref["cenas"]):
+        kt.append(cn["segmentos"][-1]["legendas"][-1]["t1"]); ks.append(co["segmentos"][-1]["legendas"][-1]["t1"])
+    kt += [fim_conteudo, fim_conteudo + CREDITOS]
+    ks += [90.0, 95.0]
+    o = np.argsort(kt)
+    kt, ks = np.array(kt)[o], np.array(ks)[o]
+    f = PchipInterpolator(kt, ks)
+    dt = 1 / 120
+    tt = np.arange(0, kt[-1] + dt, dt)
+    ss = f(tt)
+    deriv = np.gradient(ss, dt)
+    return {"dt": dt, "duracao": round(float(kt[-1]), 3), "s": [round(float(x), 4) for x in ss]}, deriv
+
+
 def main():
     pasta = sys.argv[1]
     tts = TTS(pasta)
-    total = 96.0
-    trilha = np.zeros(int(total * SR), dtype=np.float32)
+    ref = json.load(open(os.path.join(ROOT, "scene", "data", "timeline_roteiro.json"), encoding="utf-8"))
+    ref_fim = {c["cena"]: c["segmentos"][-1]["legendas"][-1]["t1"] for c in ref["cenas"]}
+    ref_ini = {c["cena"]: c["segmentos"][0]["legendas"][0]["t0"] for c in ref["cenas"]}
+    trilha = np.zeros(int(120 * SR), dtype=np.float32)
     saida = {"sr": SR, "voz": VOZ, "velocidade": VELOCIDADE, "cenas": []}
     relatorio = []
-    for cena in CENAS:
-        t = cena["inicio_fala"]
-        segs_out = []
-        for i, (exibido, pausa) in enumerate(cena["segmentos"]):
-            if i > 0:
-                t += pausa
-            pedacos = [p.strip() for p in exibido.split("|")]
-            texto = " ".join(pedacos)
-            fala = texto
-            for a, b in PRONUNCIA.items():
-                fala = fala.replace(a, b)
-            audio, pal, fon = tts.falar(fala)
-            audio, desloc = aparar(audio)
-            palavras_txt = texto.split()
-            if len(pal) != len(palavras_txt):
-                raise SystemExit(f"Contagem de palavras diferente em: {texto}\n{fon}\n{len(pal)} vs {len(palavras_txt)}")
-            n = audio.size
-            ini = int(round(t * SR))
-            trilha[ini:ini + n] += audio
-            palavras = []
-            for w, p in zip(palavras_txt, pal):
-                palavras.append({"w": w, "t0": round(t + p["t0"] - desloc, 3), "t1": round(t + p["t1"] - desloc, 3)})
-            # legendas
-            legendas, k = [], 0
-            for ped in pedacos:
-                nw = len(ped.split())
-                ws = palavras[k:k + nw]
-                legendas.append({"txt": ped, "t0": ws[0]["t0"], "t1": ws[-1]["t1"]})
-                k += nw
-            fim = t + n / SR
-            segs_out.append({"texto": texto, "t0": round(t, 3), "t1": round(fim, 3), "palavras": palavras, "legendas": legendas})
-            t = fim
-        j0, j1 = cena["janela"]
-        relatorio.append(f"Cena {cena['cena']}: fala {segs_out[0]['t0']:.2f}–{t:.2f}s  janela {j0}–{j1}  folga final {j1 - t:+.2f}s")
-        saida["cenas"].append({"cena": cena["cena"], "janela": cena["janela"], "segmentos": segs_out})
+    t = CENAS[0]["inicio_fala"]
+    for idx, cena in enumerate(CENAS):
+        if idx > 0:
+            gap_ref = ref_ini[cena["cena"]] - ref_fim[CENAS[idx - 1]["cena"]]
+            t += min(GAP_MAX, max(GAP_MIN, GAP_FATOR * gap_ref))
+        # a cena inteira numa só tomada: sem pausas inseridas, só as da pontuação
+        pedacos = [p.strip() for ex, _ in cena["segmentos"] for p in ex.split("|")]
+        texto = " ".join(pedacos)
+        fala = texto
+        for a_, b_ in PRONUNCIA.items():
+            fala = fala.replace(a_, b_)
+        audio, pal, fon = tts.falar(fala)
+        audio, desloc = aparar(audio)
+        palavras_txt = texto.split()
+        if len(pal) != len(palavras_txt):
+            raise SystemExit(f"Contagem de palavras diferente em: {texto}\n{fon}\n{len(pal)} vs {len(palavras_txt)}")
+        ini = int(round(t * SR))
+        trilha[ini:ini + audio.size] += audio
+        palavras = [{"w": w, "t0": round(t + p["t0"] - desloc, 3), "t1": round(t + p["t1"] - desloc, 3)} for w, p in zip(palavras_txt, pal)]
+        legendas, k = [], 0
+        for ped in pedacos:
+            nw = len(ped.split())
+            ws = palavras[k:k + nw]
+            legendas.append({"txt": ped, "t0": ws[0]["t0"], "t1": ws[-1]["t1"]})
+            k += nw
+        fim = t + audio.size / SR
+        saida["cenas"].append({"cena": cena["cena"], "segmentos": [{"texto": texto, "t0": round(t, 3), "t1": round(fim, 3), "palavras": palavras, "legendas": legendas}]})
+        relatorio.append(f"Cena {cena['cena']}: fala {t:.2f}–{fim:.2f}s ({fim - t:.1f}s)")
+        t = fim
 
+    fim_conteudo = round(saida["cenas"][-1]["segmentos"][-1]["legendas"][-1]["t1"] + CAUDA_FINAL, 3)
+    for c in saida["cenas"]:
+        c["janela"] = [None, None]
     pico = np.abs(trilha).max()
-    trilha *= 0.89 / pico
+    trilha = trilha[: int((fim_conteudo + CREDITOS) * SR)] * (0.89 / pico)
     os.makedirs(os.path.join(ROOT, "build"), exist_ok=True)
     sf.write(os.path.join(ROOT, "build", "narracao.wav"), trilha, SR)
 
     # chamado da pessoa escondida
-    chamado, _, _ = tts.falar("Ei! Aqui!", voz="pf_dora", velocidade=1.0)
+    chamado, _, _ = tts.falar("Ei! Aqui!", voz=tts.voz_chamado, velocidade=1.0)
     chamado, _ = aparar(chamado)
     sf.write(os.path.join(ROOT, "build", "chamado.wav"), chamado / np.abs(chamado).max() * 0.9, SR)
     saida["chamado"] = {"t0": 1.05, "dur": round(chamado.size / SR, 3)}
 
+    # janelas das cenas no tempo do vídeo: entre o fim da fala anterior e o início da seguinte
+    warp, deriv = calcular_warp(saida, ref, fim_conteudo)
     with open(os.path.join(ROOT, "scene", "data", "timeline.json"), "w", encoding="utf-8") as f:
         json.dump(saida, f, ensure_ascii=False, indent=1)
+    with open(os.path.join(ROOT, "scene", "data", "warp.json"), "w") as f:
+        json.dump(warp, f, separators=(",", ":"))
     print("\n".join(relatorio))
+    print(f"conteúdo: {fim_conteudo:.2f}s  + créditos = {warp['duracao']:.2f}s")
+    print(f"velocidade do roteiro (ds/dt): mín {deriv.min():.2f}  máx {deriv.max():.2f}  "
+          f"mediana {np.median(deriv):.2f}  >2.5 em {np.mean(deriv > 2.5) * 100:.1f}% do tempo")
     print("chamado:", saida["chamado"])
 
 

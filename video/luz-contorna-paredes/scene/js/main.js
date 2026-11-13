@@ -143,7 +143,7 @@ const DESTAQUES = [
   { t0: 11.95, t1: 14.9, txt: 'A luz já faz isso.', top: 950 },
   { t0: 42.7, t1: 47.7, txt: 'Agora começa a hipótese.', top: 300 },
   { t0: 57.9, t1: 62.7, txt: 'Mais espalhamento pelas bordas.', top: 270 },
-  { t0: 67.1, t1: 71.6, txt: 'Receber sinal ≠ enxergar detalhes.', top: 950 },
+  { t0: 67.1, t1: 71.6, txt: 'Receber sinal ≠ enxergar detalhes.', top: 140 },
   { t0: 86.3, t1: 90.1, txt: 'O segredo está na escala.', top: 300 },
 ];
 
@@ -193,7 +193,8 @@ function edicao(t, O, camState) {
   st.lupa = {
     op: win(t, 28.9, 32.3, 0.35, 0.35), zoom: ss(28.95, 29.85, t), ondas: ss(29.75, 30.15, t), nota: ss(30.35, 30.75, t), ancora: anc,
   };
-  st.detector = { op: win(t, 66.8, 75.6, 0.45, 0.4), sinal: ss(67.15, 67.5, t), imagem: ss(68.2, 68.55, t), formula: ss(70.45, 70.85, t) };
+  // tela ilustrativa: primeiro o caso atual (1 m); em "limita os detalhes", os outros comprimentos de onda
+  st.detector = { op: win(t, 66.8, 75.6, 0.45, 0.4), c1m: ss(66.95, 67.35, t), c10: ss(71.6, 71.95, t), c1: ss(71.85, 72.2, t), formula: ss(72.7, 73.05, t) };
   st.legenda = win(t, 55.8, 63.0, 0.5, 0.2);
   st.split = t >= 78 && t < 84.6 ? win(t, 78.0, 84.6, 0.35, 0.3) : 0;
   st.visaoAdaptada = Math.max(win(t, 39.4, 42.6, 0.35, 0.1), win(t, 66.6, 75.4, 0.35, 0.6)) * 0.95;
@@ -211,7 +212,33 @@ function camAt(t) {
   return c;
 }
 
-window.renderAt = (t) => {
+// ---------- tempo de saída x tempo do roteiro ----------
+// O roteiro visual (timeline.js) foi escrito sobre a narração de referência
+// (data/timeline_roteiro.json). data/warp.json leva o tempo do vídeo final ao tempo
+// do roteiro, ancorado nos trechos de legenda: os eventos ficam sincronizados com a
+// narração atual, qualquer que seja a voz.
+let warp = null;
+function tempoRoteiro(tv) {
+  if (!warp) return tv;
+  const x = tv / warp.dt;
+  const i = Math.max(0, Math.min(warp.s.length - 2, Math.floor(x)));
+  const u = Math.min(1, Math.max(0, x - i));
+  return warp.s[i] + (warp.s[i + 1] - warp.s[i]) * u;
+}
+function tempoVideo(ts) {
+  if (!warp) return ts;
+  const s = warp.s;
+  let lo = 0, hi = s.length - 1;
+  if (ts <= s[0]) return 0;
+  if (ts >= s[hi]) return hi * warp.dt;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (s[m] <= ts) lo = m; else hi = m; }
+  const u = (ts - s[lo]) / Math.max(1e-9, s[hi] - s[lo]);
+  return (lo + u) * warp.dt;
+}
+window.duracao = () => (warp ? warp.duracao : T.DURACAO);
+
+window.renderAt = (tv) => {
+  const t = tempoRoteiro(tv);
   const schem = T.esquema(t);
   world.update(t, schem);
   // céu, névoa e luzes acompanham o modo esquemático
@@ -227,7 +254,7 @@ window.renderAt = (t) => {
   // desfoque proporcional ao movimento da câmera (acelerações nas transições)
   let blur = 0;
   if (!c.split) {
-    const cp = camAt(Math.max(0, t - 1 / 30));
+    const cp = camAt(tempoRoteiro(Math.max(0, tv - 1 / 30)));
     if (!cp.split) {
       const dPos = c.pos.distanceTo(cp.pos);
       const dAng = c.quat.angleTo(cp.quat) * 180 / Math.PI;
@@ -292,14 +319,54 @@ window.renderAt = (t) => {
   }
   canvas.style.filter = blur > 0.25 ? `blur(${blur.toFixed(2)}px)` : 'none';
 
-  overlay.update(t, edicao(t, O, c));
+  overlay.update(tv, edicao(t, O, c));
   return true;
 };
 
-window.eventos = () => ({ ...T.EVENTOS, passos: T.passos(), chamado: timeline.chamado, duracao: T.DURACAO });
+// eventos para o áudio, já no tempo do vídeo final
+window.eventos = () => {
+  const E = T.EVENTOS;
+  const v = (x) => +tempoVideo(x).toFixed(3);
+  return {
+    trocas: E.trocas.map(v), transicoes: E.transicoes.map(v), cortes: E.cortes.map(v),
+    painelEntra: v(E.painelEntra), pilula: v(E.pilula), creditos: v(E.creditos),
+    tela: v(66.85), formula: v(70.45), cliques: v(37.7),
+    passos: T.passos().map(v), chamado: timeline.chamado, duracao: window.duracao(),
+    // amostras roteiro -> vídeo, para a trilha acompanhar as cenas
+    mapa: Array.from({ length: 191 }, (_, i) => [i * 0.5, v(i * 0.5)]),
+  };
+};
+
+// retrato da pessoa escondida, visto da abertura, para a simulação de imagem (tools/visao.py)
+window.renderRetrato = () => {
+  const w = 600, h = 800;
+  const r2 = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  r2.setSize(w, h);
+  r2.toneMapping = THREE.ACESFilmicToneMapping;
+  r2.toneMappingExposure = 1.1;
+  r2.outputColorSpace = THREE.SRGBColorSpace;
+  const sc = new THREE.Scene();
+  sc.background = new THREE.Color('#15181e');
+  const pessoa = new Person(PALETAS.escondida);
+  pessoa.pose({ headPitch: -0.03 });
+  sc.add(pessoa.root);
+  sc.add(new THREE.HemisphereLight(0xc8d4ee, 0x6a5a4a, 1.6));
+  const key = new THREE.DirectionalLight(0xffe2c0, 2.2);
+  key.position.set(2, 3, 4);
+  sc.add(key);
+  // mesma distância da abertura até ela (6 m); campo vertical de ~2,5 m
+  const cam = new THREE.PerspectiveCamera(23.5, w / h, 0.1, 50);
+  cam.position.set(0, 1.0, 6.0);
+  cam.lookAt(0, 0.95, 0);
+  r2.render(sc, cam);
+  const url = r2.domElement.toDataURL('image/png');
+  r2.dispose();
+  return { url, fovVertGraus: 23.5, distancia: 6.0 };
+};
 
 (async () => {
   timeline = await (await fetch('./data/timeline.json')).json();
+  try { warp = await (await fetch('./data/warp.json')).json(); } catch (e) { warp = null; }
   const maps = {};
   for (const k of ['500nm', '1cm', '10cm', '1m']) maps[k] = await loadTex(`./data/campo_${k}.png`);
   som = new WaveField(scene, maps);
