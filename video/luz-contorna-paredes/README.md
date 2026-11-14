@@ -9,7 +9,9 @@ Todo o vídeo é gerado por código, de forma reprodutível:
 | Etapa | Arquivo | O que faz |
 |---|---|---|
 | Física | `tools/campos.py` | Calcula, pelo princípio de Huygens–Fresnel, a intensidade e a fase atrás da abertura de 1 m para λ = 500 nm, 1 cm, 10 cm e 1 m. Gera `scene/data/campo_*.png`. |
-| Narração | `tools/narracao.py` | Sintetiza a narração (Kokoro TTS, pt-BR) e extrai o tempo exato de cada palavra a partir das durações de fonemas do modelo. Gera `scene/data/timeline.json`, usado nas legendas. |
+| Narração | `tools/narracao.py` | Sintetiza a narração, cada cena numa só tomada (sem pausas inseridas), com o tempo de cada palavra para as legendas. Motor offline (Kokoro) ou Azure Speech (`tools/tts_azure.py`, voz neural mais humana). Gera `scene/data/timeline.json` e `scene/data/warp.json`. |
+| Sincronia | `scene/data/warp.json` | Mapa suave do tempo do vídeo para o roteiro visual (`timeline_roteiro.json`), ancorado em cada trecho de legenda: trocar a voz não desalinha nenhum evento. |
+| Visão simulada | `tools/visao.py` | Imagem da pessoa escondida borrada pela difração (padrão de Airy, abertura de 1 m) para λ = 1 cm, 10 cm e 1 m. |
 | Cena | `scene/` | Página Three.js com cidade, personagens, ondas, painel e legendas. `window.renderAt(t)` desenha qualquer instante de forma determinística. |
 | Captura | `tools/render.mjs` | Abre a cena no Chromium headless e grava os quadros direto no ffmpeg. |
 | Áudio | `tools/audio.py` | Trilha instrumental sintetizada, efeitos (passos, transições, painel) e mixagem com ducking sob a narração. |
@@ -40,11 +42,15 @@ curl -L -o modelos/voices-v1.0.bin  https://github.com/thewh1teagle/kokoro-onnx/
 python3 tools/expor_duracoes.py modelos      # cria kokoro-v1.0-dur.onnx
 
 python3 tools/campos.py                      # mapas de difração
-python3 tools/narracao.py modelos            # narração e tempos das legendas
+python3 tools/narracao.py modelos            # narração e tempos das legendas (voz offline)
+# ou, com a voz neural do Azure (chave como segredo de rede do ambiente para
+# brazilsouth.tts.speech.microsoft.com, cabeçalho Ocp-Apim-Subscription-Key, ou AZURE_SPEECH_KEY):
+# python3 tools/narracao.py modelos --motor azure --regiao brazilsouth --voz pt-BR-AntonioNeural
+node tools/render.mjs --retrato && python3 tools/visao.py   # visão simulada da pessoa escondida
 node tools/render.mjs --eventos              # tempos de eventos para o áudio
 python3 tools/audio.py                       # trilha, efeitos e mixagem
-node tools/render.mjs --full --from 0 --to 48 &
-node tools/render.mjs --full --from 48 --to 95
+node tools/render.mjs --full --from 0 --to 38 &
+node tools/render.mjs --full --from 38
 wait
 bash tools/montar.sh                         # saida/e-se-a-luz-contornasse-paredes.mp4
 ```

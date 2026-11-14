@@ -5,3 +5,4 @@ numpy
 scipy
 soundfile
 pillow
+azure-cognitiveservices-speech  # opcional: voz neural do Azure

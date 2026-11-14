@@ -1,7 +1,9 @@
-"""Gera a narração (Kokoro TTS, voz pm_alex, pt-BR) e o arquivo de sincronização.
+"""Gera a narração e o arquivo de sincronização.
 
 Uso:
-    python3 tools/narracao.py <pasta_dos_modelos>
+    python3 tools/narracao.py <pasta_dos_modelos>                     # Kokoro (offline)
+    python3 tools/narracao.py <pasta_dos_modelos> --motor azure       # Azure Speech (voz neural, mais humana)
+        [--regiao brazilsouth] [--voz pt-BR-AntonioNeural]
 
 A pasta de modelos precisa conter:
     kokoro-v1.0-dur.onnx  (kokoro-v1.0.onnx com a saída de durações exposta, ver tools/expor_duracoes.py)
@@ -79,6 +81,7 @@ class TTS:
         self.k = Kokoro(os.path.join(pasta, "kokoro-v1.0-dur.onnx"), os.path.join(pasta, "voices-v1.0.bin"))
         self.sess = ort.InferenceSession(os.path.join(pasta, "kokoro-v1.0-dur.onnx"))
         self.voz_chamado = "pf_dora"
+        self.voz = VOZ
 
     def falar(self, texto, voz=VOZ, velocidade=VELOCIDADE):
         fon = self.k.tokenizer.phonemize(texto, "pt-br")
@@ -163,14 +166,23 @@ def calcular_warp(saida, ref, fim_conteudo):
     return {"dt": dt, "duracao": round(float(kt[-1]), 3), "s": [round(float(x), 4) for x in ss]}, deriv
 
 
+def arg(nome, padrao=None):
+    return sys.argv[sys.argv.index(nome) + 1] if nome in sys.argv else padrao
+
+
 def main():
     pasta = sys.argv[1]
-    tts = TTS(pasta)
+    motor = arg("--motor", "kokoro")
+    if motor == "azure":
+        from tts_azure import TTSAzure
+        tts = TTSAzure(regiao=arg("--regiao", "brazilsouth"), voz=arg("--voz", "pt-BR-AntonioNeural"))
+    else:
+        tts = TTS(pasta)
     ref = json.load(open(os.path.join(ROOT, "scene", "data", "timeline_roteiro.json"), encoding="utf-8"))
     ref_fim = {c["cena"]: c["segmentos"][-1]["legendas"][-1]["t1"] for c in ref["cenas"]}
     ref_ini = {c["cena"]: c["segmentos"][0]["legendas"][0]["t0"] for c in ref["cenas"]}
     trilha = np.zeros(int(120 * SR), dtype=np.float32)
-    saida = {"sr": SR, "voz": VOZ, "velocidade": VELOCIDADE, "cenas": []}
+    saida = {"sr": SR, "motor": motor, "voz": getattr(tts, "voz", VOZ), "cenas": []}
     relatorio = []
     t = CENAS[0]["inicio_fala"]
     for idx, cena in enumerate(CENAS):
