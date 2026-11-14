@@ -23,7 +23,7 @@
   const M2U = (0.46 * FIG * 0.92 * 1.02) / 1.7;
   const MAXT = 24000, MAXU = 3000, MAXC = 5000, MAXSMOKE = 900, MAXDROP = 3600;
   let renderer, scene, camera, sun, hemi, el, cw = 1, ch = 1, gradient, toonV, glowV, skyTex, skyCtx;
-  let land, water, hot, landTop = null, landSide = null;
+  let land, water, hot, landTop = null, landSide = null, pools = null, flies = null, NIGHT = 0;
   let people, heads, hats, beasts, props, smoke, clouds, rain, snow, bolts;
   let landFine = null, landPlain = null;
   let wx0 = 0, wy0 = 0, ws = 0, roll = 0, needBuild = true, floraClock = 0, bldClock = 0, gTarget = 0, frameN = 0;
@@ -126,6 +126,67 @@
     return TL.CLOTH; // banners and awnings in a realm's colours
   }
 
+  // ------------------------------------------------------------ night
+  // After dark: warm light pools on the ground around every home, hearth and hall (with the bloom
+  // they read as lamplight and firelight), windows that glow brighter, and fireflies drifting over
+  // the woods and meadows on warm nights.
+  function glowTex() {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  const FLY_N = 260, flyHome = new Float32Array(FLY_N * 3), flyPh = new Float32Array(FLY_N);
+  function makeNight() {
+    const tex = glowTex(), pg = new THREE.PlaneGeometry(1, 1); pg.rotateX(-Math.PI / 2);
+    pools = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ map: tex, color: 0xffa04a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }), 900);
+    pools.frustumCulled = false; pools.count = 0; pools.renderOrder = 3; pools.visible = false; scene.add(pools);
+    const fg = new THREE.BufferGeometry();
+    fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FLY_N * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    fg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(FLY_N * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    flies = new THREE.Points(fg, new THREE.PointsMaterial({ size: 0.42, map: tex, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, fog: false }));
+    flies.frustumCulled = false; flies.visible = false; flies.renderOrder = 4; scene.add(flies);
+    for (let k = 0; k < FLY_N; k++) { flyPh[k] = Math.random() * 100; flyHome[k * 3 + 1] = -999; }
+  }
+  const LIT = new Set([BT.HOUSE, BT.HUT, BT.TENT, BT.HALL, BT.HEARTH, BT.TEMPLE, BT.SHRINE, BT.KEEP, BT.MARKET, BT.WORKSHOP, BT.TOWER]);
+  let poolN = 0;
+  function poolAt(b, base) {
+    if (!pools || poolN >= 900 || !LIT.has(b.type)) return;
+    const r = (Math.max(b.w, b.h) + 2.2) * (b.type === BT.HEARTH ? 1.4 : 1);
+    _m.makeScale(r, 1, r); _m.setPosition(b.cx, base + 0.06, b.cy);
+    pools.setMatrixAt(poolN++, _m);
+  }
+  function nightTick(t, dist) {
+    const n = NIGHT;
+    if (pools) { pools.visible = n > 0.04 && pools.count > 0; pools.material.opacity = Math.pow(n, 1.3) * 0.5; }
+    if (glowV) glowV.color.setScalar(0.5 + 0.5 * n); // windows dim by day, glow at night
+    if (!flies) return;
+    const warm = Sky.season() <= 2, on = n > 0.35 && warm && R.cam.z >= 12;
+    flies.visible = on;
+    if (!on) return;
+    const P = flies.geometry.attributes.position, C = flies.geometry.attributes.color, pa = P.array, ca = C.array, rad = Math.min(ws * 0.45, dist * 0.7 + 6);
+    for (let k = 0; k < FLY_N; k++) {
+      let hx = flyHome[k * 3], hy = flyHome[k * 3 + 1], hz = flyHome[k * 3 + 2];
+      if (hy < -100 || Math.abs(hx - target.x) > rad || Math.abs(hz - target.z) > rad) { // find a new home over woods or meadow near the view
+        hy = -999;
+        for (let tries = 0; tries < 6; tries++) {
+          const x = target.x + (Math.random() - 0.5) * 2 * rad, z = target.z + (Math.random() - 0.5) * 2 * rad, i = AG.clamp(z | 0, 0, H - 1) * W + AG.clamp(x | 0, 0, W - 1);
+          if (Wd.veg[i] >= 90 && Wd.fl[i] < 0.004 && !Wd.bgrid[i] && Wd.Tc(i) > 0.35) { hx = x; hz = z; hy = V.groundAt(x, z) + 0.25 + Math.random() * 0.9; break; }
+        }
+        flyHome[k * 3] = hx; flyHome[k * 3 + 1] = hy; flyHome[k * 3 + 2] = hz;
+      }
+      const ph = flyPh[k], o = k * 3;
+      if (hy < -100) { pa[o + 1] = -999; ca[o] = ca[o + 1] = ca[o + 2] = 0; continue; }
+      pa[o] = hx + Math.sin(t * 0.7 + ph) * 0.45 + Math.sin(t * 1.9 + ph * 2) * 0.12;
+      pa[o + 1] = hy + Math.sin(t * 1.1 + ph * 1.3) * 0.22;
+      pa[o + 2] = hz + Math.cos(t * 0.6 + ph * 0.7) * 0.45;
+      const blink = (0.15 + 0.85 * Math.pow(Math.max(0, Math.sin(t * (1.4 + (ph % 1)) + ph)), 3)) * n; // a slow pulse
+      ca[o] = 0.85 * blink; ca[o + 1] = 1.0 * blink; ca[o + 2] = 0.35 * blink;
+    }
+    P.needsUpdate = true; C.needsUpdate = true;
+  }
+
   // ------------------------------------------------------------ surface textures
   // The textures (textures.js) live in one texture array (WebGL 2). They are sampled by position,
   // so no model needs texture coordinates: the land by world position (its tops, and its sides with
@@ -133,7 +194,7 @@
   // axes blended by the surface normal (so a texture stays on a walking animal). The texture
   // multiplies the surface's own colour (it averages a neutral grey) and its brightness bends the
   // normal a little for relief. Detail levels turn relief and then textures off.
-  const TP = { on: false, u: null, bumpLand: { value: 0.9 } };
+  const TP = { on: false, u: null, bumpLand: { value: 0.9 }, wind: { tpTime: { value: 0 }, tpWind: { value: 0.4 } } };
   function setupTextures() {
     V.textured = false;
     if (!AG.Textures || !renderer.capabilities.isWebGL2 || !THREE.DataTexture2DArray) return;
@@ -145,15 +206,16 @@
       tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true;
       tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
       tex.needsUpdate = true;
-      TP.u = { tpArr: { value: tex }, tpOn: { value: 1 }, tpBump: { value: 0.4 }, tpScale: { value: Float32Array.from(T.SCALE) } };
+      TP.u = { tpArr: { value: tex }, tpOn: { value: 1 }, tpBump: { value: 0.4 }, tpScale: { value: Float32Array.from(T.SCALE) }, tpAmt: { value: 1 }, tpRim: { value: 0 }, tpDay: { value: 1 } };
       TP.on = true; V.textured = true;
     } catch (e) { TP.on = false; }
   }
   const TP_VS = `
+uniform float tpTime; uniform float tpWind;
 attribute float aMat; attribute float aTop; attribute float aSide;
 varying vec3 vTpPos; varying vec3 vTpNrm; varying float vTpA; varying float vTpB; varying float vTpTop;`;
   const TP_FS = `
-uniform mediump sampler2DArray tpArr; uniform float tpOn; uniform float tpBump; uniform float tpScale[${AG.Textures ? AG.Textures.NAMES.length : 1}]; uniform float tpLayer;
+uniform mediump sampler2DArray tpArr; uniform float tpOn; uniform float tpBump; uniform float tpAmt; uniform float tpRim; uniform float tpDay; uniform float tpTime; uniform float tpWind; uniform float tpScale[${AG.Textures ? AG.Textures.NAMES.length : 1}]; uniform float tpLayer;
 varying vec3 vTpPos; varying vec3 vTpNrm; varying float vTpA; varying float vTpB; varying float vTpTop;
 vec3 tpPerturb(vec3 sp, vec3 sn, vec2 dh, float fd) {
   vec3 sx = dFdx(sp), sy = dFdy(sp), r1 = cross(sy, sn), r2 = cross(sn, sx);
@@ -171,6 +233,15 @@ vTpTop = 0.0;
 vTpPos = (modelMatrix * tpW).xyz; vTpNrm = objectNormal; vTpA = aTop; vTpB = aSide;`;
   const TP_VS_MODEL = (attr) => `
 vTpPos = transformed; vTpNrm = objectNormal; vTpA = ${attr ? 'aMat' : '0.0'}; vTpB = 0.0; vTpTop = 0.0;`;
+  const TP_VS_SWAY = `
+#ifdef USE_INSTANCING
+{
+  vec3 tpIw = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+  float tpSw = sin(tpTime * 1.5 + tpIw.x * 0.37 + tpIw.z * 0.29) + 0.45 * sin(tpTime * 2.9 + tpIw.x * 0.93 - tpIw.z * 0.61);
+  float tpBend = tpWind * transformed.y * transformed.y;
+  transformed.x += tpSw * tpBend * 0.07; transformed.z += tpSw * tpBend * 0.045;
+}
+#endif`;
   const L_ = (n) => (AG.Textures ? AG.Textures.L[n] : 0).toFixed(1);
   // the land: tops by their surface, sides as earth or rock under a fringe of the top
   const TP_FS_LAND = () => `
@@ -186,10 +257,10 @@ if (tpOn > 0.5) {
     else if (abs(tpL - ${L_('ROCK')}) < 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, tpG * vec3(0.98, 0.97, 0.96) * 0.85, 0.65);
   }
   vec3 tpC = texture(tpArr, vec3(tpUV * tpScale[int(tpL + 0.5)], tpL)).rgb;
-  diffuseColor.rgb *= tpC * 2.0;
+  diffuseColor.rgb *= mix(vec3(1.0), tpC * 2.0, tpAmt);
   tpH = dot(texture(tpArr, vec3(tpUV * tpScale[int(tpL + 0.5)], tpL), 1.0).rgb, vec3(0.3333));
 }
-vec2 tpDH = vec2(dFdx(tpH), dFdy(tpH)) * tpBump;`;
+vec2 tpDH = vec2(dFdx(tpH), dFdy(tpH)) * tpBump * tpAmt;`;
   const TP_FS_MODEL = (attr) => `
 float tpH = 0.5;
 if (tpOn > 0.5) {
@@ -197,30 +268,44 @@ if (tpOn > 0.5) {
   vec3 tpN = normalize(vTpNrm), tpW = pow(abs(tpN), vec3(4.0));
   tpW /= tpW.x + tpW.y + tpW.z + 1e-5;
   vec3 tpC = texture(tpArr, vec3(vTpPos.zy * tpS, tpL)).rgb * tpW.x + texture(tpArr, vec3(vTpPos.xz * tpS, tpL)).rgb * tpW.y + texture(tpArr, vec3(vTpPos.xy * tpS, tpL)).rgb * tpW.z;
-  diffuseColor.rgb *= tpC * 2.0;
+  diffuseColor.rgb *= mix(vec3(1.0), tpC * 2.0, tpAmt);
   // relief from a softer (two mip levels coarser) sample of the main projection, so the cel-shaded
   // light rolls over stones and planks instead of flickering pixel by pixel
   vec2 tpUV = tpW.y > tpW.x && tpW.y > tpW.z ? vTpPos.xz : (tpW.x > tpW.z ? vTpPos.zy : vTpPos.xy);
   tpH = dot(texture(tpArr, vec3(tpUV * tpS, tpL), 2.0).rgb, vec3(0.3333));
 }
-vec2 tpDH = vec2(dFdx(tpH), dFdy(tpH)) * tpBump;`;
+vec2 tpDH = vec2(dFdx(tpH), dFdy(tpH)) * tpBump * tpAmt;`;
   const TP_FS_BUMP = `
 if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection);`;
+  const TP_FS_RIM = `
+if (tpRim > 0.0) outgoingLight += tpRim * tpDay * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0) * (diffuseColor.rgb * 0.55 + vec3(0.3, 0.3, 0.34));
+gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
   // mode: 'land' (per-column top and side layers), 'attr' (a layer per vertex), 'layer' (one layer)
-  function texturize(mat, mode, layer) {
-    if (!TP.on) return mat;
+  function texturize(mat, mode, layer, sway) {
+    if (!TP.on) return sway ? swayOnly(mat) : mat;
     const land = mode === 'land', attr = mode === 'attr', bump = !mat.isMeshLambertMaterial;
     mat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, TP.u);
+      Object.assign(sh.uniforms, TP.u, TP.wind);
       if (land) sh.uniforms.tpBump = TP.bumpLand;
       sh.uniforms.tpLayer = { value: layer || 0 };
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + TP_VS)
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + (land ? TP_VS_LAND : TP_VS_MODEL(attr)));
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + (land ? TP_VS_LAND : TP_VS_MODEL(attr)) + (sway ? TP_VS_SWAY : ''));
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + TP_FS)
         .replace('#include <color_fragment>', '#include <color_fragment>\n' + (land ? TP_FS_LAND() : TP_FS_MODEL(attr)))
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + (bump ? TP_FS_BUMP : ''));
+      if (bump && !land) sh.fragmentShader = sh.fragmentShader.replace('gl_FragColor = vec4( outgoingLight, diffuseColor.a );', TP_FS_RIM);
     };
-    mat.customProgramCacheKey = () => 'tp-' + mode + (bump ? '-b' : '');
+    mat.customProgramCacheKey = () => 'tp-' + mode + (bump ? '-b' : '') + (sway ? '-w' : '');
+    return mat;
+  }
+  // wind sway alone (without textures, on WebGL 1)
+  function swayOnly(mat) {
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, TP.wind);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float tpTime; uniform float tpWind;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + TP_VS_SWAY);
+    };
+    mat.customProgramCacheKey = () => 'sway';
     return mat;
   }
   const layerMats = new Map();
@@ -253,7 +338,7 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
     const geo = new THREE.PlaneGeometry(W, H, Math.max(1, W >> 2), Math.max(1, H >> 2));
     geo.rotateX(-Math.PI / 2); geo.translate(W / 2, SEA_Y, H / 2);
     const mat = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, fog: true,
+      transparent: true, depthWrite: true, fog: true,
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         uTime: { value: 0 }, uDepth: { value: null }, uSize: { value: new THREE.Vector2(W, H) },
         uSun: { value: new THREE.Vector3(0.3, 0.8, 0.4) }, uLight: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
@@ -400,6 +485,7 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
       }
       land.material = keep;
       renderer.render(scene, camera);
+      if (AG.Post3D) AG.Post3D.prewarm(scene, camera);
       needBuild = true;
       return true;
     } catch (e) { needBuild = true; return false; }
@@ -433,6 +519,8 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
     el.addEventListener('webglcontextrestored', () => { V.lost = false; V.ok = true; needBuild = true; try { applyQuality(); } catch (e) { /* next frame */ } }, false);
     makeGeos();
     setupTextures();
+    if (AG.Post3D) AG.Post3D.setup(renderer);
+    V.setLook(V.lookWanted || 'stylized');
     scene = new THREE.Scene();
     const sc = document.createElement('canvas'); sc.width = 2; sc.height = 128; skyCtx = sc.getContext('2d');
     skyTex = new THREE.CanvasTexture(sc); scene.background = skyTex;
@@ -496,6 +584,7 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
 
     // flora: twenty instanced plant and rock shapes (see makeFlora)
     makeFlora(inst, toon);
+    makeNight();
 
     // figures: a jointed humanoid, a quadruped, heads, hats and a generic prop box
     const humanGeo = merge([
@@ -819,7 +908,7 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
       { geo: drum, c: grey(220), x: -0.19, y: 0.42, z: 0, sx: 0.09, sy: 0.24, sz: 0.09 },
     ]);
     const k = (n) => (lowEnd ? Math.ceil(n / 2) : n);
-    const coloured = texturize(toon({ vertexColors: true }), 'attr'), solid = (name) => (TP.on ? layerMat(name) : toon({}));
+    const still = texturize(toon({ vertexColors: true }), 'attr'), coloured = texturize(toon({ vertexColors: true }), 'attr', 0, true), solid = (name) => (TP.on ? layerMat(name) : toon({}));
     const C = PLANT_CAPS;
     PL.trunks = inst(g6(0.3, 0.5, 6, true), solid('BARK'), k(C.trunks), true, false);
     PL.conifers = inst(tiers(false), coloured, k(C.conifers), true, true);
@@ -837,11 +926,11 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
     PL.reeds = inst(reedGeo, coloured, k(C.reeds), false, false);
     PL.ferns = inst(fernGeo, coloured, k(C.ferns), false, true);
     PL.rocks = inst(GEO.mound, solid('ROCK'), k(C.rocks), true, true);
-    PL.crags = inst(cragGeo, coloured, k(C.crags), true, true);
+    PL.crags = inst(cragGeo, still, k(C.crags), true, true);
     PL.snowcaps = inst(oct, solid('SNOW'), k(C.snowcaps), false, true);
     PL.tips = inst(pyramid, solid('SNOW'), k(C.tips), false, true); // snow on the crag tops
     PL.flowers = inst(oct, new THREE.MeshLambertMaterial(), k(C.flowers), false, false);
-    PL.cacti = inst(cactusGeo, coloured, k(C.cacti), true, false);
+    PL.cacti = inst(cactusGeo, still, k(C.cacti), true, false);
     for (const name in PL) PL[name].userData.cap = k(C[name]);
   }
 
@@ -1429,6 +1518,7 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
   function syncBuildings() {
     if (!ws) return;
     const seen = new Set(), x1 = wx0 + ws, y1 = wy0 + ws;
+    poolN = 0;
     for (const c of Civ.cities) {
       if (!c.alive || c.x < wx0 - 30 || c.x > x1 + 30 || c.y < wy0 - 30 || c.y > y1 + 30) continue;
       for (const bid of c.buildings) {
@@ -1441,12 +1531,14 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
         if (b.type === BT.DOCK) base = Math.max(base, 0.12);
         g.position.set(b.cx, base, b.cy);
         g.updateMatrixWorld();
+        if (b.prog >= 1) poolAt(b, base);
         if (g.userData.rise) g.userData.rise.scale.y = Math.max(0.05, b.prog * g.userData.riseH);
         if (g.userData.crops) { g.userData.crops.material = cropMat(b.growth); g.userData.crops.scale.y = 0.06 + b.growth * 0.3; }
         seen.add(b.id);
       }
     }
     for (const [id, g] of groups) if (!seen.has(id)) { scene.remove(g); groups.delete(id); }
+    if (pools) { pools.count = poolN; pools.instanceMatrix.needsUpdate = true; }
   }
 
   // ------------------------------------------------------------ creatures
@@ -1732,6 +1824,7 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
   let lastSky = '';
   function lighting(dist) {
     const day = Sky.daylight(), sh = Sky.sunHeight(), sd = Sky.sunDir();
+    NIGHT = 1 - day;
     const dusk = Math.max(0, 1 - Math.abs(sh) / 0.35) * (day > 0.05 ? 1 : 0);
     const ci = AG.clamp((R.cam.y / 4) | 0, 0, Sky.CLH - 1) * Sky.CLW + AG.clamp((R.cam.x / 4) | 0, 0, Sky.CLW - 1);
     const gloom = Math.min(1, Sky.dark[ci] * 1.3); // under a storm the light goes grey
@@ -1795,6 +1888,12 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
     TP.bumpLand.value = want && Q.level < 2 ? 0.9 : 0;
   }
   V.applyTextures = () => applyTextures();
+  // The look of the close-up (post3d.js): it sets the finish and how strongly textures and rim light show.
+  V.setLook = function (name) {
+    V.lookWanted = name;
+    const L = AG.Post3D ? AG.Post3D.setLook(name) : null;
+    if (TP.on && L) { TP.u.tpAmt.value = L.tex; TP.u.tpRim.value = L.rim; }
+  };
   function adaptQuality(t) {
     const real = Q.prev ? t - Q.prev : 0; Q.prev = t; // the real time between 3D frames (not the game's capped step)
     if (Q.lock || Q.fixed) return; // (a level chosen in the settings, or pinned by a benchmark)
@@ -1832,10 +1931,21 @@ if (tpBump > 0.0) normal = tpPerturb(-vViewPosition, normal, tpDH, faceDirection
     updatePrecip(Math.min(dt, 0.1), dist);
     updateBolts(t);
     lighting(dist);
+    nightTick(t, dist);
     updateSea(t, dt);
     if (AG.Disaster3D) AG.Disaster3D.render(scene, t, Q.level);
-    renderer.render(scene, camera);
-    V.stats.window = ws; V.stats.triangles = renderer.info.render.triangles; V.stats.calls = renderer.info.render.calls; V.stats.quality = Q.level;
+    if (TP.on) TP.u.tpDay.value = 0.3 + 0.7 * Sky.daylight();
+    TP.wind.tpTime.value = t;
+    { const wv = Math.hypot(Sky.wind.x, Sky.wind.y), ci = AG.clamp((R.cam.y / 4) | 0, 0, Sky.CLH - 1) * Sky.CLW + AG.clamp((R.cam.x / 4) | 0, 0, Sky.CLW - 1);
+      const target = 0.25 + wv * 0.6 + Math.min(1, Sky.dark[ci] * 1.3) * 0.9; TP.wind.tpWind.value += (target - TP.wind.tpWind.value) * 0.02; } // storms bend the trees
+    // the look: drawn off-screen and finished (outlines, focus, bloom, grading), or drawn plainly
+    if (AG.Post3D && AG.Post3D.render(scene, camera, { level: Q.level, night: 1 - Sky.daylight() })) {
+      V.stats.triangles = AG.Post3D.stats.triangles; V.stats.calls = AG.Post3D.stats.calls; V.stats.postMs = AG.Post3D.stats.ms;
+    } else {
+      renderer.setRenderTarget(null); renderer.render(scene, camera);
+      V.stats.triangles = renderer.info.render.triangles; V.stats.calls = renderer.info.render.calls; V.stats.postMs = 0;
+    }
+    V.stats.window = ws; V.stats.quality = Q.level; V.stats.look = AG.Post3D ? AG.Post3D.look : 'classic';
     V.stats.clouds = clouds.visible ? clouds.count : 0; V.stats.drops = dropN;
   };
 

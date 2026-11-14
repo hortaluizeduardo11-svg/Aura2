@@ -51,6 +51,7 @@ js/ai.js       brains for embodied people and creatures, movement, combat
 js/history.js  NEW  cause-linked chronicle, timeline, era maps, save/load, branches
 js/god.js      player powers
 js/render.js   stylized 2D renderer + overlays
+js/post3d.js   NEW  the 3D finish: ink outlines, tilt-shift focus, bloom, grading, FXAA; the looks
 js/textures.js NEW  24 tileable surface textures painted in code (grass, rock, masonry, thatch...)
 js/view3d.js   3D renderer (voxel terrain, cel-shaded models)
 js/disaster3d.js  real-time meteor flights and impacts in the 3D close-up
@@ -760,6 +761,22 @@ These follow from the same rules rather than special cases:
   picking.
 - A lost WebGL context switches the close-up off until the browser restores it; the 2D map
   carries on.
+- The finish (`post3d.js`): the scene renders into an off-screen target with a 24-bit depth
+  texture; one full-screen pass then applies FXAA, ink (the second difference of inverse depth
+  over a one-to-1.5-pixel cross, relative to the centre, so flat faces give nothing and creases and
+  silhouettes give lines; the line is the colour beneath at 34% and fades between 1.7 and 4 times
+  the focus depth), tilt-shift (the focus is the depth at the screen centre; the blur weight
+  grows with |z - focus| / 0.6 focus and mixes in a quarter-resolution Gaussian of the scene),
+  grading (saturation, contrast, split toning, a moonlight tint by night), bloom added after the
+  grading (a quarter-resolution bright pass: threshold 0.93 by day, 0.6 by night), a highlight
+  shoulder above 0.8 and a vignette. The Pixel look renders the target at 1/3 resolution with
+  nearest filtering, a one-texel outline and 22 levels per channel. Detail 2 drops bloom and
+  focus; detail 3 drops the finish (Pixel keeps it, being cheaper than full resolution). Models
+  get rim light (a Fresnel term, brighter by day), and each look sets the texture strength.
+  Trees and grass sway in the vertex shader by their instance position and the sky's wind.
+  Night set-pieces: additive light pools under lit buildings (opacity follows the darkness),
+  glow materials dim by day, and 260 fireflies that find homes over vegetated ground near the
+  view on warm nights.
 - Textures in 3D (`textures.js`, `view3d.js`): 24 layers of 256x256, generated at load (~0.7 s)
   from periodic value noise, cellular noise and stamped strokes (blades, straw, needles, leaves),
   each normalised to a mean brightness of 50%. They live in one `DataTexture2DArray` (WebGL 2) with

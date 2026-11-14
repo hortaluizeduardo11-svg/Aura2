@@ -186,6 +186,16 @@ Settings take effect at once and are saved in the browser.
       some of it, so related species look related.
     - Each animal's own pigment shades its coat; albinos are white; antlers and big horns are
       male; domestic herds come in several colours.
+  - **Looks** (Menu → Graphics → 3D look):
+    - **Stylized** (the default): ink outlines on every silhouette and voxel step, a tilt-shift
+      focus that makes the world a living miniature, bloom on fire, lava and lamplight, rich
+      colour with warm light and cool shadows, rim light on figures, trees and grass swaying in
+      the wind (harder in storms). At night the land goes moonlit blue while warm light pools
+      around every home and hearth, windows glow, and fireflies drift over the woods.
+    - **Pixel**: the 3D world as crisp pixel art to match the map, drawn at a third of the
+      resolution with one-pixel outlines and a limited palette (also the fastest).
+    - **Realistic**: full-strength textures and gentle grading, no outlines.
+    - **Classic**: the plain cel-shaded look.
   - **Textures.** Every surface in the close-up has a detailed, realistic texture, painted in
     code when the game loads (nothing is downloaded): grass blades, soil with pebbles and cracks,
     rippled sand, faceted rock with lichen, snow, leaf litter, furrowed fields, cobbled roads,
