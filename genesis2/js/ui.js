@@ -75,6 +75,7 @@
   const BAR = [
     { id: 'terrain', name: 'Terrain', icon: 'tab-terrain', groups: [['Shape', ['raise', 'lower', 'smooth']], ['Paint', ['grass', 'forest', 'desert', 'grain', 'snowcap']], ['Geology', ['plate', 'calm', 'iceage', 'warm']], ['Underground', ['dig', 'fill', 'ore', 'magma', 'aquifer']]] },
     { id: 'civ', name: 'Civilizations', icon: 'tab-civ', groups: [['People', ['people', 'possess']], ['Guide', ['dream', 'omen', 'inspire']], ['Diplomacy', ['harmony', 'discord']], ['Grace', ['bless']], ['Look', [['panel:peoples', 'Peoples'], ['panel:chronicle', 'History']]]] },
+    { id: 'peoples', name: 'Peoples', icon: 'tab-peoples', groups: [['Peoples', ['people', 'race-sylvan', 'race-stonekin', 'race-ashborn', 'race-saurian', 'race-hivekin', 'race-tidefolk', 'race-lithari', 'race-voidborn']], ['Biology', ['uplift']], ['Look', [['panel:world', 'Peoples']]]] },
     { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Look', [['panel:life', 'Tree of life']]]] },
     { id: 'weather', name: 'Weather', icon: 'tab-weather', groups: [['Storms', ['rain', 'thunder', 'blizzard', 'heat', 'bolt']], ['Elements', ['water', 'lava', 'acid', 'fire', 'freeze', 'drain']]] },
     { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse']]] },
@@ -604,7 +605,8 @@
     const c = Civ.cities[P.comm], k = c ? Civ.kingdoms[c.kd] : null, i = P.body >= 0 && U.alive[P.body] && U.pid[P.body] === P.id ? P.body : -1;
     const age = Math.floor(People.age(P)), title = People.title(P);
     const dead = P.died !== null;
-    let sub = `${P.sex ? 'man' : 'woman'} · ${age} years · ${dead ? 'died ' + yr(P.died) : AG.JOBS[P.job]}`;
+    const race = AG.Races && P.race ? AG.Races.get(P.race).adj + ' ' : '';
+    let sub = `${race}${P.sex ? 'man' : 'woman'} · ${age} years · ${dead ? 'died ' + yr(P.died) : AG.JOBS[P.job]}`;
     let h = `<div class="ihead"><span class="chipdot" style="background:${k ? k.css : '#888'}"></span><div><h2>${esc((title ? title + ' ' : '') + P.name)}${dead ? ' †' : ''}</h2><p class="muted">${esc(sub)}${c ? ` · <button type="button" class="link" data-city="${c.id}">${esc(c.name)}</button>` : ''}</p></div></div>`;
     if (i >= 0) {
       let doing = U.st[i] === 3 ? 'Fighting' : AG.TASKS[U.task[i]] || 'Idle';
@@ -698,7 +700,7 @@
     if (!c) return '';
     const k = Civ.kingdoms[c.kd], bc = Civ.counts(c, true), site = c.site >= 0 ? Civ.buildings[c.site] : null;
     const rel = c.religion >= 0 ? Civ.religions[c.religion] : null, L = Lang.get(c.lang);
-    let h = `<div class="ihead"><img class="banner" src="${R.bannerURL(k)}" alt=""><div><h2>${esc(c.name)}${c.alive ? '' : ' (abandoned)'}</h2><p class="muted">${AG.Lang.cap(c.kind)} of <button type="button" class="link" data-kd="${k.id}">${esc(k.name)}</button> · ${Tech.ERAS[c.era]}</p></div></div>`;
+    let h = `<div class="ihead"><img class="banner" src="${R.bannerURL(k)}" alt=""><div><h2>${esc(c.name)}${c.alive ? '' : ' (abandoned)'}</h2><p class="muted">${AG.Lang.cap(c.kind)} of <button type="button" class="link" data-kd="${k.id}">${esc(k.name)}</button> · ${Tech.ERAS[c.era]}${AG.Races ? ' · ' + esc(AG.Races.of(c).name) : ''}</p></div></div>`;
     h += `<dl class="kv"><dt>People</dt><dd>${c.members.length}${c.K ? ` · the land feeds ~${Math.round(c.K)}` : ''}</dd><dt>Way of life</dt><dd>${c.nomadic ? 'Nomadic foragers, moving camp with the seasons' : 'Settled'}</dd><dt>Founded</dt><dd>${yr(c.founded)}</dd><dt>Language</dt><dd>${L ? `<button type="button" class="link" data-lang="${L.id}">${esc(L.name)}</button>` : '—'}</dd><dt>Faith</dt><dd>${rel ? esc(rel.name) : 'the spirits and the ancestors'}</dd><dt>Fed</dt><dd>${pct(c.nutr)}${c.famine ? ' · <span style="color:var(--war)">famine</span>' : ''}</dd>${site ? `<dt>Building</dt><dd>${BUILD[site.type].name} · ${Math.round(site.prog * 100)}%</dd>` : ''}${c.materialized ? '<dt>In view</dt><dd>everyone here is embodied</dd>' : ''}</dl>`;
     const cu = c.customs; h += `<h3>Customs</h3><div class="chips"><span class="chip">${cu.marriage}</span><span class="chip">${cu.residence}</span><span class="chip">${cu.burial}</span><span class="chip">feast of ${cu.festival}</span>${cu.taboo !== 'none' ? `<span class="chip">taboo: ${cu.taboo}</span>` : ''}</div>`;
     if (c.jobs) h += `<h3>Work</h3><div class="chips">${AG.JOBS.map((j, q) => (c.jobs[q] ? `<span class="chip">${j} ×${c.jobs[q]}</span>` : '')).join('')}</div>`;
@@ -726,7 +728,7 @@
   function polityHTML(k) {
     if (!k) return '';
     const ruler = k.ruler ? People.get(k.ruler) : null, cap = Civ.capitalOf(k), L = Lang.get(k.lang);
-    let h = `<div class="ihead"><img class="banner" src="${R.bannerURL(k)}" alt=""><div><h2>${esc(k.name)}</h2><p class="muted">${Civ.GOVS[k.gov]} · ${L ? esc(L.name) + ' speakers' : ''} · since ${yr(k.founded)}${k.alive ? '' : ' · gone ' + yr(k.fell)}</p></div></div>`;
+    let h = `<div class="ihead"><img class="banner" src="${R.bannerURL(k)}" alt=""><div><h2>${esc(k.name)}</h2><p class="muted">${Civ.GOVS[k.gov]} · ${AG.Races ? esc(AG.Races.get(k.race || 0).name) + ' · ' : ''}${L ? esc(L.name) + ' speakers' : ''} · since ${yr(k.founded)}${k.alive ? '' : ' · gone ' + yr(k.fell)}</p></div></div>`;
     h += `<dl class="kv"><dt>${k.gov >= 3 ? 'Ruler' : k.gov === 2 ? 'Chief' : k.gov === 1 ? 'Headman' : 'Elders'}</dt><dd>${ruler && ruler.died === null ? personBtn(ruler.id) : k.gov === 0 ? 'Bands decide together' : 'None'}</dd><dt>Seat</dt><dd>${cap ? `<button type="button" class="link" data-city="${cap.id}">${esc(cap.name)}</button>` : '—'}</dd><dt>People</dt><dd>${fmt(k.pop)} in ${k.cities.length} ${k.cities.length === 1 ? 'community' : 'communities'}</dd><dt>Battles</dt><dd>${k.kills} slain · ${k.losses} lost</dd></dl>`;
     h += `<h3>State of the realm</h3><div class="rows">${bar('Stability', (k.stability + 1) / 2, 1, k.stability < 0 ? 'var(--war)' : 'var(--peace)', k.stability.toFixed(2))}${bar('Legitimacy', k.legit, 1, '#ffd56b', pct(k.legit))}${bar('Inequality', k.inequality, 1, '#ff9d4d', k.inequality.toFixed(2))}</div>`;
     if (k.inst.length) h += `<h3>Institutions</h3><div class="rows">${k.inst.map((I) => `<div class="row"><span>${Civ.INSTITUTIONS[I.kind]}</span><div class="bar"><i style="width:${(I.str * 100).toFixed(0)}%"></i></div><span title="corruption">${I.corrupt > 0.5 ? '<b style="color:var(--war)">corrupt</b>' : 'corruption ' + pct(I.corrupt)}</span></div>`).join('')}</div>`;
@@ -800,6 +802,10 @@
     h += `<h3>The land</h3><dl class="kv"><dt>Sea level</dt><dd>${Math.round(Geo.seaLevel * 2500)} m · ice ${pct(Geo.iceVol)}</dd><dt>Quakes · eruptions</dt><dd>${fmt(Geo.quakes)} · ${fmt(Geo.eruptions)}</dd><dt>Climate</dt><dd>${Geo.climate.anomaly >= 0 ? '+' : ''}${(Geo.climate.anomaly * 45).toFixed(1)} °C${Geo.climate.aerosol > 0.01 ? ' · volcanic winter' : ''}</dd></dl>`;
     const cases = new Int32Array(AG.DISEASES.length);
     for (const P of People.map.values()) if (P.died === null && P.dis) cases[P.dis - 1]++;
+    if (AG.Races) { // the peoples of the world and their numbers
+      const n = AG.Races.census(), rows = AG.Races.list.map((R, i) => [R, n[i] || 0]).filter(([R, v]) => v > 0 || !R.base);
+      if (rows.length) h += `<h3>Peoples</h3><dl class="kv">${rows.map(([R, v]) => `<dt title="${esc(R.desc)}">${esc(R.name)}${R.origin === 'folk' ? ' <span class="muted">(folk of the ' + esc(AG.Races.get(R.parent).name) + ')</span>' : R.origin === 'uplift' ? ' <span class="muted">(uplifted)</span>' : ''}</dt><dd>${v ? v.toLocaleString('en-US') : 'gone'}</dd>`).join('')}</dl>`;
+    }
     h += `<h3>Diseases</h3><dl class="kv">${AG.DISEASES.map((d, k) => `<dt><button type="button" class="link" data-dis="${k}" style="color:${d.color}">${esc(d.name)}</button></dt><dd>${cases[k] ? cases[k] + ' sick' : 'dormant'}</dd>`).join('')}</dl><div class="btnrow" style="margin-top:6px"><button type="button" class="btn" data-act="newdisease">Design a disease…</button></div>`;
     const T = (k) => (ms[k] || 0).toFixed(2);
     h += `<h3>Engine</h3><dl class="kv"><dt>Frame rate</dt><dd>${S.fps.toFixed(0)} fps</dd><dt>Clock</dt><dd>${AG.mode === 'watch' ? `${S.tps.toFixed(0)} ticks/s · ${S.simMs.toFixed(2)} ms/tick` : AG.mode === 'history' ? `${S.yps.toFixed(0)} years/s` : `${(S.myps || 0).toFixed(1)} Myr/s`}</dd><dt>Per system (ms)</dt><dd>geology ${T('geo')} · life ${T('life')} · civilisation ${T('civ')} · world ${T('world')} · physics ${T('physics')} · AI ${T('ai')} · weather ${T('sky')}</dd><dt>Rendering</dt><dd>${S.renderMs.toFixed(1)} ms per frame · ${AG.Perf ? `${AG.Perf.mode === 'auto' ? 'auto: ' : ''}${AG.Perf.LEVELS[AG.Perf.level].name}, canvas at ${Math.round(R.perf.scale * 100)}%` : ''}</dd><dt>Snapshots</dt><dd>${History.snaps.length} kept for counterfactuals</dd><dt>3D view</dt><dd>${!AG.View3D.ok ? 'unavailable (no WebGL)' : AG.View3D.active ? `on · ${AG.View3D.stats.window}² cells` : 'zoom past 8× to enter'}</dd></dl>`;

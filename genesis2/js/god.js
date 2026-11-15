@@ -103,6 +103,7 @@
   God.CATS = [
     { id: 'look', name: 'Watch' }, { id: 'land', name: 'Terrain' }, { id: 'geo', name: 'Geology' }, { id: 'elem', name: 'Elements' }, { id: 'sky', name: 'Weather' },
     { id: 'life', name: 'Life' }, { id: 'divine', name: 'Divine' }, { id: 'ruin', name: 'Disasters' }, { id: 'deep', name: 'Deep' },
+    { id: 'peoples', name: 'Peoples' },
   ];
   const plateSel = { id: -1 };
   God.TOOLS = [
@@ -239,6 +240,12 @@
     { id: 'tornado', cat: 'ruin', name: 'Tornado', mode: 'click', color: '#b0bec5', desc: 'Spawn a tornado. Keep holding to steer it.', click: (x, y) => { God.tornadoes.push({ x, y, vx: 0, vy: 0, life: 700, steer: true, a: 0 }); } },
     { id: 'tsunami', cat: 'ruin', name: 'Tsunami', mode: 'click', color: '#4fc3f7', desc: 'Send a great wave onto the nearest coast.', click: (x, y) => God.tsunami(x, y, 8) },
     // deep (underground)
+    // peoples: each sets down a band of its own kind (after the Dawn)
+    ...(AG.Races ? AG.Races.BASE.filter((R) => R.key !== 'human' && !R.uplift).map((R) => ({ id: 'race-' + R.key, cat: 'peoples', name: R.name, mode: 'click', color: AG.css(R.look.skin ? R.look.skin[1] : [200, 160, 120]),
+      desc: `${R.desc} Tap open land to set down a band${R.startEra ? ' (they arrive with the knowledge of the Industrial Age)' : ''}.`,
+      click: (x, y) => { if (!AG.Races.seed(R.id, x, y)) toast('Peoples can only be set down on open, dry land after the Dawn'); } })) : []),
+    { id: 'uplift', cat: 'peoples', name: 'Uplift', mode: 'click', color: '#a1887f', desc: 'Raise the apes near here to minds: they found a people of their own, with their own tongue.',
+      click: (x, y) => { if (!AG.Races || !AG.Races.uplift(x, y)) toast('There are no apes to uplift near here (or the Dawn has not come)'); } },
     { id: 'dig', cat: 'deep', name: 'Dig', mode: 'brush', color: '#795548', desc: 'Hollow out caverns.', deep: true, apply: (x, y) => deep(x, y, (i) => { if (Wd.ug[i] !== UG.BEDROCK && !Wd.ugOpen(i)) Wd.ug[i] = UG.CAVE; }) },
     { id: 'fill', cat: 'deep', name: 'Fill', mode: 'brush', color: '#616161', desc: 'Fill caverns with rock.', deep: true, apply: (x, y) => deep(x, y, (i) => { if (Wd.ug[i] !== UG.BEDROCK) { Wd.ug[i] = UG.ROCK; Wd.ugF[i] = 0; Wd.ugT[i] = 0; } }) },
     { id: 'ore', cat: 'deep', name: 'Ore', mode: 'brush', color: '#ffb300', desc: 'Seed copper, tin and iron for miners (and their surface outcrops).', deep: true,

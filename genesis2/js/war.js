@@ -57,6 +57,7 @@
   War.secede = function (c, why) {
     const ok = Civ.kingdoms[c.kd];
     const nk = Civ.newPolity(c.lang, Math.min(ok.gov, 2), { religion: c.religion });
+    if (nk) nk.race = c.race || 0;
     if (!nk) return null;
     let leader = null, bv = -1;
     for (const P of Civ.persons(c)) { if (P.job === J.CHILD) continue; const v = (P.traits & TR.ambitious ? 3 : 0) + (P.goal === 5 ? 3 : 0) + P.fame * 0.3 + rnd(); if (v > bv) { bv = v; leader = P; } }
@@ -142,6 +143,7 @@
         base += A.mods[b] + B.mods[a];
         A.mods[b] *= d9; B.mods[a] *= d9;
         if (A.war[b]) base -= 25;
+        if (AG.Races) { if ((A.race || 0) !== (B.race || 0)) base -= 16 * Math.max(AG.Races.get(A.race).xeno, AG.Races.get(B.race).xeno); else base += 5; } // kin and strangers
         let op = A.opinion[b];
         op += (base - op) * Math.min(1, 0.25 * dy) + (rnd() - 0.5) * 5;
         op = AG.clamp(op, -100, 100);
@@ -177,7 +179,7 @@
     for (const P of Civ.persons(c)) { if (P.job === J.SOLDIER) { n += 1; f += 1 + P.skills[SK.FIGHT] / 60; } else if (P.job !== J.CHILD && P.job !== J.ELDER && P.sex === 1 && c.nomadic) { n += 0.4; f += 0.4; } }
     const k = (t) => Tech.knows(c, t);
     const mul = (k('bow') ? 1.25 : 1) * (k('bronze') ? 1.3 : 1) * (k('iron') ? 1.2 : 1) * (k('chariots') ? 1.2 : 1) * (k('riding') ? 1.1 : 1);
-    return { n, power: f * mul };
+    return { n, power: f * mul * (AG.Races ? AG.Races.of(c).war : 1) };
   }
   function warTick(dy) {
     for (const k of Civ.kingdoms) {
@@ -522,6 +524,7 @@
   // ============================================================ clocks
   War.yearStep = function (dy) {
     diplomacy(dy); warTick(dy); religionYear(dy); tradeYear(dy); outbreaks(dy);
+    if (AG.Races) AG.Races.yearStep(dy);
   };
   War.tick = function () {
     const t = AG.tick, Y = AG.YEAR_TICKS;

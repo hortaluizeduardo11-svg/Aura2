@@ -144,6 +144,7 @@
     });
     const spParts = [];
     for (const part of chunks(Life.species, 3)) st.push(() => { spParts.push(clone(part)); });
+    st.push(() => { snap.races = AG.Races ? AG.Races.state() : []; });
     st.push(() => { snap.life = Object.assign(clone({ extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, env: Life.env }), { species: [].concat(...spParts) }); });
     st.push(() => {
       snap.people = Object.assign(clone({ alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }), { entries: entries || peopleEntries() });
@@ -196,6 +197,7 @@
     Object.assign(Geo, s.geoScalars);
     const go = clone(s.geoObj); Geo.plates = go.plates; Geo.hotspots = go.hotspots; Geo.volcanoes = go.volcanoes; Geo.climate = go.climate; Geo.events = go.events;
     Geo.setRng(s.rng.geo); Life.setRng(s.rng.life); AG.setRndState(s.rng.core);
+    if (AG.Races) AG.Races.restore(s.races);
     const li = clone(s.life);
     Life.species = li.species; Life.extinctions = li.extinctions; Life.speciations = li.speciations; Life.massExtinctions = li.massExtinctions; Life.macro = li.macro;
     Life.people = li.people >= 0 ? Life.species[li.people] : null; Life.envYear = li.envYear;

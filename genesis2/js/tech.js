@@ -110,8 +110,9 @@
     }
     // the Tasmanian effect: small, unskilled and isolated communities forget (neighbours who still
     // know a thing keep it alive)
+    const keepEra = AG.Races ? AG.Races.of(c).startEra || -1 : -1; // (visitors keep what they arrived knowing)
     for (const t of LIST) {
-      if (!c.tech[t.id] || KEEP_ALWAYS.has(t.key) || t.era <= 1 && ctx.pop >= 12) continue;
+      if (!c.tech[t.id] || KEEP_ALWAYS.has(t.key) || t.era <= 1 && ctx.pop >= 12 || t.era <= keepEra) continue;
       let p = 0;
       if (ctx.pop < t.minPop * 0.5) p += 0.02;
       if (t.skill >= 0 && ctx.maxSkill && ctx.maxSkill[t.skill] < 8) p += 0.015;

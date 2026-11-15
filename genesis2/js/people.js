@@ -48,11 +48,13 @@
       hp: 1, parts: new Float32Array(6), chronic: [], frail: 0, mental: { trauma: 0, depressed: 0 }, addict: 0, disabled: 0,
       preg: null, lastBirth: -99, nutr: 1, dis: 0, dtm: 0, imm: 0,
       fame: 0, wealth: 0, rank: 0, kills: 0, invented: [], visited: 1, flags: 0, energy: 1,
+      race: o.race !== undefined ? o.race : 0,
     };
     const mom = o.mom ? People.get(o.mom) : null, dad = o.dad ? People.get(o.dad) : null;
     temperament(P, mom, dad);
     if (o.comm >= 0 && AG.Civ) {
       const c = AG.Civ.cities[o.comm];
+      if (c && o.race === undefined) P.race = c.race || 0;
       if (c) { if (!P.name) P.name = AG.Lang.personName(c.lang, P.sex); P.belief.faith = c.religion; P.belief.tradition = c.tradition !== undefined ? AG.clamp(c.tradition + (rnd() - 0.5) * 0.3, 0, 1) : 0.5; }
     }
     if (!P.name) P.name = AG.Lang ? AG.Lang.personName(-1, P.sex) : 'Nameless';
@@ -158,6 +160,7 @@
   };
   People.marry = function (A, B) {
     if (!A || !B || A.spouse || B.spouse || A.died !== null || B.died !== null || A === B) return false;
+    if ((A.race || 0) !== (B.race || 0)) return false; // peoples marry their own (so each stays itself)
     A.spouse = B.id; B.spouse = A.id; A.spouses.push(B.id); B.spouses.push(A.id);
     for (const [P, Q] of [[A, B], [B, A]]) { const t = People.tie(P, Q.id); t.k |= TIE.SPOUSE; t.aff = Math.max(t.aff, 0.5); t.trust = Math.max(t.trust, 0.4); P.emo.love = 1; P.emo.joy = Math.min(1, P.emo.joy + 0.5); }
     People.remember(A, MK.MARRIED, { who: B.id, v: 0.8, s: 1, core: true }); People.remember(B, MK.MARRIED, { who: A.id, v: 0.8, s: 1, core: true });
@@ -314,7 +317,7 @@
     const med = c && AG.Tech.knows(c, 'medicine') ? 0.4 : c && AG.Tech.knows(c, 'herbal') ? 0.75 : 1;
     // childbirth was dangerous for mothers and infants alike
     if (rnd() < 0.012 * med * (1.4 - M.nutr * 0.5)) { People.die(M, 'childbirth'); if (rnd() < 0.5) return null; }
-    const K = People.create({ gen: pr.gen, comm: M.comm, mom: M.id, dad: pr.father, x: M.x, y: M.y });
+    const K = People.create({ gen: pr.gen, comm: M.comm, mom: M.id, dad: pr.father, x: M.x, y: M.y, race: M.race || 0 });
     People.births++;
     const F = People.get(pr.father);
     for (const Q of [M, F]) {
@@ -352,7 +355,7 @@
       // pregnancy runs its course (nine months)
       if (P.preg) { P.preg.t += dy; if (P.preg.t >= 0.75) { People.birth(P); if (P.died !== null) continue; } }
       // mortality: infancy, accidents and senescence; hunger, frailty, injury and illness add to it
-      const life = 0.85 + People.ph(P, L.LIFE) / 255 * 0.3 + (P.traits & TR.longlived ? 0.15 : 0);
+      const life = (0.85 + People.ph(P, L.LIFE) / 255 * 0.3 + (P.traits & TR.longlived ? 0.15 : 0)) * (AG.Races ? AG.Races.ofPerson(P).life : 1);
       const infant = 0.11 * Math.exp(-age * 1.1) * medicine;
       const sen = 0.00022 * Math.exp((0.085 / life) * age);
       const hunger = Math.pow(Math.max(0, 0.6 - P.nutr) / 0.6, 2) * 0.4;
@@ -503,7 +506,7 @@
       const a = y - M.born; if (a < 16 || a > 44 || y - M.lastBirth < space) continue;
       const F = People.get(M.spouse); if (!F || F.died !== null || F.comm !== M.comm) continue;
       const fert = (People.ph(M, L.FERT) + People.ph(F, L.FERT)) / 510 + (M.traits & TR.fertile ? 0.25 : 0) - (M.traits & TR.cursed ? 0.5 : 0);
-      const p = 0.85 * (0.5 + fert) * AG.clamp((M.nutr - 0.6) / 0.35, 0, 1) * (c.crowded ? 0.35 : 1) * over;
+      const p = 0.85 * (0.5 + fert) * AG.clamp((M.nutr - 0.6) / 0.35, 0, 1) * (c.crowded ? 0.35 : 1) * over * (AG.Races ? AG.Races.ofPerson(M).fert : 1);
       if (dy < 1.5) { if (rnd() < Math.min(1, p * dy)) People.conceive(M, F); continue; }
       // a long stride: as many pregnancies as the years allow, each born before the next begins
       let t = Math.max(0, M.lastBirth + space - (y - dy)), born = 0;

@@ -27,7 +27,7 @@
     kills: A(Uint16Array), anim: A(Float32Array), stuck: A(Uint8Array), faith: A(Float32Array),
     // Genesis 2
     pid: A(Int32Array), sid: A(Int16Array), tm0: A(Int32Array), gen: A(Uint8Array, MAXU * GL), fgen: A(Uint8Array, MAXU * GL),
-    energy: A(Float32Array), preg: A(Float32Array), scale: A(Float32Array), sense: A(Float32Array),
+    energy: A(Float32Array), preg: A(Float32Array), scale: A(Float32Array), sense: A(Float32Array), race: A(Uint8Array),
     cold: A(Float32Array), heat: A(Float32Array), bold: A(Float32Array), social: A(Float32Array), hue: A(Uint8Array),
   });
   const free = new Int32Array(MAXU);
@@ -50,7 +50,7 @@
   function base(i, sp, x, y, o) {
     const d = SPECIES[sp];
     x = AG.clamp(x, 0.5, W - 0.5); y = AG.clamp(y, 0.5, H - 0.5);
-    U.alive[i] = 1; U.sp[i] = sp;
+    U.alive[i] = 1; U.sp[i] = sp; U.race[i] = 0;
     U.x[i] = U.px[i] = U.tx[i] = x; U.y[i] = U.py[i] = U.ty[i] = y;
     U.fx[i] = rnd() < 0.5 ? 1 : -1; U.fy[i] = 0;
     U.layer[i] = o.layer !== undefined ? o.layer : d.flying ? 2 : 1;
@@ -122,7 +122,7 @@
     const i = slot(); if (i < 0) return -1;
     const c = AG.Civ.cities[P.comm];
     base(i, SP.PERSON, x, y, { age: AG.People.age(P), sex: P.sex, kd: c ? c.kd : -1, city: P.comm, home: P.comm });
-    U.pid[i] = P.id; U.sid[i] = Life.people ? Life.people.id : -1;
+    U.pid[i] = P.id; U.sid[i] = Life.people ? Life.people.id : -1; U.race[i] = P.race || 0;
     U.gen.set(P.gen, i * GL);
     U.job[i] = P.job; U.dis[i] = P.dis; U.dtm[i] = P.dtm; U.imm[i] = P.imm; U.kills[i] = P.kills;
     U.energy[i] = P.needs.food; U.faith[i] = P.belief.devotion * 10;

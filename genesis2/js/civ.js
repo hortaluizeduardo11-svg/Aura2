@@ -29,6 +29,7 @@
   Civ.resetFree = () => { freeB.length = 0; for (let k = Civ.buildings.length - 1; k >= 0; k--) { const b = Civ.buildings[k]; if (b && !b.alive) freeB.push(b.id); } };
   Civ.reset = function () {
     freeB.length = 0;
+    if (AG.Races) AG.Races.reset();
     Civ.kingdoms.length = 0; Civ.cities.length = 0; Civ.buildings.length = 0; Civ.religions.length = 0;
     Civ.squads.length = 0; Civ.routes.length = 0; Civ.expeditions.length = 0; Civ.contact.fill(0);
     Flow.cache.clear(); Civ.embodied = 0;
@@ -174,6 +175,9 @@
   // levels off at the land's capacity (extra hands add little)
   const yieldShare = (cap, n) => (n <= 0 ? 0 : cap <= 0 ? 0 : (cap * (1 - Math.exp(-n / cap))) / n);
   Civ.techMul = function (c, job) {
+    return techMul0(c, job) * (AG.Races ? AG.Races.foodMul(c, job) : 1); // (each people is better at some ways of feeding itself)
+  };
+  function techMul0(c, job) {
     const k = (t) => Tech.knows(c, t);
     switch (job) {
       case J.GATHER: return (k('foraging') ? 1.3 : 1) * (k('groundstone') ? 1.05 : 1);
@@ -183,7 +187,7 @@
       case J.HERD: return k('herding') ? (k('riding') ? 1.15 : 1) : 0;
       default: return 1;
     }
-  };
+  }
   // Capacity of each food source, in workers it can keep at full rate.
   function capacity(c) {
     const s = c.survey || survey(c);
@@ -355,7 +359,7 @@
       food: 6, wood: 6, stone: 0, metal: 0, goods: 0, gold: 0, faith: 0, herd: 0,
       buildings: [], site: -1, radius: o.nomadic ? 7 : 6, religion: o.religion === undefined ? k.religion : o.religion, loyalty: 1,
       founded: year(), coastal: false, water: false, river: false, wallPlan: null, towerPlan: null, walled: false, captureT: 0, area: 0,
-      lastTrade: AG.tick, lastSettle: year(), lastMove: year(), keep: -1, hearth: -1, empty: 0, race: 0,
+      lastTrade: AG.tick, lastSettle: year(), lastMove: year(), keep: -1, hearth: -1, empty: 0, race: o.race !== undefined ? o.race : k.race || 0,
       tech: o.tech ? Uint8Array.from(o.tech) : Tech.newSet(), techYear: {}, era: 0, banned: o.banned || null,
       tradition: o.tradition === undefined ? 0.5 : o.tradition, customs: o.customs ? Object.assign({}, o.customs) : newCustoms(), art: o.art ? Object.assign({}, o.art) : { motif: ri(6), hue: rnd() * 360 },
       contacts: new Map(), grievance: new Map(), overForage: 0, nutr: 1, surplus: 0, famine: false,
@@ -726,7 +730,8 @@
     const capk = k ? Civ.capitalOf(k) : null;
     const independent = !k || dist2(site.x, site.y, capk ? capk.x : c.x, capk ? capk.y : c.y) > (k.gov >= 2 ? 140 : 90) ** 2 || (k.gov === 0 && rnd() < 0.5) || (k.gov === 1 && k.cities.length >= 7);
     if (independent) { pk = newPolity(c.lang, 0, { religion: c.religion }); if (!pk) pk = k; }
-    const d = newCommunity(pk, site.x, site.y, { nomadic: c.nomadic, lang: c.lang, tech: c.tech, banned: c.banned, tradition: c.tradition, customs: c.customs, art: c.art, religion: c.religion });
+    if (pk !== k) pk.race = c.race || 0;
+    const d = newCommunity(pk, site.x, site.y, { race: c.race || 0, nomadic: c.nomadic, lang: c.lang, tech: c.tech, banned: c.banned, tradition: c.tradition, customs: c.customs, art: c.art, religion: c.religion });
     d.food = Math.max(2, c.food * 0.3); c.food *= 0.7; d.wood = c.wood * 0.3; c.wood *= 0.7;
     d.herd = c.herd * 0.3; c.herd *= 0.7;
     for (const id of go) { const P = People.get(id); if (!P || P.comm !== c.id) continue; Civ.moveMember(P, d); P.x = d.x + (rnd() - 0.5) * 5; P.y = d.y + (rnd() - 0.5) * 5; People.remember(P, MK.FOUNDED, { v: 0.4, s: 0.6, d: d.name }); }
@@ -900,7 +905,7 @@
       pop: ps.length, sedentary: c.sedentary, farming: Tech.knows(c, 'cultivation'), res: s.res, tradeRes: c.tradeRes, cereal: s.cereal / Math.max(1, s.cells) * 6, water: c.water, coast: c.coastal, river: c.river, forest: s.forest / Math.max(1, s.cells),
       stone: s.stone > 20, cold: s.temp < 0.28, wolves, domesticable: !!dom, domesticableName: dom ? dom.common : '', horses,
       contacts: c.contacts.size, gov: k ? k.gov : 0, war: k ? k.atWar : false, deaths: c.stats.deaths, stable: AG.Geo.climate.anomaly > -0.065 && AG.Geo.climate.aerosol < 0.02, // a warm, settled climate
-      innovation: ni ? inno / ni : 0.5, stability: k ? 0.6 + k.stability * 0.6 : 1, maxSkill, visible: c.materialized, inspired: c.inspired > year(),
+      innovation: (ni ? inno / ni : 0.5) * (AG.Races ? AG.Races.of(c).wit : 1), stability: k ? 0.6 + k.stability * 0.6 : 1, maxSkill, visible: c.materialized, inspired: c.inspired > year(),
     };
   };
 
@@ -929,7 +934,7 @@
     let corr = 0; for (const I of k.inst) corr += I.corrupt / Math.max(1, k.inst.length);
     k.legit = AG.clamp(k.legit + dy * (0.03 - famine / k.cities.length * 0.2 - corr * 0.06 - (k.unrest || 0) * 0.1 + (k.monuments || 0) * 0.01 + (R && R.traits & TR.kind ? 0.01 : 0) - (R && R.traits & TR.cruel ? 0.015 : 0)), 0, 1);
     k.unrest = (k.unrest || 0) * Math.pow(0.6, dy);
-    k.stability = AG.clamp(k.legit - corr * 0.5 - k.inequality * 0.3 - k.exhaustion * 0.004 - (k.unrest || 0), -1, 1);
+    k.stability = AG.clamp(k.legit - corr * 0.5 - k.inequality * 0.3 - k.exhaustion * 0.004 - (k.unrest || 0) + (AG.Races ? AG.Races.get(k.race || 0).stab : 0), -1, 1);
     // government transitions
     const sedCap = cap && cap.sedentary, age = year() - (k.founded || 0), S = AG.clamp(People.budget / 6000, 0.5, 1.5); // thresholds scale with the world's people
     if (k.gov === 0 && k.cities.length >= 3 && age > 30) setGov(k, 1, 'kinship among growing bands');

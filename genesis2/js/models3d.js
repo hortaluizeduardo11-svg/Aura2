@@ -271,7 +271,7 @@
   function lookOf(i) {
     const U = AG.U, Civ = AG.Civ, uid = U.uid[i], kd = U.kd[i], job = U.job[i], king = U.flags[i] & AG.FL.KING ? 1 : 0, age = U.age[i];
     const c = U.city[i] >= 0 ? Civ.cities[U.city[i]] : null, era = c ? c.era : 0;
-    const stamp = kd * 1e6 + job * 1e4 + king * 1000 + era * 100 + Math.min(99, (age / 8) | 0);
+    const race = U.race[i] || 0, stamp = race * 1e9 + kd * 1e6 + job * 1e4 + king * 1000 + era * 100 + Math.min(99, (age / 8) | 0);
     let L = looks.get(uid);
     if (L && L.stamp === stamp) return L;
     const male = U.sex[i] === 1, child = job === AG.J.CHILD, o = i * AG.Life.GL, LL = AG.Life.L;
@@ -313,7 +313,11 @@
     else if (!child && style === 'robe' && clim === 'dry') { hat = 'turban'; hatC = (h >>> 3) % 3 ? [240, 234, 220] : mix(kc, LINEN, 0.4); }
     else if (!child && (style === 'wrap' || style === 'wrapf') && (h >>> 5) % 3 === 0) { hat = 'feathers'; hatC = mix(kc, [255, 255, 255], 0.2); }
     else if (!child && job === AG.J.FARM && era >= 2 && clim !== 'snow' && clim !== 'cold' && (h >>> 6) % 5 < 2) { hat = 'straw'; hatC = [222, 196, 120]; }
-    L = { stamp, style, hair, hat, cloth: cl(cloth), skin: cl(skinOf(pig, albino)), hairC: cl(hairOf(pig, albino, neutral, age)), hatC: cl(hatC) };
+    const Rc = AG.Races ? AG.Races.get(race) : null, rs = Rc ? AG.Races.skin(Rc, pig) : null, RL = Rc ? Rc.look : {};
+    if (RL.feature === 'bighead' && job !== AG.J.PRIEST) cloth = mix([206, 212, 222], kc, 0.15); // the visitors' silver suits
+    const skinC = rs && !albino ? rs : skinOf(pig, albino), hairC = RL.hair ? (age > 55 ? mix(RL.hair, [220, 220, 224], 0.6) : RL.hair) : hairOf(pig, albino, neutral, age);
+    L = { stamp, style, hair: RL.feature === 'bighead' ? -1 : hair, hat, cloth: cl(cloth), skin: cl(skinC), hairC: cl(hairC), hatC: cl(hatC),
+      feature: RL.feature || null, featC: cl(RL.featC || (RL.feature === 'beard' || RL.feature === 'fur' ? hairC : RL.feature === 'bighead' ? skinC : skinC)), tall: RL.tall || 1 };
     looks.set(uid, L);
     if (looks.size > 12000) looks.clear();
     return L;
@@ -324,12 +328,36 @@
   M.person = function (i, x, y, z, k, ry, roll) {
     drawn++;
     const L = lookOf(i), c = L.cloth, s = L.skin, hc = L.hairC;
+    k *= L.tall; // each people its own height
     bank('pc' + L.style).add(x, y, z, k, k, k, ry, roll, c[0] / 255, c[1] / 255, c[2] / 255);
     bank('ps' + L.style).add(x, y, z, k, k, k, ry, roll, s[0] / 255, s[1] / 255, s[2] / 255);
-    bank('ph' + L.hair).add(x, y, z, k, k, k, ry, roll, hc[0] / 255, hc[1] / 255, hc[2] / 255);
-    if (L.hat) { const t = L.hatC; bank('pt' + L.hat).add(x, y, z, k, k, k, ry, roll, t[0] / 255, t[1] / 255, t[2] / 255); }
+    if (L.hair >= 0) bank('ph' + L.hair).add(x, y, z, k, k, k, ry, roll, hc[0] / 255, hc[1] / 255, hc[2] / 255);
+    if (L.hat && L.feature !== 'antennae' && L.feature !== 'bighead') { const t = L.hatC; bank('pt' + L.hat).add(x, y, z, k, k, k, ry, roll, t[0] / 255, t[1] / 255, t[2] / 255); }
+    if (L.feature) { const f = L.featC; bank('pf' + L.feature, () => featureGeo(L.feature), false).add(x, y, z, k, k, k, ry, roll, f[0] / 255, f[1] / 255, f[2] / 255); }
     return L;
   };
+  // the features that set a people apart, on the shared figure (head at y 0.355-0.46, face to +z)
+  function featureGeo(f) {
+    const p = new Parts(f === 'fur' || f === 'beard' ? TX.FUR : 0), W = G(255);
+    switch (f) {
+      case 'ears': for (const sx of [-1, 1]) p.add('box', W, sx * 0.057, 0.375, -0.004, 0.012, 0.062, 0.026, 0, 0, -sx * 0.55); break; // long and pointed
+      case 'beard': p.add('box', W, 0, 0.3, 0.032, 0.094, 0.075, 0.04).add('box', G(236), 0, 0.27, 0.04, 0.06, 0.04, 0.03); break;
+      case 'tusks': for (const sx of [-1, 1]) p.add('cone', W, sx * 0.026, 0.352, 0.05, 0.012, 0.036, 0.012); break;
+      case 'crest': for (let q = 0; q < 4; q++) p.add('box', G(255 - q * 14), 0, 0.455, 0.035 - q * 0.024, 0.01, 0.05 - q * 0.008, 0.02); break;
+      case 'antennae': for (const sx of [-1, 1]) p.add('cyl', W, sx * 0.022, 0.452, 0.02, 0.006, 0.075, 0.006, 0, 0, -sx * 0.4).add('ico', W, sx * 0.052, 0.522, 0.02, 0.018, 0.018, 0.018); break;
+      case 'fins': for (const sx of [-1, 1]) p.add('box', W, sx * 0.056, 0.36, -0.01, 0.006, 0.065, 0.05, 0, 0, -sx * 0.25); p.add('box', G(230), 0, 0.17, -0.064, 0.008, 0.14, 0.05); break;
+      case 'bighead': // a great domed head with dark, wrap-round eyes
+        p.add('box', W, 0, 0.4, -0.004, 0.13, 0.085, 0.118).add('box', G(250), 0, 0.47, -0.008, 0.11, 0.025, 0.1);
+        for (const sx of [-1, 1]) p.add('box', G(14), sx * 0.025, 0.378, 0.05, 0.034, 0.03, 0.006, 0, 0, sx * 0.25);
+        break;
+      case 'shards': // crystals growing from the head and shoulders
+        p.add('cone', W, 0, 0.455, -0.005, 0.03, 0.08, 0.03).add('cone', G(230), 0.03, 0.445, -0.02, 0.02, 0.05, 0.02, 0, 0, -0.4).add('cone', G(230), -0.03, 0.445, -0.02, 0.02, 0.05, 0.02, 0, 0, 0.4);
+        for (const sx of [-1, 1]) p.add('cone', G(240), sx * 0.09, 0.27, 0, 0.022, 0.06, 0.022, 0, 0, -sx * 0.5);
+        break;
+      case 'fur': p.add('box', W, 0, 0.405, 0.044, 0.104, 0.018, 0.012).add('box', G(232), 0, 0.2, -0.045, 0.16, 0.13, 0.02).add('box', G(240), 0, 0.27, 0, 0.17, 0.03, 0.1); break;
+    }
+    return p.geo();
+  }
 
   // ============================================================ animals
   const KIND = { deer: 'deer', elk: 'elk', gazelle: 'gazelle', ibex: 'ibex', goats: 'ibex', aurochs: 'bovine', cattle: 'bovine', bison: 'bison', mammoth: 'mammoth', 'wild horse': 'horse', horses: 'horse', sheep: 'sheep', 'herd beast': 'bovine',
@@ -556,11 +584,85 @@
     return true;
   };
 
+  // ============================================================ the peoples' towns
+  // One design per people for dwellings (house, hut, tent at their own scale), one for halls and one
+  // for temples and shrines; anything else keeps the common design. They grow taller with the era.
+  const RACE_STYLES = new Set(['sylvan', 'stonekin', 'ashborn', 'saurian', 'hive', 'tide', 'crystal', 'void']);
+  M.RACE_STYLES = RACE_STYLES;
+  function raceKit(k, type, style, kc, v, era) {
+    const BT = AG.BT, smokes = [], flag = (kc[0] << 16) | (kc[1] << 8) | kc[2];
+    const kind = type === BT.HALL ? 'hall' : type === BT.TEMPLE || type === BT.SHRINE ? 'temple' : type === BT.HOUSE || type === BT.HUT || type === BT.TENT ? 'home' : null;
+    if (!kind) return null;
+    const s = type === BT.TENT || type === BT.SHRINE ? 0.6 : 1, g = 1 + Math.min(0.6, Math.max(0, era - 4) * 0.07); // later eras build higher
+    const S = (n) => n * s;
+    switch (style) {
+      case 'sylvan': { // homes among (and in) great trees, leaf roofs, lanterns
+        const bark = { c: 0x6e5338, t: 'bark' }, leaf = { c: [86, 150, 70], t: 'leaves' };
+        if (kind === 'home') { k.cyl(bark, 0, 0, 0, S(0.36), S(1.5) * g, S(0.36)); k.ico(leaf, 0, S(1.75) * g, 0, S(1.5), S(0.9), S(1.5)); k.cyl({ c: 0x8a6a46, t: 'planks' }, 0, S(0.7) * g, 0, S(1.0), S(0.08), S(1.0)); k.cyl({ c: 0xd8c896, t: 'plaster' }, 0, S(0.78) * g, 0, S(0.62), S(0.42), S(0.62)); k.cone(leaf, 0, S(1.2) * g, 0, S(0.82), S(0.42), S(0.82)); k.glow(0xffe08a, S(0.32), S(0.9) * g, S(0.1), S(0.04), S(0.08), S(0.04)); }
+        else if (kind === 'hall') { k.cyl(bark, 0, 0, 0, 0.7, 2.2 * g, 0.7); k.ico(leaf, 0, 2.6 * g, 0, 2.8, 1.4, 2.6); k.cyl({ c: 0x8a6a46, t: 'planks' }, 0, 0.9, 0, 2.4, 0.1, 1.8); k.box({ c: 0xd8c896, t: 'plaster' }, 0, 1.0, 0, 1.9, 0.55, 1.3); k.prism(leaf, 0, 1.55, 0, 2.1, 0.5, 1.5, Math.PI / 2); for (const x of [-0.7, 0.7]) k.glow(0xffe08a, x, 1.2, 0.66, 0.08, 0.12, 0.02); }
+        else { k.cyl(bark, 0, 0, 0, S(1.0), S(2.6) * g, S(1.0)); k.ico(leaf, 0, S(3.0) * g, 0, S(3.0), S(1.8), S(3.0)); for (let q = 0; q < 6; q++) { const a = q * 1.05; k.glow(0xbfffd0, Math.cos(a) * S(1.1), S(1.4 + (q % 2) * 0.6), Math.sin(a) * S(1.1), S(0.08), S(0.1), S(0.08)); } }
+        break;
+      }
+      case 'stonekin': { // halls dug into turfed mounds, stone doorways, round doors, forge glow
+        const turf = { c: [104, 140, 76], t: 'grass' }, stone = { c: 0x8f8a80, t: 'masonry' };
+        if (kind === 'home') { k.mound(turf, 0, S(0.15), 0, S(1.7), S(1.0) * g, S(1.6)); k.box(stone, 0, 0, S(0.62), S(0.62), S(0.62), S(0.24)); k.cyl({ c: 0x6b4a2c, t: 'planks' }, 0, S(0.24), S(0.75), S(0.36), S(0.04), S(0.36), 0, Math.PI / 2); k.cyl(stone, S(0.4), S(0.5) * g, S(-0.2), S(0.16), S(0.5), S(0.16)); smokes.push([S(0.4), S(1.05) * g, S(-0.2)]); }
+        else if (kind === 'hall') { k.mound(turf, 0, 0.2, 0, 3.0, 1.5 * g, 2.0); k.box(stone, 0, 0, 0.9, 1.3, 1.0, 0.3); for (const x of [-0.5, 0.5]) k.cyl(stone, x, 0, 1.1, 0.16, 1.0, 0.16); k.box(stone, 0, 1.0, 1.1, 1.4, 0.16, 0.3); k.glow(0xff9a3c, 0, 0.1, 1.06, 0.6, 0.6, 0.02); smokes.push([0.8, 1.7 * g, -0.3]); }
+        else { k.box(stone, 0, 0, 0, S(2.4), S(0.3), S(2.4)); k.box(stone, 0, S(0.3), 0, S(1.6), S(1.4) * g, S(1.6)); k.prism({ c: 0x6f6a62, t: 'masonry' }, 0, S(1.7) * g, 0, S(1.8), S(0.6), S(1.8)); k.glow(0xff8a2c, 0, S(0.35), S(0.81), S(0.5), S(0.6), S(0.02)); smokes.push([0, S(2.4) * g, 0]); }
+        break;
+      }
+      case 'ashborn': { // dark hide and timber, bone spikes, skull totems
+        const hide = { c: 0x4a3a30, t: 'hide' }, bone = 0xe8dcc0, wood = { c: 0x3a2a20, t: 'logs' };
+        if (kind === 'home') { k.cone(hide, 0, 0, 0, S(1.5), S(1.3) * g, S(1.5)); for (let q = 0; q < 5; q++) { const a = q * 1.26; k.cone(bone, Math.cos(a) * S(0.55), S(0.5), Math.sin(a) * S(0.55), S(0.06), S(0.5), S(0.06), 0, Math.cos(a) * 0.6, -Math.sin(a) * 0.6); } k.ico(bone, 0, S(1.3) * g, 0, S(0.16), S(0.14), S(0.16)); k.box(0x1e1612, 0, 0, S(0.66), S(0.3), S(0.42), S(0.03)); }
+        else if (kind === 'hall') { k.box(wood, 0, 0, 0, 2.6, 0.9 * g, 1.6); k.prism(hide, 0, 0.9 * g, 0, 2.8, 0.9, 1.8, Math.PI / 2); for (const x of [-1.1, -0.4, 0.4, 1.1]) k.cone(bone, x, 1.6 * g, 0, 0.06, 0.5, 0.06); for (const x of [-1.4, 1.4]) { k.cyl(wood, x, 0, 0.95, 0.08, 1.4, 0.08); k.ico(bone, x, 1.45, 0.95, 0.14, 0.12, 0.14); } }
+        else { k.cyl(wood, 0, 0, 0, S(0.3), S(2.4) * g, S(0.3)); for (let q = 0; q < 3; q++) k.ico(bone, 0, S(0.9 + q * 0.55) * g, S(0.16), S(0.24), S(0.2), S(0.22)); k.cone(hide, 0, 0, 0, S(1.6), S(0.5), S(1.6)); k.glow(0xff5a2c, 0, S(0.1), 0, S(0.3), S(0.25), S(0.3)); }
+        break;
+      }
+      case 'saurian': { // stepped clay houses with carved crests, jungle thatch
+        const clay = { c: 0xb98a5a, t: 'plaster' }, jade = 0x4aa878, thatch = { c: 0x9aa050, t: 'thatch' };
+        if (kind === 'home') { k.box(clay, 0, 0, 0, S(1.5), S(0.6), S(1.5)); k.box(clay, 0, S(0.6), 0, S(1.1), S(0.5) * g, S(1.1)); k.cone(thatch, 0, S(1.1) * g, 0, S(1.3), S(0.6), S(1.3)); k.box(jade, 0, S(0.15), S(0.76), S(0.4), S(0.12), S(0.04)); k.box(0x2a1a10, 0, 0, S(0.76), S(0.28), S(0.45), S(0.02)); }
+        else if (kind === 'hall') { for (let q = 0; q < 3; q++) k.box(clay, 0, q * 0.45, 0, 2.7 - q * 0.6, 0.45, 1.8 - q * 0.4); k.prism(thatch, 0, 1.35, 0, 1.6, 0.6, 0.8, Math.PI / 2); for (const x of [-1.1, 1.1]) k.ico(jade, x, 0.5, 0.95, 0.2, 0.2, 0.2); }
+        else { for (let q = 0; q < 4; q++) k.box(clay, 0, q * 0.5 * g, 0, S(2.8 - q * 0.6), S(0.5) * g, S(2.8 - q * 0.6)); k.box(clay, 0, 0, S(1.2), S(0.7), S(1.6) * g, S(0.6), 0, -0.5); k.box(jade, 0, S(2.0) * g, 0, S(0.6), S(0.5), S(0.6)); k.glow(0x8affc0, 0, S(2.5) * g, 0, S(0.2), S(0.2), S(0.2)); }
+        break;
+      }
+      case 'hive': { // organic mound hives with dark openings, spires, amber glow
+        const wax = { c: 0xc28c48, t: 'plaster' }, dark = 0x2a1c12;
+        if (kind === 'home') { k.mound(wax, 0, S(0.3), 0, S(1.5), S(1.2) * g, S(1.5)); k.mound(wax, S(0.2), S(1.0) * g, S(-0.1), S(0.8), S(0.8), S(0.8)); k.ico(dark, 0, S(0.32), S(0.66), S(0.36), S(0.36), S(0.12)); k.ico(dark, S(0.3), S(0.95) * g, S(0.26), S(0.16), S(0.16), S(0.08)); }
+        else if (kind === 'hall') { k.cone(wax, 0, 0, 0, 2.6, 2.8 * g, 2.0); k.mound(wax, -0.8, 0.4, 0, 1.4, 1.0, 1.2); k.mound(wax, 0.9, 0.3, 0.2, 1.2, 0.9, 1.0); for (let q = 0; q < 4; q++) k.ico(dark, -0.6 + q * 0.4, 0.5 + (q % 2) * 0.7, 0.75, 0.2, 0.2, 0.1); }
+        else { k.cone(wax, 0, 0, 0, S(2.6), S(4.0) * g, S(2.6)); for (let q = 0; q < 5; q++) k.glow(0xffb040, Math.cos(q * 1.26) * S(0.6), S(0.6 + q * 0.5) * g, Math.sin(q * 1.26) * S(0.6), S(0.12), S(0.12), S(0.12)); }
+        break;
+      }
+      case 'tide': { // spiral shell houses on stilts, coral, pearl glow
+        const shell = { c: 0xf0d8cc, t: 'plaster' }, coral = 0xe8786a, post = { c: 0x7a6650, t: 'planks' };
+        if (kind === 'home') { for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) k.cyl(post, S(x), 0, S(z), S(0.08), S(0.5), S(0.08)); k.box(post, 0, S(0.5), 0, S(1.4), S(0.08), S(1.4)); k.cone(shell, 0, S(0.58), 0, S(1.1), S(1.4) * g, S(1.1)); k.ico(shell, S(0.2), S(0.9) * g, S(0.3), S(0.5), S(0.5), S(0.5)); k.ico(coral, S(-0.5), S(0.62), S(0.5), S(0.2), S(0.3), S(0.2)); }
+        else if (kind === 'hall') { k.mound(shell, 0, 0.3, 0, 2.8, 1.6 * g, 1.8); for (let q = 0; q < 5; q++) k.cone(coral, -1.1 + q * 0.55, 0, 0.9, 0.16, 0.6 + (q % 2) * 0.4, 0.16); k.ico(shell, 0, 1.55 * g, 0, 0.7, 0.5, 0.7); }
+        else { k.mound(shell, 0, S(0.4), 0, S(2.6), S(2.0) * g, S(2.6)); k.glow(0xe0f4ff, 0, S(1.9) * g, 0, S(0.5), S(0.5), S(0.5)); for (let q = 0; q < 6; q++) k.cone(coral, Math.cos(q) * S(1.2), 0, Math.sin(q) * S(1.2), S(0.14), S(0.8), S(0.14)); }
+        break;
+      }
+      case 'crystal': { // clustered crystal spires with glowing cores
+        const cr = [176, 150, 236], cr2 = [140, 210, 240];
+        if (kind === 'home') { k.cone6(cr, 0, 0, 0, S(0.9), S(1.8) * g, S(0.9)); k.cone6(cr2, S(0.45), 0, S(0.2), S(0.5), S(1.1) * g, S(0.5), 0.4); k.cone6(cr, S(-0.4), 0, S(-0.3), S(0.45), S(0.9) * g, S(0.45), 0.8); k.glow(0xc0f0ff, 0, S(0.5), 0, S(0.28), S(0.5), S(0.28)); }
+        else if (kind === 'hall') { for (let q = 0; q < 6; q++) { const a = q * 1.05; k.cone6(q % 2 ? cr2 : cr, Math.cos(a) * 0.9, 0, Math.sin(a) * 0.6, 0.6, (1.6 + (q % 3) * 0.6) * g, 0.6, a); } k.cone6(cr, 0, 0, 0, 1.0, 2.8 * g, 1.0); k.glow(0xd8c0ff, 0, 0.8, 0, 0.5, 0.8, 0.5); }
+        else { k.cone6(cr, 0, 0, 0, S(1.4), S(4.5) * g, S(1.4)); for (let q = 0; q < 4; q++) k.cone6(cr2, Math.cos(q * 1.57) * S(0.9), 0, Math.sin(q * 1.57) * S(0.9), S(0.5), S(1.6) * g, S(0.5)); k.glow(0xe8f8ff, 0, S(1.6) * g, 0, S(0.4), S(1.0), S(0.4)); }
+        break;
+      }
+      case 'void': { // smooth white domes, glowing rings, masts
+        const shell = { c: 0xe6eaf0, t: 'plaster' }, metal = 0x9aa4b0;
+        if (kind === 'home') { k.mound(shell, 0, S(0.2), 0, S(1.6), S(1.1) * g, S(1.6)); k.cyl(metal, 0, S(0.05), 0, S(1.75), S(0.12), S(1.75)); k.glow(0x7affd0, 0, S(0.2), 0, S(1.8), S(0.04), S(1.8)); k.cyl(metal, 0, S(1.2) * g, 0, S(0.04), S(0.6), S(0.04)); k.glow(0xff4060, 0, S(1.8) * g, 0, S(0.06), S(0.06), S(0.06)); }
+        else if (kind === 'hall') { for (const [x, z] of [[-1, -0.6], [1, -0.6], [-1, 0.6], [1, 0.6]]) k.cyl(metal, x, 0, z, 0.1, 0.9, 0.1); k.cyl(shell, 0, 0.9, 0, 3.0, 0.3, 2.2); k.mound(shell, 0, 1.1, 0, 1.6, 0.8 * g, 1.2); k.glow(0x7affd0, 0, 0.95, 0, 3.1, 0.06, 2.3); }
+        else { k.cyl(shell, 0, 0, 0, S(0.8), S(4.0) * g, S(0.8)); k.cone(shell, 0, S(4.0) * g, 0, S(0.8), S(1.2), S(0.8)); for (const y of [1.4, 2.6]) k.glow(0x7affd0, 0, S(y) * g, 0, S(1.6), S(0.06), S(1.6)); }
+        break;
+      }
+    }
+    return smokes;
+  }
+
   // ============================================================ houses
   // a building's style comes from where its community lives, and its era
   M.styleOf = function (b) {
     if (M.debug.style) return M.debug.style(b);
     const c = AG.Civ.cities[b.city];
+    const Rs = AG.Races && c ? AG.Races.of(c).style : null;
+    if (Rs) return Rs;
     return climateAt(c ? c.x : b.cx, c ? c.y : b.cy);
   };
   const BEAM = 0x5e4130, DOOR = 0x3a2618, WIN = 0xffd27a, STONE = 0x9c978f, STONE2 = 0x7f7a73, GOLD = 0xe2b64c;
@@ -569,6 +671,7 @@
   // Fills kit k for the regional variants; returns the chimney smoke points, or null when the
   // building keeps its common design (castles, towers, walls, farms, markets, mines, docks...).
   M.houseKit = function (k, type, style, kc, v, era, roof) {
+    if (RACE_STYLES.has(style)) return raceKit(k, type, style, kc, v, era);
     const BT = AG.BT, smokes = [], flag = (kc[0] << 16) | (kc[1] << 8) | kc[2];
     const tiled = era >= 4, roofC = tiled ? roof : THATCH;
     switch (type) {

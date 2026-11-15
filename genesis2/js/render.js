@@ -891,6 +891,12 @@
     king: [['y.y.y', '.yyy.', '.sss.', 'skkks', 'KkykK', 'KKKKK', '.b.b.'], ['y.y.y', '.yyy.', '.sss.', 'skkks', 'KkykK', 'KKKKK', 'b...b']],
     priest: [['.hhh.', '.sss.', 'seees', '.eke.', '.eee.', '.eee.', '.b.b.'], ['.hhh.', '.sss.', 'seees', '.eke.', '.eee.', 'eeeee', 'b...b']],
     child: [['hhh', 'sss', 'kkk', 'kkk', 'b.b'], ['hhh', 'sss', 'kkk', 'kkk', '.b.']],
+    saurian: [['.oo..', '.sso.', '.sss.', 'skkks', '.KKK.', '.b.bs', '.b.b.'], ['.oo..', '.sso.', '.sss.', 'skkks', '.KKK.', 'b..bs', 'b...b']],
+    hive: [['o...o', '.o.o.', '.sss.', 'skkks', '.KKK.', '.b.b.', 'b...b'], ['o...o', '.o.o.', '.sss.', 'skkks', '.KKK.', 'b...b', '.b.b.']],
+    tide: [['.sss.', 'ossso', 'skkks', '.kkk.', '.KKK.', '.b.b.', '.b.b.'], ['.sss.', 'ossso', 'skkks', '.kkk.', '.KKK.', 'b...b', 'b...b']],
+    crystal: [['..o..', '.ooo.', '.sss.', 'skkks', '.kkk.', '.b.b.', '.b.b.'], ['..o..', '.ooo.', '.sss.', 'skkks', '.kkk.', 'b...b', 'b...b']],
+    void: [['.sss.', 'sssss', 'sbsbs', '.sss.', '.kkk.', '.k.k.', '.b.b.'], ['.sss.', 'sssss', 'sbsbs', '.sss.', '.kkk.', '.k.k.', 'b...b']],
+    simian: [['.hhh.', 'hsssh', 'hkkkh', 'hkkkh', '.hhh.', '.h.h.', '.h.h.'], ['.hhh.', 'hsssh', 'hkkkh', 'hkkkh', '.hhh.', 'h...h', 'h...h']],
     hollow: [['.hhh.', '.sos.', 'skkks', '.k.k.', '.kkk.', '.b.b.', 'b...b'], ['.hhh.', '.sos.', 'skkks', '.k.k.', '.kkk.', 'b...b', '.b.b.']],
     herald: [['.y.y.', '..y..', '.sss.', 'eeeee', '.eye.', '.eee.', '.e.e.'], ['.y.y.', '..y..', '.sss.', 'eeeee', '.eye.', 'eeeee', 'e...e']],
     deer: [['.....W', '....fW', 'ffffff', 'fffff.', '.f..f.'], ['.....W', '....fW', 'ffffff', 'fffff.', 'f....f']],
@@ -958,6 +964,9 @@
     const t = AG.clamp((hue - 40) / 190, 0, 1);
     return [232 - t * 128, 192 - t * 122, 160 - t * 110];
   }
+  const RACE_SPRITE = { sylvan: 'sylvan', stonekin: 'stone', ashborn: 'ashen', saurian: 'saurian', hivekin: 'hive', tidefolk: 'tide', lithari: 'crystal', voidborn: 'void', simian: 'simian' };
+  // the base people a folk descends from
+  function raceRoot(R) { let q = R, n = 0; while (q && !q.base && q.parent !== undefined && n++ < 20) q = AG.Races.get(q.parent); return q ? q.key : 'human'; }
   function unitSprite(i, frame) {
     const sp = U.sp[i], d = SPECIES[sp], kd = U.kd[i], flip = U.fx[i] < 0;
     if (d.kind === 'civ') {
@@ -967,14 +976,18 @@
       else if (job === J.SOLDIER || U.sq[i] >= 0) role = 'soldier';
       else if (job === J.PRIEST) role = 'priest';
       else if (job === J.CHILD) role = 'child';
-      const hue = U.hue[i] >> 4, elder = job === J.ELDER ? 1 : 0, c = Civ.cities[U.city[i]], era = c ? Math.min(c.era, 4) : 0;
-      const key = `c|${role}|${kd}|${hue}|${elder}|${era}|${frame}|${flip ? 1 : 0}`;
+      const hue = U.hue[i] >> 4, elder = job === J.ELDER ? 1 : 0, c = Civ.cities[U.city[i]], era = c ? Math.min(c.era, 4) : 0, race = U.race[i];
+      const key = `c|${role}|${kd}|${hue}|${elder}|${era}|${frame}|${flip ? 1 : 0}|${race}`;
       return getSprite(key, () => {
         const kc = kd >= 0 && Civ.kingdoms[kd] ? Civ.kingdoms[kd].color : [150, 150, 150];
         const cloth = era <= 1 ? [150, 112, 74] : era === 2 ? AG.mixc([196, 180, 150], kc, 0.4) : kc; // hides, then linen, then dyed cloth
-        const skin = skinOf(hue * 16 + 8), hair = hue < 1 ? [236, 230, 220] : AG.mixc([176, 134, 72], [34, 24, 18], AG.clamp(hue / 9, 0, 1));
+        const Rc = AG.Races ? AG.Races.get(race) : null, rs = Rc ? AG.Races.skin(Rc, hue * 16 + 8) : null;
+        const skin = rs || skinOf(hue * 16 + 8), hair = Rc && Rc.look.hair ? Rc.look.hair : hue < 1 ? [236, 230, 220] : AG.mixc([176, 134, 72], [34, 24, 18], AG.clamp(hue / 9, 0, 1));
         const pal = Object.assign({}, BASEPAL, { s: skin, h: elder ? [214, 214, 220] : hair, k: cloth, K: dark(cloth), m: era >= 4 ? [200, 160, 90] : era >= 3 ? [200, 120, 70] : [150, 140, 130] });
-        return makeSprite(S[role][frame], pal, flip);
+        if (Rc && Rc.look.featC) pal.o = Rc.look.featC;
+        // each people its own figure (in everyday dress; soldiers, rulers and priests keep their kit)
+        const T = role === 'person' && Rc ? RACE_SPRITE[raceRoot(Rc)] || 'person' : role;
+        return makeSprite(S[T][frame], pal, flip);
       });
     }
     const sid = U.sid[i], spc = sid >= 0 ? AG.Life.species[sid] : null;
