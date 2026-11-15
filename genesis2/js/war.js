@@ -536,12 +536,13 @@
   War.yearStep = function (dy) {
     AG.Warfare.yearStep(dy);
     diplomacy(dy); warTick(dy); religionYear(dy); tradeYear(dy); outbreaks(dy);
+    if (AG.Plague) AG.Plague.yearStep(dy);
     if (AG.Races) AG.Races.yearStep(dy);
   };
   War.tick = function () {
     const t = AG.tick, Y = AG.YEAR_TICKS;
     if (t % 120 === 30) { diplomacy(120 / Y); warTick(120 / Y); }
-    if (t % 240 === 90) { religionYear(240 / Y); tradeYear(240 / Y); outbreaks(240 / Y); }
+    if (t % 240 === 90) { religionYear(240 / Y); tradeYear(240 / Y); outbreaks(240 / Y); if (AG.Plague) AG.Plague.yearStep(240 / Y); }
     if (t % 10 === 0) for (const sq of Civ.squads) if (sq.alive) squadTick(sq);
     if (t % 20 === 0) for (const c of Civ.cities) if (c.alive && c.materialized) captureCheck(c);
     if (t % 15 === 0) defenses();

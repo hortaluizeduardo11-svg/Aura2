@@ -75,16 +75,17 @@
   const BAR = [
     { id: 'terrain', name: 'Terrain', icon: 'tab-terrain', groups: [['Shape', ['raise', 'lower', 'smooth']], ['Paint', ['grass', 'forest', 'desert', 'grain', 'snowcap']], ['Geology', ['plate', 'calm', 'iceage', 'warm']], ['Underground', ['dig', 'fill', 'ore', 'magma', 'aquifer']]] },
     { id: 'civ', name: 'Civilizations', icon: 'tab-civ', groups: [['People', ['people', 'possess']], ['Guide', ['dream', 'omen', 'inspire']], ['Diplomacy', ['harmony', 'discord']], ['Grace', ['bless']], ['Look', [['panel:peoples', 'Peoples'], ['panel:chronicle', 'History']]]] },
-    { id: 'peoples', name: 'Peoples', icon: 'tab-peoples', groups: [['Peoples', ['people', 'race-sylvan', 'race-stonekin', 'race-ashborn', 'race-saurian', 'race-hivekin', 'race-tidefolk', 'race-lithari', 'race-voidborn']], ['Biology', ['uplift']], ['Look', [['panel:world', 'Peoples']]]] },
+    { id: 'peoples', name: 'Peoples', icon: 'tab-peoples', groups: [['Peoples', ['people', 'race-sylvan', 'race-stonekin', 'race-ashborn', 'race-saurian', 'race-hivekin', 'race-tidefolk', 'race-lithari', 'race-voidborn']], ['Biology', ['uplift']], ['Ages', ['eureka', 'brain', 'inspire']], ['Look', [['panel:world', 'Peoples']]]] },
     { id: 'war', name: 'War', icon: 'tab-war', groups: [['Diplomacy', ['declare', 'treaty', 'alliance', 'harmony', 'discord']], ['Command', ['levy', 'fortify', 'blitz', 'revolt']], ['Doom', ['nuke']], ['Look', [['panel:war', 'War room'], ['ov:realms', 'Realms']]]] },
     { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Look', [['panel:life', 'Tree of life']]]] },
     { id: 'weather', name: 'Weather', icon: 'tab-weather', groups: [['Storms', ['rain', 'thunder', 'blizzard', 'heat', 'bolt']], ['Elements', ['water', 'lava', 'acid', 'fire', 'freeze', 'drain']]] },
-    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse']]] },
+    { id: 'plague', name: 'Plague', icon: 'tab-plague', groups: [['Lab', [['panel:plague', 'Plague lab'], 'zero', 'plague']], ['Watch', [['ov:plague', 'Sickness map'], ['panel:war', 'War room']]]] },
+    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse']], ['Sci-fi', ['ufo', 'goo', 'hole']], ['Myth', ['dragon']]] },
     { id: 'world', name: 'World', icon: 'tab-world', groups: [['Look', ['inspect']], ['Layer', [['view:0', 'Underground'], ['view:1', 'Surface'], ['view:2', 'Sky']]],
       ['Map', [['ov:realms', 'Realms'], ['ov:faith', 'Faiths'], ['ov:language', 'Languages'], ['ov:era', 'Eras'], ['ov:genes', 'Genes'], ['ov:rock', 'Rock'], ['ov:resources', 'Resources'], ['ov:heat', 'Climate'], ['ov:none', 'Plain'], ['trade', 'Trade routes']]],
       ['Windows', [['panel:inspect', 'Inspector'], ['panel:world', 'World stats'], ['minimap', 'Minimap']]], ['Game', [['act:save', 'Save'], ['act:load', 'Load'], ['act:timelapse', 'Time-lapse'], ['act:menu', 'Settings'], ['act:title', 'Title screen']]]] },
   ];
-  const OVERLAYS = ['realms', 'faith', 'language', 'era', 'genes', 'rock', 'resources', 'heat', 'none'];
+  const OVERLAYS = ['realms', 'faith', 'language', 'era', 'genes', 'rock', 'resources', 'heat', 'plague', 'none'];
   const tabOfTool = {};
   for (const T of BAR) for (const [, items] of T.groups) for (const it of items) if (typeof it === 'string') tabOfTool[it] = T.id;
   const icon = (id) => AG.Icons.url(id);
@@ -260,7 +261,7 @@
   function setTab(t) {
     UI.tab = t; worldBuilt = false;
     for (const b of document.querySelectorAll('.tab')) { b.classList.toggle('on', b.dataset.tab === t); b.setAttribute('aria-selected', b.dataset.tab === t); }
-    $('#ptitle').textContent = { inspect: 'Inspector', peoples: 'Peoples', life: 'Tree of Life', chronicle: 'History', world: 'World', war: 'War room' }[t] || 'Chronicle';
+    $('#ptitle').textContent = { inspect: 'Inspector', peoples: 'Peoples', life: 'Tree of Life', chronicle: 'History', world: 'World', war: 'War room', plague: 'Plague lab' }[t] || 'Chronicle';
     refreshBarState();
     renderPanel(true);
   }
@@ -466,7 +467,7 @@
     if (!$('#panel').hidden) {
       if (UI.tab === 'chronicle' && AG.Chronicle.dirty && frameN % 6 === 0) renderPanel(false);
       else if (UI.tab === 'inspect' && frameN % 30 === 0 && !panelHover) renderPanel(false);
-      else if ((UI.tab === 'peoples' || UI.tab === 'life' || UI.tab === 'world' || UI.tab === 'war') && frameN % 60 === 0 && !panelHover) renderPanel(false);
+      else if ((UI.tab === 'peoples' || UI.tab === 'life' || UI.tab === 'world' || UI.tab === 'war' || UI.tab === 'plague') && frameN % 60 === 0 && !panelHover) renderPanel(false);
     }
   };
   function worldEra() { let e = 0; for (const c of Civ.cities) if (c.alive && c.era > e) e = c.era; return Tech.ERAS[e]; }
@@ -520,10 +521,13 @@
       case 'chronicle': pb.innerHTML = historyHTML(); AG.Chronicle.dirty = false; break;
       case 'world': if (!worldBuilt || force) { pb.innerHTML = worldShell(); worldBuilt = true; } $('#wstats').innerHTML = worldStats(); break;
       case 'war': pb.innerHTML = warRoomHTML(); break;
+      case 'plague': if (!force && panelHover) break; pb.innerHTML = labHTML(); break;
     }
   }
   UI.render = renderPanel;
   function panelClick(e) {
+    const pl = e.target.closest('[data-pl]');
+    if (pl) { labAction(pl.dataset.pl); return; }
     const t = e.target.closest('[data-pid],[data-city],[data-kd],[data-sp],[data-x],[data-act],[data-dis],[data-sub],[data-whatif],[data-branch],[data-hf],[data-lang]');
     if (!t) return;
     if (t.dataset.pid) { UI.sel = { type: 'person', id: +t.dataset.pid }; setTab('inspect'); const P = People.get(+t.dataset.pid); if (P && P.died === null) { const c = Civ.cities[P.comm]; if (c) R.centerOn(P.body >= 0 ? U.x[P.body] : c.x, P.body >= 0 ? U.y[P.body] : c.y); } return; }
@@ -749,6 +753,49 @@
   }
 
   // ============================================================ Peoples, Life, History
+  // The plague lab: design a pathogen, buy its traits with DNA, set it loose, watch the cure race.
+  UI.labType = 'bacteria';
+  function labHTML() {
+    const Pl = AG.Plague; if (!Pl) return '';
+    const p = Pl.cur(), T = Pl.TYPES;
+    const live = Pl.list.filter((q) => !q.done || q.cured);
+    let h = `<div class="btnrow" style="flex-wrap:wrap;gap:4px">${live.map((q) => `<button type="button" class="btn${p && q.id === p.id ? ' on' : ''}" data-pl="sel:${q.id}" style="border-color:${T[q.type].color}">${esc(q.name)}${q.cured ? ' (cured)' : q.done ? ' (gone)' : ''}</button>`).join('')}</div>`;
+    h += `<h3>New pathogen</h3><div style="display:flex;flex-wrap:wrap;gap:4px">${Object.keys(T).map((k) => `<button type="button" class="btn${UI.labType === k ? ' on' : ''}" data-pl="type:${k}" title="${esc(T[k].desc)}" style="border-color:${T[k].color}">${esc(T[k].name)}</button>`).join('')}</div>
+      <p class="muted" style="font-size:12px;margin:4px 0">${esc(T[UI.labType].desc)}</p>
+      <div class="btnrow"><button type="button" class="btn" data-pl="new">Create ${esc(T[UI.labType].name.toLowerCase())}</button></div>`;
+    if (!p) return h + '<p class="muted" style="font-size:12px">Create a pathogen, then pick <b>Patient zero</b> on the Plague bar and tap a community.</p>';
+    const D = AG.DISEASES[p.d] || {}, sev = Pl.severity(p), status = p.cured ? `Cured in ${yr(p.curedYear)}` : p.done ? 'Gone' : p.zero < 0 ? 'Waiting for patient zero' : p.infected ? 'Spreading' : 'Dormant';
+    const pct = (v) => Math.round(v * 100) + '%';
+    h += `<h3 style="color:${T[p.type].color}">${esc(p.name)} <span class="muted" style="font-size:12px">${esc(T[p.type].name)}</span></h3>
+      <dl class="kv"><dt>Status</dt><dd>${status}${p.detected && !p.done ? ' · noticed' : !p.done ? ' · unnoticed' : ''}</dd><dt>${p.type === 'rumour' ? 'Believers' : 'Infected'}</dt><dd>${fmt(p.infected)} in ${p.comms} communities (peak ${fmt(p.peak)})</dd>
+      <dt>Dead</dt><dd>${fmt(p.dead)}</dd><dt>DNA</dt><dd>${Pl.unlimited ? '∞' : fmt(p.dna)}</dd><dt>Spread</dt><dd>${pct(D.contagion || 0)}</dd><dt>Lethality</dt><dd>${(D.lethality || 0).toFixed(2)}</dd><dt>Severity</dt><dd>${sev}</dd></dl>
+      <div style="font-size:12px">${p.type === 'rumour' ? 'The truth' : 'Cure'}: ${pct(p.cure)}</div><div style="height:8px;border:1px solid var(--line,#444);margin:2px 0 6px"><div style="height:100%;width:${pct(p.cure)};background:#64b5f6"></div></div>
+      <label style="font-size:12px"><input type="checkbox" data-pl="unlimited" ${Pl.unlimited ? 'checked' : ''}> Unlimited DNA (sandbox)</label>`;
+    for (const [g, name] of [['trans', 'Transmission'], ['symp', p.type === 'rumour' ? 'Effects' : 'Symptoms'], ['abil', 'Abilities']]) {
+      h += `<h3>${name}</h3><div style="display:flex;flex-wrap:wrap;gap:4px">`;
+      for (const t of Pl.TRAIT_LIST.filter((q) => q.group === g)) {
+        const own = p.traits.includes(t.key), can = Pl.canBuy(p, t.key), locked = t.pre && !p.traits.includes(t.pre);
+        h += `<button type="button" class="btn${own ? ' on' : ''}" data-pl="${own ? 'sell' : 'buy'}:${t.key}" ${!own && !can ? 'disabled' : ''} title="${own ? 'Owned (tap to devolve for some DNA back)' : locked ? 'Needs ' + esc(Pl.traitName(p, t.pre)) : 'Costs ' + Pl.cost(p, t.key) + ' DNA'}">${esc(Pl.traitName(p, t.key))}${own ? ' ✓' : locked ? ' 🔒' : ' ' + Pl.cost(p, t.key)}</button>`;
+      }
+      h += '</div>';
+    }
+    const hordes = Pl.hordes.filter((q) => q.p === p.id), lords = Pl.lords.filter((q) => q.p === p.id);
+    if (hordes.length) h += `<h3>Hollow hordes</h3>` + hordes.map((q) => `<div style="font-size:12px"><button type="button" class="link" data-x="${Math.round(q.x)}" data-y="${Math.round(q.y)}">${Math.round(q.n)} hollow</button> risen from ${esc(q.from)}</div>`).join('');
+    if (lords.length) h += `<h3>Lord of the night</h3>` + lords.map((q) => `<div style="font-size:12px"><button type="button" class="link" data-x="${Math.round(q.x)}" data-y="${Math.round(q.y)}">${esc(q.name)}</button> · fed on ${q.fed} · strength ${Math.round(q.hp)}</div>`).join('');
+    if (p.log.length) h += `<h3>Log</h3>` + p.log.slice(-8).reverse().map((e) => `<div style="font-size:12px">${yr(e.year)}: ${esc(e.text)}</div>`).join('');
+    return h;
+  }
+  function labAction(a) {
+    const Pl = AG.Plague, [k, v] = a.split(':'), p = Pl.cur();
+    if (k === 'type') UI.labType = v;
+    else if (k === 'new') { const q = Pl.create(UI.labType); if (!q) UI.toast('The world holds too many diseases at once; wait for one to die out.'); else { UI.toast(`${q.name} is ready. Pick Patient zero and tap a community.`); selectTool('zero'); } }
+    else if (k === 'sel') Pl.current = +v;
+    else if (k === 'buy' && p) { if (!Pl.buy(p, v)) UI.toast('Not enough DNA'); }
+    else if (k === 'sell' && p) { if (!Pl.sell(p, v)) UI.toast('Other traits are built on that one'); }
+    else if (k === 'unlimited') Pl.unlimited = !Pl.unlimited;
+    renderPanel(true);
+  }
+  UI.labAction = labAction;
   // The war room: every war with its score, generals, arms and fronts; vassals and alliances.
   function warRoomHTML() {
     const Wf = AG.Warfare;

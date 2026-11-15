@@ -264,6 +264,7 @@
   People.die = function (P, cause, killer) {
     if (!P || P.died !== null) return;
     P.died = year(); P.cause = cause || 'unknown causes';
+    if (AG.Plague && P.dis) AG.Plague.onDeath(P, cause);
     People.alive--; People.deaths++;
     const age = Math.floor(People.age(P));
     const by = killer ? People.get(killer) : null;
@@ -369,7 +370,7 @@
         parts.sort((a, b) => b[0] - a[0]);
         People.die(P, parts[0][1]); continue;
       }
-      if (P.dis) { P.dtm += dy * 40; const D = AG.DISEASES[P.dis - 1]; if (!D || P.dtm > (D.incubation + D.duration)) { if (D) { P.imm |= 1 << (P.dis - 1); People.remember(P, MK.RECOVERED, { v: 0.3, s: 0.4, d: D.name }); } P.dis = 0; } }
+      if (P.dis && !(AG.DISEASES[P.dis - 1] && AG.DISEASES[P.dis - 1].lab)) { P.dtm += dy * 40; const D = AG.DISEASES[P.dis - 1]; /* (the plague lab's pathogens heal in plague.js) */ if (!D || P.dtm > (D.incubation + D.duration)) { if (D) { P.imm |= 1 << (P.dis - 1); People.remember(P, MK.RECOVERED, { v: 0.3, s: 0.4, d: D.name }); } P.dis = 0; } }
       // bodies heal, age and wear
       for (let k = 0; k < 6; k++) P.parts[k] *= heal;
       P.hp = Math.min(1, P.hp + dy * 0.8);

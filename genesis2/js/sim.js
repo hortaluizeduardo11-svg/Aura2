@@ -22,6 +22,7 @@
     AG.seed = seed; AG.tick = 0; AG.mode = 'deep'; AG.creating = true;
     AG.seedRnd(Math.imul(seed, 2654435761) >>> 0);
     AG.DISEASES.splice(0, AG.DISEASES.length, ...AG.DISEASES.filter((d) => d.builtin));
+    if (AG.Plague) AG.Plague.reset();
     AG.Chronicle.reset(); AG.History.reset(); AG.Ent.reset(); AG.Civ.reset(); AG.War.reset(); AG.God.reset(); AG.FX.reset && AG.FX.reset(); AG.Proj.reset();
     People.reset(); AG.Lang.list.length = 0; AG.Lang.splits = 0; AG.Lang.changes = 0; AG.Tech.reset();
     Wd.reset(); Wd.seed = seed;

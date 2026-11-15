@@ -1757,6 +1757,53 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
       const g = V.groundAt(s.cx, s.cy), kc = k.color;
       for (let q = 0; q < 2; q++) plane(s.cx, g, s.cy, s.id * 3.1 + q * Math.PI, era, kc, t, prop, 4 + q * 1.5);
     }
+    // wonders and terrors: the sky-ship and its beam, the dragon, the black hole's maw
+    for (const w of (AG.God && AG.God.wonders) || []) {
+      if (w.x < wx0 || w.y < wy0 || w.x >= x1 || w.y >= y1) continue;
+      const gy = V.groundAt(w.x, w.y);
+      if (w.kind === 'ufo') {
+        const lift = 6 + Math.max(0, 3 - w.t) * 8 + Math.max(0, w.t - w.life + 2) * 10;
+        prop(w.x, gy + lift, w.y, 2.4, 0.3, 2.4, t, [154, 164, 176]); prop(w.x, gy + lift + 0.3, w.y, 1.0, 0.45, 1.0, t, [200, 246, 255]);
+        for (let q = 0; q < 8; q++) { const a = q / 8 * Math.PI * 2 + t * 2; prop(w.x + Math.cos(a) * 1.1, gy + lift + 0.1, w.y + Math.sin(a) * 1.1, 0.15, 0.1, 0.15, 0, q % 2 ? [122, 255, 208] : [255, 110, 110]); }
+        if (w.t > 1.5 && w.t < w.life - 1.5) prop(w.x, gy, w.y, 0.9, lift, 0.9, t * 0.5, [190, 255, 250]);
+      } else if (w.kind === 'dragon') {
+        const ry = Math.atan2(w.vx, w.vy), fx = Math.sin(ry), fz = Math.cos(ry), rx = Math.cos(ry), rz = -Math.sin(ry), lift = 6 + Math.sin(t * 2) * 0.3, flap = Math.sin(t * 5);
+        prop(w.x, gy + lift, w.y, 0.5, 0.36, 1.5, ry, [170, 36, 36]);
+        prop(w.x + fx * 0.85, gy + lift + 0.1, w.y + fz * 0.85, 0.28, 0.26, 0.42, ry, [150, 30, 30]);
+        prop(w.x - fx * 1.05, gy + lift + 0.05, w.y - fz * 1.05, 0.14, 0.12, 0.7, ry, [130, 26, 26]);
+        for (const side of [-1, 1]) prop(w.x + rx * side * 0.95, gy + lift + 0.2 + flap * 0.35, w.y + rz * side * 0.95, 1.5, 0.05, 0.75, ry, [140, 28, 28], -side * flap * 0.5);
+        if (w.breath > 0 && w.tgt >= 0) prop(w.x + fx * 1.4, gy + lift - 0.4, w.y + fz * 1.4, 0.3, 0.3, 1.2, ry, [255, 170, 60], 0.6);
+      } else if (w.kind === 'hole') {
+        const r = w.r * Math.min(1, w.t / 2) * (w.t > w.life - 2 ? Math.max(0, (w.life - w.t) / 2) : 1);
+        if (nh < MAXU - 1) place(heads, nh++, w.x, gy + 0.6 + r * 0.5, w.y, r * 1.2, r * 1.2, r * 1.2, t, [3, 2, 6], 0); // (a sphere of nothing)
+        for (let q = 0; q < 16; q++) { const a = q / 16 * Math.PI * 2 + t * 1.5; prop(w.x + Math.cos(a) * r * 1.6, gy + 0.9 + Math.sin(a * 2) * 0.1, w.y + Math.sin(a) * r * 1.6, 0.5, 0.06, 0.2, -a, [255, 150 + (q % 3) * 30, 60]); }
+      }
+    }
+    // the plague lab's walkers: hollow hordes shamble with their arms out; the lord of the night
+    // stands in its cloak under a cloud of bats
+    if (AG.Plague) {
+      const Pl = AG.Plague;
+      for (const h of Pl.hordes) {
+        if (h.x < wx0 || h.y < wy0 || h.x >= x1 || h.y >= y1) continue;
+        const n = Math.min(16, 2 + Math.round(h.n / 2)), r = 0.6 + Math.sqrt(h.n) * 0.35;
+        for (let k = 0; k < n; k++) {
+          const a = k * 2.4 + h.born, d = r * Math.sqrt((k + 0.5) / n), x = h.x + Math.cos(a) * d + Math.sin(t * 0.8 + k) * 0.12, y = h.y + Math.sin(a) * d, gy = V.groundAt(x, y), ry = a + Math.sin(t + k) * 0.4, sway = Math.sin(t * 3 + k) * 0.12;
+          const fx = Math.sin(ry), fz = Math.cos(ry), kk = FIG;
+          prop(x, gy, y, 0.14 * kk, 0.36 * kk, 0.1 * kk, ry, [92, 104, 80], sway);
+          prop(x + fx * 0.02, gy + 0.36 * kk, y + fz * 0.02, 0.1 * kk, 0.1 * kk, 0.1 * kk, ry, [150, 178, 128], sway);
+          for (const side of [-1, 1]) prop(x + Math.cos(ry) * side * 0.06 * kk + fx * 0.08 * kk, gy + 0.27 * kk, y - Math.sin(ry) * side * 0.06 * kk + fz * 0.08 * kk, 0.03 * kk, 0.03 * kk, 0.16 * kk, ry, [130, 150, 110]);
+        }
+      }
+      for (const l of Pl.lords) {
+        if (l.x < wx0 || l.y < wy0 || l.x >= x1 || l.y >= y1) continue;
+        const gy = V.groundAt(l.x, l.y), kk = FIG * 1.3, ry = t * 0.2;
+        prop(l.x, gy, l.y, 0.22 * kk, 0.42 * kk, 0.16 * kk, ry, [40, 8, 22]);
+        prop(l.x, gy + 0.42 * kk, l.y, 0.1 * kk, 0.11 * kk, 0.1 * kk, ry, [214, 210, 220]);
+        prop(l.x + Math.sin(ry) * 0.05 * kk, gy + 0.47 * kk, l.y + Math.cos(ry) * 0.05 * kk, 0.07 * kk, 0.02 * kk, 0.01, ry, [255, 30, 30]);
+        prop(l.x, gy + 0.36 * kk, l.y, 0.3 * kk, 0.1 * kk, 0.2 * kk, ry, [24, 6, 14]); // the high collar
+        for (let q = 0; q < 8; q++) { const a = t * 2 + q * 0.8, bx = l.x + Math.cos(a) * (0.8 + (q % 3) * 0.3), bz = l.y + Math.sin(a) * (0.8 + (q % 3) * 0.3), by = gy + 0.9 + Math.sin(a * 1.7 + q) * 0.2, flap = Math.sin(t * 16 + q); prop(bx, by, bz, 0.12, 0.01, 0.04, -a, [20, 14, 24], flap * 0.6); }
+      }
+    }
     people.count = np; heads.count = nh; hats.count = nhat; beasts.count = nb; props.count = nprop;
     for (const m of [people, heads, hats, beasts, props]) flag(m);
     if (M3 && M3.ready) { M3.endFrame(); V.stats.models = M3.stats; }

@@ -8,7 +8,13 @@ different year in every world), people appear, and from then on history runs on 
 - hunter-gatherer bands spread, split and marry between camps
 - languages drift apart
 - wherever the land and climate allow, and only there, farming, metal, writing and states
-  appear
+  appear, and on through castles, printing, steam, engines, computers and spaceflight to the
+  stars and endless future technology, each age rebuilding the towns in its own look
+- other peoples can share the world (elves of the woods, mountain dwarves, horned raiders,
+  lizard-folk, insect hives, sea-folk, crystal beings, star visitors, uplifted apes), and new
+  peoples split off from isolated ones
+- wars are fought with the arms of each age, led by generals and ended by treaties; and the god
+  can design plagues in a lab and set them loose
 
 Every person is a record with:
 - a genome inherited from both parents
@@ -37,8 +43,8 @@ the title screen back.
 
 **The interface** is pixel art throughout, in one pixel font:
 - **Top bar:** the calendar, the speeds, Skip to the Dawn, the Chronicle window and the Menu.
-- **Power bar** along the bottom, in six tabs: Terrain, Civilizations, Creatures, Weather,
-  Destruction and World.
+- **Power bar** along the bottom, in nine tabs: Terrain, Civilizations, Peoples, War, Creatures,
+  Weather, Plague, Destruction and World.
   - Each tab lays its powers out as two rows of icon buttons, in labelled groups (Shape, Paint,
     Geology, Underground, and so on). Hover over a power for its name and what it does; on a
     touch screen the card shows when you pick it.
@@ -87,10 +93,13 @@ Settings take effect at once and are saved in the browser.
 - **Life:** the tree of life.
 - **History:** the chronicle, with a cause on every entry, plus era timelines, era maps and
   "what if this never happened?".
-- **World:** save/load, time-lapse, scenarios, new world, engine stats and diseases. Graphics
-  settings are in the menu.
+- **War:** the war room: every war with its score, generals, arms and fronts, the last battle,
+  vassals and alliances.
+- **Lab:** the plague lab (below).
+- **World:** save/load, time-lapse, scenarios, new world, engine stats, the census of peoples and
+  diseases. Graphics settings are in the menu.
 
-**Powers** (53, each with its own pixel icon; this is what they do, the bar groups them in six tabs):
+**Powers** (over 80, each with its own pixel icon; this is what they do, the bar groups them in nine tabs):
 - **Land:** raise or lower ground, plant meadows, forests or wild grain.
 - **Geology:** push a plate, trigger or calm a fault, force an eruption, start an ice age, warm
   the world.
@@ -102,6 +111,35 @@ Settings take effect at once and are saved in the browser.
 - **Ruin:** meteors (they fly in real time, even while paused, with a 3D flight and impact up
   close), tornadoes, tsunamis.
 - **Deep:** dig, ore, magma, aquifers.
+- **Peoples:** set down a band of any of eight peoples, uplift apes to minds; **Eureka** (a
+  community leaps into its next age) and **Golden brain** (generations of curious, brilliant
+  people).
+- **War:** declare war, a peace treaty on the war score's terms, alliances, incite a revolt,
+  levy soldiers, fortify a town at once, blitz (every front attacks at once), and the bomb
+  (only the god uses it: a flash, a firestorm, a crater and fallout).
+- **Plague:** patient zero for the lab's pathogen, and the sickness map.
+- **Sci-fi and myth:** a UFO that takes a few people (and sometimes leaves a secret behind), grey
+  goo that eats everything in a widening circle, a black hole that swallows land and towns, and a
+  dragon that burns town after town until the defenders bring it down.
+
+**The plague lab** (the Plague tab, or the Lab panel): pick a type, create the pathogen, then
+tap a community with Patient zero.
+- **Types:** bacterium (hardy), virus (mutates by itself), fungus (spores jump to distant lands),
+  parasite (hard to notice), prion (very hard to cure), nano-virus (seen at once, fought hard),
+  bio-weapon (grows deadlier on its own), and five strange ones: an **undead blight** whose dead
+  rise in hordes that fall on the living, an **ape fever** that wakes apes to minds, a **night
+  plague** led by a lord of the night who walks from town to town, a **mind worm** that binds
+  its hosts into a cult that breaks away, and a **rumour** that kills nobody but breeds unrest,
+  revolts and hatred between realms (its cure is the truth).
+- **Traits** bought with DNA, which the outbreak earns as it spreads and kills: transmission
+  (air, water, livestock, rodents, insects, blood), symptoms (each more visible and more deadly,
+  up to total organ failure) and abilities (cold, heat and drug resistance, genetic hardening and
+  reshuffling). Unlimited DNA is a checkbox.
+- It spreads inside communities generation by generation and between them along contacts,
+  neighbours, shores and spores; cold and heat slow it unless it resists them. The sick recover
+  and are immune, unless the illness never lets go.
+- Once it is noticed, every realm that knows of it works on a cure as fast as its medicine and
+  science allow: almost nothing before medicine, years with vaccines and computers.
 
 ## What's simulated
 
@@ -228,15 +266,40 @@ Settings take effect at once and are saved in the browser.
     food yield. They eat, starve, move camp, split, merge, marry out (exogamy) and settle.
   - **Polities** (band → tribe → chiefdom → state) have rulers, succession, institutions that
     grow corrupt and get reformed, inequality, legitimacy, collapse and secession.
-  - **A 50-invention graph** with prerequisites and real conditions. Cultivation needs wild
-    cereals and a settled climate; bronze needs tin, or trade for it; writing needs a chiefdom.
-    Inventions spread between contacts, and small isolated groups can lose them. Eras are only
-    labels on what each community knows.
+  - **A 100-invention graph in 15 ages** (Paleolithic to Classical, then Medieval, Renaissance,
+    Industrial, Modern, Atomic, Information, Space Age and Stellar) with prerequisites and real
+    conditions. Cultivation needs wild cereals and a settled climate; bronze needs tin, or trade
+    for it; writing needs a chiefdom; fission needs a state. Inventions spread between
+    contacts, and small isolated groups can lose them. Eras are only labels on what each
+    community knows. Past warp drive come future technologies without end.
+  - **Effects of the later ages:** mills, fertiliser, engines, the green revolution and
+    genetics multiply farming; vaccines, antibiotics and genetics cut disease deaths; printing,
+    universities, science, computers, the net and artificial minds multiply invention (about
+    12× by the Space Age), so history speeds up as it does on Earth; houses hold more people.
+  - **The look of each age:** towns rebuild in 3D and 2D as half-timbered townhouses, castles,
+    cathedrals and windmills; brick terraces, factories, railway halls and domed capitols;
+    apartment blocks, skyscrapers, malls and cooling towers; glass towers, data centres and wind
+    turbines; arcologies, fusion rings and a launch tower with its rocket (and a sky tether in
+    the Stellar age). Soldiers carry sword and shield, pike or musket, rifle, helmet and carbine,
+    then white armour and plasma rifles; carts become lorries and hover freighters, siege engines
+    cannon and tanks, boats steamers and freighters; aircraft circle over modern armies; clothes
+    follow the fashions of the age.
+  - **Peoples** (`races.js`): eight base peoples with their own lifespans, fertility, fighting,
+    wits, stability, xenophobia, food and climate preferences, faces and towns. They only marry
+    their own. Uplifted apes become a people of their own, and a realm long cut off from its kin
+    becomes a new people (ethnogenesis).
   - **Languages** have regular sound changes and split when contact breaks or a dialect chain
     stretches too far.
-  - **Also:** diplomacy, raids and wars (embodied squads near the camera, Lanchester battles
-    elsewhere), trade, gods born of what a people lived through, and epidemics with drifting
-    strains.
+  - **War** (`warfare.js`, `war.js`): neighbouring states compete for land, the strong covet
+    the weak, and realms far ahead in the ages look on their neighbours as lands to take. Battles
+    follow Lanchester's square law with the multiplied weight of each side's arms (a gap of ages
+    is decisive), generals who win fame or fall, defenders' ground (hills, mountains, forests,
+    rivers; air power flattens it), winter in cold country and supply lines that roads, railways,
+    engines and aircraft lengthen. Each war keeps a score for both sides; the peace follows it:
+    a white peace, tribute, vassalage (vassals march with their lords) or a city annexed.
+    Embodied squads march near the camera.
+  - **Also:** trade, gods born of what a people lived through, epidemics with drifting strains,
+    and the plague lab (`plague.js`).
 - **History** (`history.js`):
   - every chronicle entry carries its cause
   - snapshots every 500 years make counterfactuals possible ("what if writing was never
@@ -297,7 +360,7 @@ message instead of a frozen screen.
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 20 headless tests, ~85 s
+node genesis2/tests/run.js            # 22 headless tests, ~90 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -324,6 +387,11 @@ The tests cover:
 - **Habitat:** animals stand on clearly better ground than random spots, social kinds come in
   groups, predators are near prey, grazers bed down at night, fewer songbirds stay for a cold
   winter, and a bear in cold country hibernates and burns almost nothing.
+- **Ages:** every invention needs nothing from a later age; learning multiplies through the
+  ages; past warp drive there is always more to learn; the arms of the Stellar age outweigh a
+  warband a hundredfold.
+- **Plague lab:** a pathogen spreads between communities, earns DNA, is noticed and worked on
+  toward a cure; a rumour kills nobody.
 
 Both demos are also in-game under World → Scenarios.
 
@@ -342,7 +410,8 @@ This is a prototype, and these are the honest gaps:
 - **States are rare.**
   - Chiefdoms appear after farming. States need a large, long-lived chiefdom with writing,
     monuments or several towns, and at this population scale few reach it in 14,000 years.
-  - Conquest-driven state formation is modelled, but wars are infrequent.
+  - Conquest-driven state formation is modelled; wars are now common between states, rarer
+    between bands.
 - **One big continent.**
   - Deep time usually ends with a single large landmass covering about 60% of the map, more
     than Earth.

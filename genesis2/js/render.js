@@ -724,6 +724,10 @@
       if (mode === 'faith') { kk = c.religion; rc = c.religion >= 0 ? Civ.religions[c.religion].color : null; }
       else if (mode === 'language') { const L = AG.Lang.get(c.lang); kk = c.lang; if (L) { const fam = AG.Lang.get(L.family); rc = AG.hsl((L.family * 97 + 30) % 360 + (L.id - L.family) * 9, 0.6, 0.45 + ((L.id * 37) % 5) * 0.06); } }
       else if (mode === 'era') { kk = c.era; rc = ERA_C[c.era]; }
+      else if (mode === 'plague') { // the share of each community that is sick (any illness), pale green to deep red
+        let n = 0, s = 0; for (const id of c.members) { const P = AG.People.get(id); if (P) { n++; if (P.dis) s++; } }
+        const f = n ? s / n : 0; kk = f > 0 ? 1 + Math.min(4, (f * 5) | 0) : -1; rc = f > 0 ? [Math.round(150 + f * 105), Math.round(200 - f * 180), Math.round(80 - f * 60)] : null;
+      }
       else if (mode === 'genes') { // the people's mean skin tone (pigment gene)
         let h = 0, n = 0; for (const id of c.members) { const P = AG.People.get(id); if (P) { h += AG.Life.express(P.gen, 0, AG.Life.L.HUE); n++; } }
         h = n ? h / n : 128; kk = (h / 12) | 0; rc = skinOf(h);
@@ -1223,7 +1227,7 @@
     const tp = performance.now();
     updateTerrain();
     R.stats.terrainMs = performance.now() - tp;
-    if (R.bordersDirty || (R.overlay === 'heat' && frameN % 20 === 0) || (AG.mode === 'deep' && frameN % 10 === 0)) { updateBorders(); R.bordersDirty = false; }
+    if (R.bordersDirty || (R.overlay === 'heat' && frameN % 20 === 0) || ((R.overlay === 'plague' || R.overlay === 'era') && frameN % 60 === 0) || (AG.mode === 'deep' && frameN % 10 === 0)) { updateBorders(); R.bordersDirty = false; }
     const vis = viewWin(0); // (a jump of the camera past the margin brings the layers up to date at once)
     if (frameN % 2 === 0 || ((lightOn || glowOn) && !covers(lwin, vis))) updateLight();
     if (!under && (frameN % 3 === 0 || (gasOn && !covers(gwin, vis)))) updateGas();
@@ -1262,6 +1266,8 @@
     if (!sprites && U.count > 0) { updateDots(alpha); blit(dotsC, ox, oy, z); }
     if (sprites) drawUnits(ox, oy, z, s, alpha, vx0, vy0, vx1, vy1, under);
     else R._sky = [];
+    if (!under && AG.Plague && (AG.Plague.hordes.length || AG.Plague.lords.length)) drawPlague(ox, oy, z, Math.max(1, s), vx0, vy0, vx1, vy1);
+    if (!under && God.wonders && God.wonders.length) drawWonders(ox, oy, z, Math.max(1, s));
     drawProjectiles(ox, oy, z, under);
     drawParticles(ox, oy, z, under, false);
     if (!under) {
@@ -1399,6 +1405,61 @@
       const a = Math.atan2(ty - sy, tx - sx), L = Math.max(6, z * 1.6);
       ctx.fillStyle = AG.css(k.color, 0.9);
       ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx - Math.cos(a - 0.4) * L, ty - Math.sin(a - 0.4) * L); ctx.lineTo(tx - Math.cos(a + 0.4) * L, ty - Math.sin(a + 0.4) * L); ctx.fill();
+    }
+  }
+  // The plague lab's walkers: hordes of the hollow, and the lord of the night with its bats
+  const LORD = [['..bbb..', '.bbbbb.', '.bsrsb.', '.bsssb.', 'bbkkkbb', 'bkkkkkb', 'bkkkkkb', 'bkkkkkb', '.kk.kk.', '.b...b.'], ['..bbb..', '.bbbbb.', '.bsrsb.', '.bsssb.', 'bbkkkbb', 'bkkkkkb', 'bkkkkkb', 'bkkkkkb', '.kkkkk.', '..b.b..']];
+  // UFOs with their beams, the grey goo's shimmering edge, black holes, dragons
+  const DRAGON = [['.....r.....r....', '....rr.....rr...', '...rrr.....rrr..', '..rrRr.....rRrr.', '.rrRRrr...rrRRr.', 'rrRRRRrrrrrRRRRr', 'rRRRRRRooRRRRRRr', '.....RRooRR.....', '......RRRR......', '.......RR.......', '.......RRy......', '........Ry......'], ['................', '................', '................', '................', '.....rr...rr....', '..rrrRRrrrRRrr..', 'rrRRRRRooRRRRRrr', 'r....RRooRR....r', '......RRRR......', '.......RR.......', '.......RRy......', '........Ry......']];
+  function drawWonders(ox, oy, z, s) {
+    for (const w of God.wonders) {
+      const x = ox + w.x * z, y = oy + w.y * z;
+      if (w.kind === 'ufo') {
+        const lift = 30 + Math.max(0, 3 - w.t) * 60 - Math.max(0, w.t - w.life + 2) * -80, beam = w.t > 1.5 && w.t < w.life - 1.5;
+        if (beam) { ctx.globalCompositeOperation = 'lighter'; const g = ctx.createLinearGradient(x, y - lift, x, y); g.addColorStop(0, 'rgba(160,255,250,0.55)'); g.addColorStop(1, 'rgba(160,255,250,0.1)'); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - 4, y - lift); ctx.lineTo(x + 4, y - lift); ctx.lineTo(x + 14, y); ctx.lineTo(x - 14, y); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+        ctx.fillStyle = '#9aa4b0'; ctx.beginPath(); ctx.ellipse(x, y - lift, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c8f6ff'; ctx.beginPath(); ctx.ellipse(x, y - lift - 4, 7, 5, 0, Math.PI, 0); ctx.fill();
+        for (let q = 0; q < 6; q++) { ctx.fillStyle = (q + ((tm * 6) | 0)) % 3 ? '#7affd0' : '#ff6e6e'; ctx.fillRect(x - 13 + q * 5, y - lift + 1, 2, 2); }
+      } else if (w.kind === 'goo') {
+        const r = w.r * z;
+        ctx.strokeStyle = `rgba(200,205,210,${0.5 + 0.3 * Math.sin(tm * 8)})`; ctx.lineWidth = Math.max(2, z * 0.6); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(120,124,128,0.35)'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        for (let q = 0; q < 24; q++) { const a = q / 24 * Math.PI * 2 + tm; ctx.fillStyle = '#e0e4e8'; ctx.fillRect(x + Math.cos(a) * r - 1, y + Math.sin(a) * r - 1, 2, 2); }
+      } else if (w.kind === 'hole') {
+        const grow = Math.min(1, w.t / 2) * (w.t > w.life - 2 ? Math.max(0, (w.life - w.t) / 2) : 1), r = Math.max(3, w.r * z * 0.55 * grow);
+        const g = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 2.4); g.addColorStop(0, 'rgba(0,0,0,0.9)'); g.addColorStop(0.4, 'rgba(255,140,40,0.55)'); g.addColorStop(1, 'rgba(80,0,120,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,200,120,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, r * 1.7, r * 0.5, tm * 0.6, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      } else if (w.kind === 'dragon') {
+        const f = (tm * 4) & 1, spr = getSprite(`dragon|${f}`, () => makeSprite(DRAGON[f], Object.assign({}, BASEPAL, { r: [176, 32, 30], R: [120, 20, 22], o: [255, 170, 60], y: [255, 220, 120] }), false));
+        const k = Math.max(2, s * 2), ang = Math.atan2(w.vy, w.vx) + Math.PI / 2, lift = 26;
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y, 10 * k / 2, 3 * k / 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.translate(x, y - lift); ctx.rotate(ang); ctx.drawImage(spr, -spr.width * k / 2, -spr.height * k / 2, spr.width * k, spr.height * k); ctx.restore();
+      }
+    }
+  }
+  function drawPlague(ox, oy, z, s, vx0, vy0, vx1, vy1) {
+    const Pl = AG.Plague;
+    for (const h of Pl.hordes) {
+      if (h.x < vx0 - 4 || h.x > vx1 + 4 || h.y < vy0 - 4 || h.y > vy1 + 4) continue;
+      const n = Math.min(14, 2 + Math.round(h.n / 2)), r = 0.6 + Math.sqrt(h.n) * 0.35;
+      if (z < 3) { ctx.fillStyle = 'rgba(110,150,70,0.85)'; ctx.beginPath(); ctx.arc(ox + h.x * z, oy + h.y * z, Math.max(3, r * z), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#1b2410'; ctx.lineWidth = 1; ctx.stroke(); continue; }
+      for (let k = 0; k < n; k++) {
+        const a = k * 2.4 + h.born, d = r * Math.sqrt((k + 0.5) / n), x = h.x + Math.cos(a) * d + Math.sin(tm * 1.3 + k) * 0.15, y = h.y + Math.sin(a) * d;
+        const spr = getSprite(`hollow|${(tm * 2 + k) & 1}`, () => makeSprite(S.hollow[(tm * 2 + k) & 1], Object.assign({}, BASEPAL, { h: [70, 84, 56], s: [150, 178, 128], o: [255, 70, 40], k: [92, 104, 80], b: [40, 44, 36] }), false));
+        ctx.drawImage(spr, Math.round(ox + x * z - spr.width * s / 2), Math.round(oy + y * z - spr.height * s), spr.width * s, spr.height * s);
+      }
+    }
+    for (const l of Pl.lords) {
+      if (l.x < vx0 - 4 || l.x > vx1 + 4 || l.y < vy0 - 4 || l.y > vy1 + 4) continue;
+      const night = AG.Sky && AG.Sky.daylight ? 1 - AG.Sky.daylight() : 0.5, x = ox + l.x * z, y = oy + l.y * z;
+      ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(200,20,30,${0.18 + night * 0.25})`; ctx.beginPath(); ctx.arc(x, y - 5 * s, Math.max(4, 7 * s), 0, Math.PI * 2); ctx.fill(); ctx.globalCompositeOperation = 'source-over';
+      const spr = getSprite(`lord|${(tm * 2) & 1}`, () => makeSprite(LORD[(tm * 2) & 1], Object.assign({}, BASEPAL, { b: [20, 12, 24], s: [214, 210, 220], r: [255, 40, 40], k: [70, 10, 24] }), false));
+      const k = Math.max(1, s * 1.4);
+      ctx.drawImage(spr, Math.round(x - spr.width * k / 2), Math.round(y - spr.height * k), spr.width * k, spr.height * k);
+      ctx.fillStyle = '#140c18';
+      for (let q = 0; q < 5; q++) { const a = tm * 2.2 + q * 1.26, bx = x + Math.cos(a) * 9 * k, by = y - 12 * k + Math.sin(a * 1.3) * 3 * k, w = (Math.sin(tm * 14 + q) > 0 ? 2 : 1) * k; ctx.fillRect(bx - w * 1.5, by, w * 1.2, k * 0.8); ctx.fillRect(bx + w * 0.3, by, w * 1.2, k * 0.8); ctx.fillRect(bx - k * 0.4, by + k * 0.4, k * 0.8, k * 0.8); }
     }
   }
   function drawUnits(ox, oy, z, s, alpha, vx0, vy0, vx1, vy1, under) {

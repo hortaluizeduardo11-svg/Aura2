@@ -571,6 +571,29 @@ The era of a community is the highest era whose **marker invention** it knows:
 | Bronze Age | bronze |
 | Iron Age | iron smelting |
 | Classical | philosophy |
+| Medieval | feudalism |
+| Renaissance | printing press |
+| Industrial | steam power |
+| Modern | combustion engine |
+| Atomic | nuclear fission |
+| Information | internet |
+| Space Age | spaceflight |
+| Stellar | warp drive |
+
+Past warp drive a community keeps discovering **future technologies** (`c.future`, a level that
+only grows), each a little harder than the last; each adds a little to invention, farming and
+arms. The later inventions are paced so history accelerates: printing, universities, the
+scientific method, computers, the net and artificial minds multiply a community's innovation
+(`Civ.learning`, about 12x by the Space Age), so the stretch from steam to warp drive is a few
+centuries where the stretch from farming to iron was thousands of years.
+
+**The look of each age** comes from `c.era` alone: `Models3D.eraKit` builds the 3D buildings of
+five bands (Medieval-Renaissance, Industrial, Modern-Atomic, Information, Space Age and beyond)
+for every building type, regional styles keep flavour in the earliest band (whitewash and domes
+in dry lands), and the peoples keep their own forms with lamps, masts and lit rings added. The
+2D map has matching sprites (`render.js` `eraSprite`, drawn rows for the first two bands and
+generated blocks and towers after). Models are cached per era. Soldiers' gear, vehicles,
+aircraft over armies and clothing read the era of the unit's community.
 
 ### 9.2 Invention graph (`tech.js`)
 
@@ -675,6 +698,69 @@ independently.
 - **Relations** carry opinion, grievance memory, treaties, alliances and tribute.
 - **Multi-generation grievances:** a community's grievance ledger decays slowly, and is refreshed
   by persons who remember the wrong and pass it on as rumour.
+- **Rivalry** (why wars happen): neighbouring states (-12), a strong state beside a weak realm
+  (-10), a gap of two or more ages (-6 per age beyond the first), crowding (-8); a shared
+  language counts for less than it did (+9).
+- **Warfare** (`warfare.js`). Power = soldiers x skill x `Warfare.arms(c)` (the product of the
+  community's weapons, about 1.25 for the bow up to several hundred in the Stellar age) x the
+  people's fighting nature x `generalMul` (the realm's best fighter, with fame from victories).
+  `Warfare.field` gives the defender's ground (mountains 1.5, hills 1.25, forest 1.15, an
+  unbridged river 1.1, halved for armies of the Modern age), the attacker's supply (strength
+  falls off beyond a reach of 60 cells plus roads, railways, engines, flight, spaceflight) and
+  winter in cold country (0.7, and frost losses). Battles add to a per-war score (`k.score`);
+  `Warfare.makePeace` turns the score gap into terms: >= 60 annexes the loser's city nearest
+  the winner, >= 35 vassalage (vassals keep the peace with their lords, pay tribute, join their
+  wars, and may break free when they outgrow them), >= 15 tribute, else a white peace. A beaten
+  side sues for peace sooner.
+
+### 9.7 The plague lab (`plague.js`)
+
+A pathogen is a record (`Plague.list`) mirrored into an `AG.DISEASES` slot (re-using a slot
+nobody carries, with its immunity bits wiped), so the existing machinery runs it for bodies in
+view and for records far away. Its contagion, radius, lethality, duration, madness and sterility
+are recomputed from its type and bought traits. Each year step:
+- **Inside a community**, generation by generation (as many as the illness's length fits in the
+  step): each susceptible is infected with probability 1 - exp(-k I), k from contagion, the
+  routes that suit the place (water by rivers and coasts, livestock with herds, rodents in big
+  towns, insects in the heat; presses, radio and the net for a rumour) and the climate it can or
+  cannot stand; then the sick recover (and are immune) at the rate the illness lasts. Prions, the
+  undead blight and the mind worm never let go.
+- **Between communities**: along contacts (by their strength, faster across a front), between
+  neighbours within 32 cells, by sea for waterborne ones, and by spores.
+- **DNA** from newly reached communities, new cases and deaths.
+- **Noticed** after enough deaths, cases or severe symptoms (at once for a nano-virus); then every
+  realm that has a sick community researches the cure at a rate from its medicine and science
+  (herbal lore barely; vaccines, antibiotics, computers and genetics a great deal), slowed by
+  severity, drug resistance and hardening; reshuffling sets it back. A cure heals and immunises
+  everyone.
+- **Special types:** the undead blight's dead rise in hordes (`Plague.hordes`) that march on the
+  nearest town, fight its soldiers and grow with those they kill; the night plague's lord
+  (`Plague.lords`) moves between towns, feeds and spreads the plague until hunters or the cure
+  end it; the ape fever calls `Races.uplift` near its hosts; the mind worm secedes a town into a
+  hive realm and adds others to it; the rumour (lethality x0.12) drains stability and loyalty,
+  sparks revolts and turns realms against their neighbours.
+
+### 9.8 Wonders and terrors (`god.js`)
+
+`God.wonders` holds the UFO, grey goo, black hole and dragon, advanced in real time like the
+meteors. The UFO takes up to three people and may teach its community an invention of its next
+age; grey goo widens to a set radius turning land to grey rock and unmaking everything in it;
+the black hole lowers the land into a pit, pulls creatures in and swallows towns; the dragon
+flies to the nearest town, breathes fire (burning cells, buildings and people) and is worn down
+by the town's soldiers in proportion to the arms of their age.
+
+### 9.9 Peoples (`races.js`)
+
+`AG.Races` holds eight base peoples (humans, the sylvan, stonekin, ashborn, saurians, hivekin,
+tidefolk, lithari and voidborn, all original) plus an uplift template and up to 32 derived
+peoples. Each has multipliers for lifespan, fertility, fighting, wits (innovation), stability,
+xenophobia (diplomacy), food by job, a climate preference, a look (skin, hair, a feature such as
+ears, beards, tusks, crests, antennae, fins or crystal shards) and a town style (`raceKit`).
+Communities, polities and persons carry `race`; people marry only their own; seceding realms
+keep their people. `Races.seed` founds a band with the arts of its neighbours (the voidborn
+arrive with Industrial knowledge they never forget); `Races.uplift` turns the nearest apes into
+a new people; a realm cut off from its kin for 3,500 years becomes a new folk with its language's
+name (ethnogenesis). Custom peoples are saved with the world.
 
 ### 9.6 Reacting to a changing land
 

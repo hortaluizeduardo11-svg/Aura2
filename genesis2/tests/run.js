@@ -477,6 +477,45 @@ test('sizes: animals are drawn at real sizes from their own genes, and follow th
   return `horse ${fmt(horse.h)} m, ibex ${fmt(ibex.h)}, mammoth ${fmt(mammoth.h)}, wolf ${fmt(wolf.h)}, bear ${fmt(bear.h)}, foal ${fmt(foal.h)}; size gene 100 -> ${fmt(dwarf)} m, 185 -> ${fmt(giant)} m`;
 });
 
+// ------------------------------------------------------------ the later ages, war and plague
+test('ages: inventions run on past the Classical age to the stars and on into future technology', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), T = AG.Tech, Civ = AG.Civ;
+  const c = Civ.cities.filter((q) => q.alive).sort((a, b) => b.members.length - a.members.length)[0], k = Civ.kingdoms[c.kd];
+  assert(T.ERAS.length === 15 && T.ERAS[14] === 'Stellar', 'fifteen ages, the last the Stellar');
+  for (const t of T.LIST) for (const p of t.preIds) assert(T.LIST[p].era <= t.era, `${t.name} needs nothing from a later age`);
+  k.gov = 3; for (const t of T.LIST) if (t.era <= 6) T.learn(c, t, 'god');
+  assert(c.era === 6, 'the Classical age');
+  const before = AG.Civ.learning(c);
+  for (const t of T.LIST) if (t.era <= 13) T.learn(c, t, 'god');
+  assert(c.era === 13 && AG.Civ.learning(c) > before * 10, `printing, science, computers, the net and minds multiply invention (${fmt(AG.Civ.learning(c))}x)`);
+  for (const t of T.LIST) T.learn(c, t, 'god');
+  const ctx = Object.assign(Civ.techContext(c), { pop: 400, contacts: 6 });
+  for (let y = 0; y < 400 && !c.future; y++) T.futureStep(c, ctx, 5);
+  assert(c.era === 14 && c.future >= 1 && /future/.test(T.eraName(c)), 'past warp drive there is always more to learn');
+  assert(AG.Warfare.arms(c) > 100, `the arms of the Stellar age outweigh a warband a hundredfold (${Math.round(AG.Warfare.arms(c))}x)`);
+  return `${T.LIST.length} inventions in ${T.ERAS.length} ages; learning ${fmt(before)}x -> ${fmt(AG.Civ.learning(c))}x; ${T.eraName(c)}`;
+});
+
+test('plague lab: a pathogen spreads between communities, earns DNA, is noticed and cured; a rumour kills nobody', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Civ = AG.Civ, Pl = AG.Plague, T = AG.Tech;
+  for (let y = 0; y < 300; y += 5) AG.Sim.yearStep(5); // (a world of many communities)
+  for (const c of Civ.cities) if (c.alive) for (const t of T.LIST) if (t.era <= 9) T.learn(c, t, 'god'); // (an age with medicine and science)
+  const c = Civ.cities.filter((q) => q.alive).sort((a, b) => b.members.length - a.members.length)[0];
+  const p = Pl.create('bacteria');
+  p.dna = 40; for (const k of ['air1', 'cough', 'water1']) assert(Pl.buy(p, k), 'buys ' + k);
+  assert(!Pl.buy(p, 'organfail'), 'a symptom needs the ones before it');
+  Pl.release(p, c.x, c.y);
+  const r = Pl.create('rumour'), c2 = Civ.cities.filter((q) => q.alive && q !== c).sort((a, b) => b.members.length - a.members.length)[0];
+  Pl.release(r, c2.x, c2.y);
+  let maxComms = 0, dna = 0;
+  for (let y = 0; y < 80 && !(p.done && r.done); y += 2) { AG.Sim.yearStep(2); maxComms = Math.max(maxComms, p.comms); dna = Math.max(dna, p.dna); }
+  assert(maxComms >= 3, `it spread to other communities (${maxComms})`);
+  assert(dna > 10, `the outbreak earned DNA (${dna})`);
+  assert(p.detected && (p.cure > 0.2 || p.done), `it was noticed and a cure was worked on (${fmt(p.cure)})`);
+  assert(r.dead === 0, 'a rumour kills nobody');
+  return `${p.name}: ${maxComms} communities, ${p.dead} dead, DNA ${dna}, cure ${Math.round(p.cure * 100)}%${p.cured ? ' (cured)' : ''}; rumour ${r.name}: peak ${r.peak} believers`;
+});
+
 test('textures: every surface tiles seamlessly, averages a neutral grey, and is the same every run', () => {
   const AG = load({ W: 64, H: 64, modules: ['core', 'textures'] }), T = AG.Textures, S = 256;
   T.build(S);

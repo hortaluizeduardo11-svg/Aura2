@@ -4,7 +4,7 @@
  * underground sculpting, and possession of any creature (a controllable avatar). */
 'use strict';
 (function () {
-  const AG = window.AG, Wd = AG.World, U = AG.U, Ent = AG.Ent, Civ = AG.Civ, Sky = AG.Sky;
+  const AG = window.AG, Wd = AG.World, U = AG.U, Ent = AG.Ent, Civ = AG.Civ, Sky = AG.Sky, Tech = AG.Tech;
   const { W, H, SP, SPECIES, FT, GT, SO, UG, UF, FL, TR, ST, TK, NG } = AG;
   const rnd = AG.rnd;
 
@@ -16,8 +16,9 @@
   });
 
   God.reset = function () {
-    God.tornadoes.length = 0; God.meteors.length = 0; God.impacts.length = 0; God.possessed = -1; God.pendingKd = -1; God.shake = 0;
+    God.tornadoes.length = 0; God.meteors.length = 0; God.impacts.length = 0; God.possessed = -1; God.pendingKd = -1; God.shake = 0; God.wonders.length = 0;
   };
+  God.wonders = []; // UFOs, grey goo, black holes and dragons at work (wonders.js-like, advanced in real time)
 
   // ------------------------------------------------------------ brush helpers
   // A brush power paints a round or a square patch (the player's choice); everything else that
@@ -103,7 +104,7 @@
   God.CATS = [
     { id: 'look', name: 'Watch' }, { id: 'land', name: 'Terrain' }, { id: 'geo', name: 'Geology' }, { id: 'elem', name: 'Elements' }, { id: 'sky', name: 'Weather' },
     { id: 'life', name: 'Life' }, { id: 'divine', name: 'Divine' }, { id: 'ruin', name: 'Disasters' }, { id: 'deep', name: 'Deep' },
-    { id: 'peoples', name: 'Peoples' }, { id: 'war', name: 'War' },
+    { id: 'peoples', name: 'Peoples' }, { id: 'war', name: 'War' }, { id: 'lab', name: 'Plague lab' },
   ];
   const plateSel = { id: -1 };
   God.TOOLS = [
@@ -244,6 +245,40 @@
     ...(AG.Races ? AG.Races.BASE.filter((R) => R.key !== 'human' && !R.uplift).map((R) => ({ id: 'race-' + R.key, cat: 'peoples', name: R.name, mode: 'click', color: AG.css(R.look.skin ? R.look.skin[1] : [200, 160, 120]),
       desc: `${R.desc} Tap open land to set down a band${R.startEra ? ' (they arrive with the knowledge of the Industrial Age)' : ''}.`,
       click: (x, y) => { if (!AG.Races.seed(R.id, x, y)) toast('Peoples can only be set down on open, dry land after the Dawn'); } })) : []),
+    // the plague lab
+    { id: 'zero', cat: 'lab', name: 'Patient zero', mode: 'click', color: '#9ccc65', desc: 'Tap a community to set your lab\'s pathogen loose there (design it in the Plague lab first; a new one is made if you have none).',
+      click: (x, y) => {
+        const Pl = AG.Plague; let p = Pl.cur();
+        if (!p || p.done || p.zero >= 0) p = Pl.create((AG.UI && AG.UI.labType) || 'bacteria');
+        if (!p) { toast('The world holds too many diseases at once'); return; }
+        const c = Pl.release(p, x, y);
+        if (!c) { toast('Tap a community'); return; }
+        AG.FX.burst(c.x, c.y, 'magic', 20);
+        toast(`${p.name} is loose in ${c.name}`);
+      } },
+    // the far future (and the far past): wonders and terrors
+    { id: 'eureka', cat: 'peoples', name: 'Eureka', mode: 'click', color: '#ffee58', desc: 'Tap a community: it leaps into its next age at once, every invention of that age understood.',
+      click: (x, y) => {
+        const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 30); if (!c) { toast('Tap a community'); return; }
+        const to = Math.min(Tech.ERAS.length - 1, (c.era || 0) + 1), from = c.era || 0;
+        for (const t of Tech.LIST) if (t.era <= to && !c.tech[t.id] && !Tech.banned.has(t.key)) Tech.learn(c, t, 'god');
+        if (from === Tech.ERAS.length - 1) c.future = (c.future || 0) + 3;
+        AG.FX.burst(c.x, c.y, 'holy', 40); Civ.experience(c.x, c.y, 'watcher', 1);
+        AG.History.event('god', `A flash of insight: ${c.name} leaps into the ${Tech.eraName(c)}`, { x: c.x, y: c.y, comm: c.id, cause: 'divine will' });
+        toast(`${c.name} enters the ${Tech.eraName(c)}`);
+      } },
+    { id: 'brain', cat: 'peoples', name: 'Golden brain', mode: 'click', color: '#ffd54f', desc: 'Tap a community: a golden brain glows over it, and for generations its people are curious and brilliant.',
+      click: (x, y) => {
+        const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 30); if (!c) { toast('Tap a community'); return; }
+        c.inspired = AG.Geo.year + 200;
+        for (const P of Civ.persons(c)) { P.traits |= TR.curious; if (rnd() < 0.12) P.traits |= TR.genius; P.pers.open = Math.min(1, P.pers.open + 0.25); }
+        AG.FX.burst(c.x, c.y, 'holy', 50);
+        AG.History.event('god', `A golden brain shines over ${c.name}: its people burn with curiosity`, { x: c.x, y: c.y, comm: c.id, cause: 'divine will' });
+      } },
+    { id: 'ufo', cat: 'ruin', name: 'UFO', mode: 'click', color: '#80deea', desc: 'Send a ship of lights over a community: it takes a few people into the sky, and sometimes leaves a secret behind.', click: (x, y) => God.summon('ufo', x, y) },
+    { id: 'goo', cat: 'ruin', name: 'Grey goo', mode: 'click', color: '#9e9e9e', desc: 'Release self-copying machines that eat everything in a widening circle until their power runs out.', click: (x, y) => God.summon('goo', x, y, God.brush.r) },
+    { id: 'hole', cat: 'ruin', name: 'Black hole', mode: 'click', color: '#311b92', desc: 'Open a small black hole: it drags in creatures, swallows towns and land, and leaves a deep pit.', click: (x, y) => God.summon('hole', x, y, 3 + God.brush.r * 0.5) },
+    { id: 'dragon', cat: 'ruin', name: 'Dragon', mode: 'click', color: '#c62828', desc: 'Wake a dragon. It flies from town to town breathing fire, until the defenders (with the arms of their age) bring it down.', click: (x, y) => God.summon('dragon', x, y) },
     // war: the god of battles
     { id: 'declare', cat: 'war', name: 'Declare war', mode: 'click', color: '#e53935', desc: 'Tap the realm that attacks, then the realm it attacks. Vassals and allies join their side.',
       click: (x, y) => pairOf(x, y, (A, B) => { if (A.war[B.id]) toast(`${A.name} and ${B.name} are already at war`); else { Civ.declareWar(A, B, 'at the command of the heavens'); toast(`War: the ${A.name} against the ${B.name}`); } }) },
@@ -349,6 +384,7 @@
   };
   God.frame = function (dt) {
     God.advanceMeteors(dt);
+    if (God.wonders.length) advanceWonders(Math.min(0.1, Math.max(0, dt)));
     const k = Math.min(3, dt * 60);
     if (God.down && God.cur.mode === 'brush') act(God.cur, God.wx, God.wy, k);
     if (God.shake > 0) God.shake = Math.max(0, God.shake - dt * 30);
@@ -393,6 +429,97 @@
   function placeName(x, y) {
     const c = Civ.nearestCity(x, y, -1, 50);
     return c ? `near ${c.name}` : 'in the wilds';
+  }
+  // ------------------------------------------------------------ wonders and terrors
+  // A sky-ship that takes a few people (and sometimes leaves a gift of knowledge); grey goo that
+  // eats everything in a widening circle; a black hole that swallows land, towns and creatures; a
+  // dragon that flies from town to town breathing fire until soldiers bring it down.
+  function cityNear(x, y, r) { return Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, r || 40); }
+  function killFolded(c, share, cause) {
+    let n = 0;
+    for (const P of Civ.persons(c).slice()) if (rnd() < share) { if (P.body >= 0 && U.alive[P.body]) Ent.kill(P.body, cause); else AG.People.die(P, cause); n++; }
+    return n;
+  }
+  God.summon = function (kind, x, y, r) {
+    const w = { kind, x, y, t: 0, r: r || 4, done: false };
+    if (kind === 'ufo') { w.life = 7; w.took = false; }
+    else if (kind === 'goo') { w.life = 26; w.r = 0.5; w.max = 8 + (r || 4) * 1.4; AG.History.event('god', `Grey goo boils up ${placeName(x, y)}: tiny machines begin to eat the world`, { x, y, cause: 'grey goo' }); }
+    else if (kind === 'hole') { w.life = 12; AG.History.event('god', `A black hole opens ${placeName(x, y)}`, { x, y, cause: 'a black hole' }); }
+    else if (kind === 'dragon') { w.life = 70; w.hp = 260; w.vx = 0; w.vy = 0; w.breath = 0; w.tgt = -1; w.name = (AG.Lang ? AG.Lang.personName(-1, 1) : 'Old Red') + ' the Dragon'; AG.History.event('god', `A dragon, ${w.name}, takes wing ${placeName(x, y)}`, { x, y, cause: 'a dragon' }); }
+    God.wonders.push(w);
+    if (God.wonders.length > 12) God.wonders.shift();
+    return w;
+  };
+  function advanceWonders(dt) {
+    for (const w of God.wonders) {
+      w.t += dt;
+      if (w.kind === 'ufo') {
+        if (!w.took && w.t > 3) {
+          w.took = true;
+          const c = cityNear(w.x, w.y, 12);
+          if (c) {
+            const n = Math.min(3, c.members.length), names = [];
+            for (let k = 0; k < n; k++) { const P = AG.People.get(c.members[(rnd() * c.members.length) | 0]); if (P && P.died === null) { names.push(P.name); if (P.body >= 0 && U.alive[P.body]) Ent.remove(P.body, true); AG.People.die(P, 'taken into the sky'); } }
+            let gift = null;
+            if (rnd() < 0.6) { const next = Tech.LIST.filter((t) => !c.tech[t.id] && t.era <= (c.era || 0) + 1 && Tech.prereqsMet(c, t)); if (next.length) { gift = next[(rnd() * next.length) | 0]; Tech.learn(c, gift, 'god'); } }
+            witness(c.x, c.y, 20, AG.People.MK.MIRACLE, 'the ship of lights in the sky', 0.2);
+            AG.History.event('god', `A ship of lights hovers over ${c.name} and takes ${names.length ? names.join(', ') : 'nobody'}${gift ? `; it leaves behind the secret of ${gift.name.toLowerCase()}` : ''}`, { x: c.x, y: c.y, comm: c.id, cause: 'the sky-ship' });
+          }
+          AG.FX.burst(w.x, w.y, 'magic', 30);
+        }
+        if (w.t > w.life) w.done = true;
+      } else if (w.kind === 'goo') {
+        const r0 = w.r; w.r = Math.min(w.max, w.r + dt * 0.55);
+        eachCell(w.x, w.y, w.r, (i, f, cx, cy, d) => {
+          if (d < r0 - 0.5) return;
+          Wd.veg[i] = 0; Wd.snow[i] = 0; if (Wd.elev[i] >= AG.SEA) Wd.soil[i] = SO.BASALT; Wd.fire[i] = 0;
+          if (Wd.bgrid[i]) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1);
+        });
+        for (const j of unitsIn(w.x, w.y, w.r, 1)) if (Math.hypot(U.x[j] - w.x, U.y[j] - w.y) > r0 - 1) Ent.kill(j, 'grey goo');
+        for (const c of Civ.cities) if (c.alive && !c.gooed && Math.hypot(c.x - w.x, c.y - w.y) < w.r) { c.gooed = true; const n = killFolded(c, 0.85, 'grey goo'); if (n) AG.History.event('god', `The grey goo flows over ${c.name}; ${n} are unmade`, { x: c.x, y: c.y, comm: c.id, cause: 'grey goo' }); }
+        Wd.wakeArea(w.x | 0, w.y | 0, Math.ceil(w.r) + 1);
+        if (w.t > w.life || w.r >= w.max) { w.done = true; for (const c of Civ.cities) c.gooed = false; AG.History.event('god', `The grey goo ${placeName(w.x, w.y)} runs out of power and stills`, { x: w.x, y: w.y, cause: 'grey goo' }); if (AG.Render) AG.Render.invalidate(); }
+      } else if (w.kind === 'hole') {
+        const r = w.r * Math.min(1, w.t / 2) * (w.t > w.life - 2 ? Math.max(0, (w.life - w.t) / 2) : 1);
+        eachCell(w.x, w.y, r, (i, f) => {
+          Wd.elev[i] = Math.max(0.04, Wd.elev[i] - dt * 0.05 * f); Wd.veg[i] = 0; Wd.snow[i] = 0; Wd.fire[i] = 0;
+          if (Wd.bgrid[i]) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1);
+        });
+        for (const j of unitsIn(w.x, w.y, r * 4, 1).concat(unitsIn(w.x, w.y, r * 4, 2))) { // everything falls in
+          const dx = w.x - U.x[j], dy = w.y - U.y[j], d = Math.hypot(dx, dy) || 1;
+          if (d < r * 0.6) { Ent.kill(j, 'a black hole'); continue; }
+          const pull = Math.min(d, dt * 12 * r / d); U.x[j] += (dx / d) * pull; U.y[j] += (dy / d) * pull;
+        }
+        for (const c of Civ.cities) if (c.alive && Math.hypot(c.x - w.x, c.y - w.y) < r) { const n = killFolded(c, dt * 0.8, 'a black hole'); if (n && rnd() < 0.1) AG.History.event('god', `${c.name} falls into the black hole`, { x: c.x, y: c.y, comm: c.id, cause: 'a black hole' }); }
+        Wd.wakeArea(w.x | 0, w.y | 0, Math.ceil(w.r) + 2);
+        God.shake = Math.max(God.shake, 4);
+        if (w.t > w.life) { w.done = true; AG.History.event('god', `The black hole ${placeName(w.x, w.y)} evaporates, leaving a deep pit`, { x: w.x, y: w.y, cause: 'a black hole' }); if (AG.View3D && AG.View3D.invalidate) AG.View3D.invalidate(); if (AG.Render) AG.Render.invalidate(); }
+      } else if (w.kind === 'dragon') {
+        let c = w.tgt >= 0 ? Civ.cities[w.tgt] : null;
+        if (!c || !c.alive || c.members.length < 2 || (w.over || 0) > 8) { w.over = 0; c = null; let bd = 1e18; for (const q of Civ.cities) { if (!q.alive || q.members.length < 3 || q.id === w.tgt) continue; const d = AG.dist2(q.x, q.y, w.x, w.y); if (d < bd && d < 160 * 160) { bd = d; c = q; } } w.tgt = c ? c.id : -1; }
+        const tx = c ? c.x : w.x + Math.cos(w.t) * 20, ty = c ? c.y : w.y + Math.sin(w.t) * 20, dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy) || 1;
+        w.vx += ((dx / d) * 9 - w.vx) * Math.min(1, dt * 1.5); w.vy += ((dy / d) * 9 - w.vy) * Math.min(1, dt * 1.5);
+        if (d < 3) { w.vx += Math.sin(w.t * 3) * dt * 20; w.vy += Math.cos(w.t * 3) * dt * 20; }
+        w.x = AG.clamp(w.x + w.vx * dt, 2, W - 3); w.y = AG.clamp(w.y + w.vy * dt, 2, H - 3);
+        if (c && d < 6) { // fire
+          w.over = (w.over || 0) + dt; w.breath += dt;
+          if (w.breath > 0.4) {
+            w.breath = 0;
+            const bx = w.x + w.vx * 0.25, by = w.y + w.vy * 0.25;
+            eachCell(bx, by, 2.2, (i) => { if (Wd.veg[i] > 10 || Wd.bgrid[i]) Wd.fire[i] = 245; if (Wd.bgrid[i]) Civ.damageBuilding(Wd.bgrid[i] - 1, 30, -1); Wd.heat[i] = Math.min(1.2, Wd.heat[i] + 0.3); });
+            for (const j of unitsIn(bx, by, 2.2, 1)) Ent.damage(j, 40, -1, 'dragonfire');
+            killFolded(c, 0.03, 'dragonfire');
+            AG.FX.burst(bx, by, 'ember', 14); Wd.wakeArea(bx | 0, by | 0, 3);
+            // the town fights back with the arms of its age
+            const sold = Civ.persons(c).filter((P) => P.job === AG.J.SOLDIER).length;
+            w.hp -= sold * 0.35 * (AG.Warfare ? Math.min(30, AG.Warfare.arms(c)) : 1);
+            if (w.hp <= 0) { w.done = true; AG.FX.burst(w.x, w.y, 'explosion', 40); AG.History.event('god', `The defenders of ${c.name} bring down ${w.name}`, { x: c.x, y: c.y, comm: c.id, cause: 'war' }); witness(c.x, c.y, 20, AG.People.MK.VICTORY, 'the fall of the dragon', 0.8); }
+          }
+        }
+        if (!w.done && w.t > w.life) { w.done = true; AG.History.event('god', `${w.name} flies off to the high mountains`, { x: w.x, y: w.y, cause: 'a dragon' }); }
+      }
+    }
+    God.wonders = God.wonders.filter((w) => !w.done);
   }
   // The bomb: a flash, a fireball, a shallow crater, a firestorm ring and fallout (blighted, ashen
   // land and a sickness) that lingers; the people of every community in reach die or are maimed.
@@ -526,8 +653,8 @@
     Civ.experience(x, y, 'water', 4);
     AG.History.event('tsunami', `A great wave strikes the coast ${placeName(x, y)}`, { x, y, cause: natural ? 'an undersea earthquake' : 'divine will' });
   };
-  God.state = () => ({ tornadoes: God.tornadoes.map((t) => Object.assign({}, t)), meteors: God.meteors.map((m) => Object.assign({}, m)) });
-  God.setState = (s) => { God.tornadoes = s.tornadoes; God.meteors = s.meteors; God.impacts.length = 0; God.possessed = -1; };
+  God.state = () => ({ tornadoes: God.tornadoes.map((t) => Object.assign({}, t)), meteors: God.meteors.map((m) => Object.assign({}, m)), wonders: God.wonders.map((w) => Object.assign({}, w)) });
+  God.setState = (s) => { God.tornadoes = s.tornadoes; God.meteors = s.meteors; God.wonders = s.wonders || []; God.impacts.length = 0; God.possessed = -1; };
 
   // per simulation tick
   God.tick = function () {
