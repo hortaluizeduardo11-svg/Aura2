@@ -76,11 +76,12 @@
     { id: 'terrain', name: 'Terrain', icon: 'tab-terrain', groups: [['Shape', ['raise', 'lower', 'smooth']], ['Paint', ['grass', 'forest', 'desert', 'grain', 'snowcap']], ['Geology', ['plate', 'calm', 'iceage', 'warm']], ['Underground', ['dig', 'fill', 'ore', 'magma', 'aquifer']]] },
     { id: 'civ', name: 'Civilizations', icon: 'tab-civ', groups: [['People', ['people', 'possess']], ['Guide', ['dream', 'omen', 'inspire']], ['Diplomacy', ['harmony', 'discord']], ['Grace', ['bless']], ['Look', [['panel:peoples', 'Peoples'], ['panel:chronicle', 'History']]]] },
     { id: 'peoples', name: 'Peoples', icon: 'tab-peoples', groups: [['Peoples', ['people', 'race-sylvan', 'race-stonekin', 'race-ashborn', 'race-saurian', 'race-hivekin', 'race-tidefolk', 'race-lithari', 'race-voidborn']], ['Biology', ['uplift']], ['Ages', ['eureka', 'brain', 'inspire']], ['Look', [['panel:world', 'Peoples']]]] },
+    { id: 'realms', name: 'Realms', icon: 'tab-realms', groups: [['Rulers', ['crown', 'assassin', 'hero', 'prophet']], ['Realm', ['golden', 'revolution', 'unite', 'exodus']], ['Build', ['town', 'metropolis', 'wonder', 'launch']], ['Look', [['panel:deeds', 'Deeds'], ['panel:war', 'War room']]]] },
     { id: 'war', name: 'War', icon: 'tab-war', groups: [['Diplomacy', ['declare', 'treaty', 'alliance', 'harmony', 'discord']], ['Command', ['levy', 'fortify', 'blitz', 'revolt']], ['Doom', ['nuke']], ['Look', [['panel:war', 'War room'], ['ov:realms', 'Realms']]]] },
     { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Look', [['panel:life', 'Tree of life']]]] },
     { id: 'weather', name: 'Weather', icon: 'tab-weather', groups: [['Storms', ['rain', 'thunder', 'blizzard', 'heat', 'bolt']], ['Elements', ['water', 'lava', 'acid', 'fire', 'freeze', 'drain']]] },
     { id: 'plague', name: 'Plague', icon: 'tab-plague', groups: [['Lab', [['panel:plague', 'Plague lab'], 'zero', 'plague']], ['Watch', [['ov:plague', 'Sickness map'], ['panel:war', 'War room']]]] },
-    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse']], ['Sci-fi', ['ufo', 'goo', 'hole']], ['Myth', ['dragon']]] },
+    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse', 'locusts']], ['Sci-fi', ['ufo', 'goo', 'hole']], ['Monsters', ['dragon', 'kraken', 'kaiju']]] },
     { id: 'world', name: 'World', icon: 'tab-world', groups: [['Look', ['inspect']], ['Layer', [['view:0', 'Underground'], ['view:1', 'Surface'], ['view:2', 'Sky']]],
       ['Map', [['ov:realms', 'Realms'], ['ov:faith', 'Faiths'], ['ov:language', 'Languages'], ['ov:era', 'Eras'], ['ov:genes', 'Genes'], ['ov:rock', 'Rock'], ['ov:resources', 'Resources'], ['ov:heat', 'Climate'], ['ov:none', 'Plain'], ['trade', 'Trade routes']]],
       ['Windows', [['panel:inspect', 'Inspector'], ['panel:world', 'World stats'], ['minimap', 'Minimap']]], ['Game', [['act:save', 'Save'], ['act:load', 'Load'], ['act:timelapse', 'Time-lapse'], ['act:menu', 'Settings'], ['act:title', 'Title screen']]]] },
@@ -261,12 +262,13 @@
   function setTab(t) {
     UI.tab = t; worldBuilt = false;
     for (const b of document.querySelectorAll('.tab')) { b.classList.toggle('on', b.dataset.tab === t); b.setAttribute('aria-selected', b.dataset.tab === t); }
-    $('#ptitle').textContent = { inspect: 'Inspector', peoples: 'Peoples', life: 'Tree of Life', chronicle: 'History', world: 'World', war: 'War room', plague: 'Plague lab' }[t] || 'Chronicle';
+    $('#ptitle').textContent = { inspect: 'Inspector', peoples: 'Peoples', life: 'Tree of Life', chronicle: 'History', world: 'World', war: 'War room', plague: 'Plague lab', deeds: 'Deeds' }[t] || 'Chronicle';
     refreshBarState();
     renderPanel(true);
   }
   UI.setTab = setTab;
   UI.toast = function (msg) {
+    msg = String(msg).replace(/\b([Tt]he) the\b/g, '$1'); // (polity names that already begin with 'the')
     const el = $('#toast');
     el.textContent = msg; el.classList.add('show');
     clearTimeout(UI._tt); UI._tt = setTimeout(() => el.classList.remove('show'), 3800);
@@ -467,7 +469,7 @@
     if (!$('#panel').hidden) {
       if (UI.tab === 'chronicle' && AG.Chronicle.dirty && frameN % 6 === 0) renderPanel(false);
       else if (UI.tab === 'inspect' && frameN % 30 === 0 && !panelHover) renderPanel(false);
-      else if ((UI.tab === 'peoples' || UI.tab === 'life' || UI.tab === 'world' || UI.tab === 'war' || UI.tab === 'plague') && frameN % 60 === 0 && !panelHover) renderPanel(false);
+      else if ((UI.tab === 'peoples' || UI.tab === 'life' || UI.tab === 'world' || UI.tab === 'war' || UI.tab === 'plague' || UI.tab === 'deeds') && frameN % 60 === 0 && !panelHover) renderPanel(false);
     }
   };
   function worldEra() { let e = 0; for (const c of Civ.cities) if (c.alive && c.era > e) e = c.era; return Tech.ERAS[e]; }
@@ -520,8 +522,9 @@
       case 'life': pb.innerHTML = lifeHTML(); break;
       case 'chronicle': pb.innerHTML = historyHTML(); AG.Chronicle.dirty = false; break;
       case 'world': if (!worldBuilt || force) { pb.innerHTML = worldShell(); worldBuilt = true; } $('#wstats').innerHTML = worldStats(); break;
-      case 'war': pb.innerHTML = warRoomHTML(); break;
+      case 'war': pb.innerHTML = warRoomHTML().replace(/\b([Tt]he) the\b/g, '$1'); break;
       case 'plague': if (!force && panelHover) break; pb.innerHTML = labHTML(); break;
+      case 'deeds': pb.innerHTML = deedsHTML().replace(/\b([Tt]he) the\b/g, '$1'); break;
     }
   }
   UI.render = renderPanel;
@@ -796,6 +799,21 @@
     renderPanel(true);
   }
   UI.labAction = labAction;
+  // Deeds: what this world has lived through (and what is still to come)
+  function deedsHTML() {
+    const D = AG.Deeds; if (!D) return '';
+    let h = `<p class="muted" style="font-size:12px">${D.count()} of ${D.LIST.length} deeds in this world. Some happen on their own; most a god can bring about.</p>`;
+    let group = '';
+    for (const d of D.LIST) {
+      if (d.group !== group) { group = d.group; h += `<h3>${esc(group)}</h3>`; }
+      const y = D.got[d.key];
+      h += `<div style="display:flex;gap:6px;align-items:baseline;font-size:12px;margin:2px 0;${y === undefined ? 'opacity:0.55' : ''}"><span style="color:${y === undefined ? '#777' : '#ffd54f'}">${y === undefined ? '○' : '★'}</span><b>${esc(d.name)}</b><span class="muted">${esc(d.desc)}${y !== undefined ? ' · ' + yr(y) : ''}</span></div>`;
+    }
+    const W0 = AG.Realms ? AG.Realms.standing() : [];
+    if (W0.length) h += `<h3>Great wonders standing</h3>` + W0.map((b) => `<div style="font-size:12px"><button type="button" class="link" data-x="${Math.round(b.cx)}" data-y="${Math.round(b.cy)}">${esc(AG.Lang.cap(b.wname || 'a wonder'))}</button> · ${esc(Civ.cities[b.city] ? Civ.cities[b.city].name : '')}, the ${esc(Civ.kingdoms[b.kd] ? Civ.kingdoms[b.kd].name : '')}${b.raised !== undefined ? ' · since ' + yr(b.raised) : ''}</div>`).join('');
+    if (AG.Realms && (AG.Realms.launches || AG.Realms.colonies)) h += `<h3>Space</h3><div style="font-size:12px">${fmt(AG.Realms.launches)} launches · ${fmt(AG.Realms.colonies)} colonies beyond the world</div>`;
+    return h;
+  }
   // The war room: every war with its score, generals, arms and fronts; vassals and alliances.
   function warRoomHTML() {
     const Wf = AG.Warfare;

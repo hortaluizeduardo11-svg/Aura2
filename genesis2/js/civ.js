@@ -375,6 +375,8 @@
     survey(c);
     return c;
   }
+  Civ.newCommunity = newCommunity;
+  Civ.campBuild = (c) => campBuild(c);
   function newCustoms() {
     return { burial: pick(['inhumation', 'cremation', 'cairns', 'sky burial']), marriage: rnd() < 0.7 ? 'monogamy' : 'polygyny', residence: rnd() < 0.6 ? 'patrilocal' : 'matrilocal', taboo: pick(['none', 'none', 'fish', 'pork', 'horse', 'dog']), festival: pick(['midsummer', 'midwinter', 'harvest', 'first rains', 'the hunt']) };
   }
@@ -409,6 +411,7 @@
   function namePolity(k, base) {
     const cap = Civ.capitalOf(k);
     k.name = AG.Lang.polityName(k.lang, GOVS[k.gov], base || (cap ? cap.name : AG.Lang.peopleName(k.lang)));
+    if (k.republic) k.name = `Republic of ${base || (cap ? cap.name : AG.Lang.peopleName(k.lang))}`;
   }
   Civ.namePolity = namePolity;
 
@@ -436,7 +439,7 @@
 
   // ============================================================ the first people
   // A band of people with genomes drawn from a gene-pool reservoir R.
-  Civ.foundBand = function (k, x, y, lang, R, parent, n) {
+  Civ.foundBand = function (k, x, y, lang, R, parent, n, keep) {
     const c = newCommunity(k, x, y, { nomadic: true, lang, tech: parent ? parent.tech : undefined, religion: parent ? parent.religion : -1 });
     if (!k.name) namePolity(k, c.name);
     n = n || 24 + ri(8);
@@ -458,7 +461,7 @@
     campBuild(c);
     assignJobs(c);
     economy(c, 0.01);
-    if (c.K && c.members.length > c.K * 0.9 && c.members.length >= 16) split(c, 'size');
+    if (!keep && c.K && c.members.length > c.K * 0.9 && c.members.length >= 16) split(c, 'size');
     if (AG.mode === 'watch') Civ.lod();
     return c;
   };
@@ -677,6 +680,7 @@
   Civ.planBuild = planBuild;
 
   // ============================================================ settling down, moving, splitting
+  Civ.settle = (c) => settle(c);
   function settle(c) {
     c.nomadic = false; c.sedentary = true; c.kind = 'village';
     for (const bid of c.buildings.slice()) { const b = Civ.buildings[bid]; if (b.type === BT.TENT) Civ.destroyBuilding(bid, -1, true); }
@@ -898,7 +902,8 @@
   // net and artificial minds (and a little more for every future technology).
   function learning(c) {
     const k = (t) => Tech.knows(c, t);
-    return (k('printing') ? 1.35 : 1) * (k('universities') ? 1.3 : 1) * (k('scientific') ? 1.5 : 1) * (k('computers') ? 1.5 : 1) * (k('internet') ? 1.5 : 1) * (k('ai') ? 2 : 1) * (1 + Math.min(1, (c.future || 0) * 0.03));
+    const kd = Civ.kingdoms[c.kd], fx = kd && kd.wonderFx;
+    return (fx ? 1 + fx.learn : 1) * (kd && kd.colonies ? 1 + Math.min(0.5, kd.colonies * 0.05) : 1) * (k('printing') ? 1.35 : 1) * (k('universities') ? 1.3 : 1) * (k('scientific') ? 1.5 : 1) * (k('computers') ? 1.5 : 1) * (k('internet') ? 1.5 : 1) * (k('ai') ? 2 : 1) * (1 + Math.min(1, (c.future || 0) * 0.03));
   }
   Civ.learning = learning;
   Civ.techContext = function (c) {

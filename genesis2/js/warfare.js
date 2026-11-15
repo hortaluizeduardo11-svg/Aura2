@@ -119,8 +119,8 @@
       const wc = Civ.capitalOf(Wn);
       let best = null, bd = 1e18;
       for (const cid of L.cities) { const c = Civ.cities[cid]; if (!c.alive || cid === L.capital) continue; const d = wc ? AG.dist2(c.x, c.y, wc.x, wc.y) : 0; if (d < bd) { bd = d; best = c; } }
-      if (best) { AG.War.transferCity(best, Wn); AG.History.event('peace', `By the treaty, ${best.name} passes from the ${L.name} to the ${Wn.name}`, { x: best.x, y: best.y, polity: Wn.id, comm: best.id, cause: 'war' }); }
-    } else if (terms === 'vassal') { ensure(L).vassal = Wn.id; AG.History.event('peace', `The ${L.name} bow to the ${Wn.name} and become their vassals`, { x: AG.Civ.capitalOf(L) ? AG.Civ.capitalOf(L).x : -1, y: AG.Civ.capitalOf(L) ? AG.Civ.capitalOf(L).y : -1, polity: Wn.id, cause: 'war' }); }
+      if (best) { AG.War.transferCity(best, Wn); if (AG.Deeds) AG.Deeds.note('annex'); AG.History.event('peace', `By the treaty, ${best.name} passes from the ${L.name} to the ${Wn.name}`, { x: best.x, y: best.y, polity: Wn.id, comm: best.id, cause: 'war' }); }
+    } else if (terms === 'vassal') { ensure(L).vassal = Wn.id; if (AG.Deeds) AG.Deeds.note('vassal'); AG.History.event('peace', `The ${L.name} bow to the ${Wn.name} and become their vassals`, { x: AG.Civ.capitalOf(L) ? AG.Civ.capitalOf(L).x : -1, y: AG.Civ.capitalOf(L) ? AG.Civ.capitalOf(L).y : -1, polity: Wn.id, cause: 'war' }); }
     ensure(A).score[B.id] = 0; ensure(B).score[A.id] = 0;
     return terms;
   };

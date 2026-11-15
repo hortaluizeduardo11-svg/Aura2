@@ -15,6 +15,9 @@ different year in every world), people appear, and from then on history runs on 
   peoples split off from isolated ones
 - wars are fought with the arms of each age, led by generals and ended by treaties; and the god
   can design plagues in a lab and set them loose
+- the god can crown and strike down rulers, call heroes and prophets, start revolutions, unite
+  realms, found towns and whole cities, raise the great wonders of each age, send rockets up,
+  loose monsters, and collect the deeds a world lives through
 
 Every person is a record with:
 - a genome inherited from both parents
@@ -43,8 +46,8 @@ the title screen back.
 
 **The interface** is pixel art throughout, in one pixel font:
 - **Top bar:** the calendar, the speeds, Skip to the Dawn, the Chronicle window and the Menu.
-- **Power bar** along the bottom, in nine tabs: Terrain, Civilizations, Peoples, War, Creatures,
-  Weather, Plague, Destruction and World.
+- **Power bar** along the bottom, in ten tabs: Terrain, Civilizations, Peoples, Realms, War,
+  Creatures, Weather, Plague, Destruction and World.
   - Each tab lays its powers out as two rows of icon buttons, in labelled groups (Shape, Paint,
     Geology, Underground, and so on). Hover over a power for its name and what it does; on a
     touch screen the card shows when you pick it.
@@ -96,10 +99,12 @@ Settings take effect at once and are saved in the browser.
 - **War:** the war room: every war with its score, generals, arms and fronts, the last battle,
   vassals and alliances.
 - **Lab:** the plague lab (below).
+- **Deeds:** the deeds this world has lived through (34 of them, from the first farmers to a
+  colony around another star), the great wonders standing, and the space program.
 - **World:** save/load, time-lapse, scenarios, new world, engine stats, the census of peoples and
   diseases. Graphics settings are in the menu.
 
-**Powers** (over 80, each with its own pixel icon; this is what they do, the bar groups them in nine tabs):
+**Powers** (about 100, each with its own pixel icon; this is what they do, the bar groups them in ten tabs):
 - **Land:** raise or lower ground, plant meadows, forests or wild grain.
 - **Geology:** push a plate, trigger or calm a fault, force an eruption, start an ice age, warm
   the world.
@@ -117,10 +122,34 @@ Settings take effect at once and are saved in the browser.
 - **War:** declare war, a peace treaty on the war score's terms, alliances, incite a revolt,
   levy soldiers, fortify a town at once, blitz (every front attacks at once), and the bomb
   (only the god uses it: a flash, a firestorm, a crater and fallout).
+- **Realms:**
+  - **Rulers:** Crown (a community's ablest person takes power: a coup in the capital, a
+    breakaway kingdom elsewhere), Assassinate (a ruler dies; the succession may tear the realm),
+    Hero (a legend who leads the armies), Prophet (a vision and a new faith).
+  - **Realm:** Golden age (sixty years of plenty and learning), Revolution (a republic is
+    proclaimed), Unite (two realms become one), Exodus (half a town sets out to found a new home
+    where you point).
+  - **Build:** Found a village (of its neighbours' age), Found a city (a built metropolis of the
+    most advanced age, with a citadel, temples, markets and a new state), Great wonder (the
+    wonder of the town's age, one of each in the world), Launch (a rocket now; with spaceflight,
+    maybe a colony).
 - **Plague:** patient zero for the lab's pathogen, and the sickness map.
-- **Sci-fi and myth:** a UFO that takes a few people (and sometimes leaves a secret behind), grey
-  goo that eats everything in a widening circle, a black hole that swallows land and towns, and a
-  dragon that burns town after town until the defenders bring it down.
+- **Sci-fi and monsters:** a UFO that takes a few people (and sometimes leaves a secret behind),
+  grey goo that eats everything in a widening circle, a black hole that swallows land and towns,
+  a dragon that burns town after town until the defenders bring it down, a kraken that sinks
+  ships and smashes harbours, a kaiju that tramples the greatest cities (spears cannot hurt it;
+  tanks and jets can), and a locust swarm that eats the fields bare and brings famine.
+
+**Great wonders** (one of each in the world, each of an age; a god can raise them, and rich
+states raise them on their own): the Great Mound, the Great Pyramid, the Colossus (by the sea),
+the Great Library, the Grand Cathedral, the Great Observatory, the Iron Tower, the Grand Stadium,
+the World Tower and the Space Elevator. Each strengthens the realm that holds it (order,
+legitimacy, invention or trade), and passes with its city if the city is conquered. They have
+their own 3D models and map sprites.
+
+**The space program:** realms that know rocketry launch rockets from time to time (in view you
+see them climb on their flame); with spaceflight a launch may found a colony on the moon or
+another world, and with warp drive around another star. Colonies speed the realm's invention.
 
 **The plague lab** (the Plague tab, or the Lab panel): pick a type, create the pathogen, then
 tap a community with Patient zero.
@@ -360,7 +389,7 @@ message instead of a frozen screen.
 ## Tests and demos
 
 ```bash
-node genesis2/tests/run.js            # 22 headless tests, ~90 s
+node genesis2/tests/run.js            # 23 headless tests, ~90 s
 node genesis2/tests/demo-emergence.js # bands -> villages, chiefdoms and new eras, with causes
 node genesis2/tests/demo-sealevel.js  # the ice melts: coasts drown, camps flee, languages split
 ```
@@ -392,6 +421,9 @@ The tests cover:
   warband a hundredfold.
 - **Plague lab:** a pathogen spreads between communities, earns DNA, is noticed and worked on
   toward a cure; a rumour kills nobody.
+- **Realms:** founded cities are built and of the most advanced age; two wonders are different
+  and strengthen their realm; a revolution proclaims a republic; a ruler is crowned; two realms
+  unite; the deeds are marked.
 
 Both demos are also in-game under World → Scenarios.
 

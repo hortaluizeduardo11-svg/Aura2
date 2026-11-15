@@ -1082,9 +1082,27 @@
     }
     return null;
   }
+  // great wonders on the map
+  function wonderRows(key) {
+    switch (key) {
+      case 'mound': return ['.......oo.......', '......GGGG......', '....GGGgGGGG....', '...GgGGGGGgGG...', '..GGGGGGGGGGGG..', '.rGGGGGGGGGGGGr.', 'rrGGGGGGGGGGGGrr', 'r.r.r.r..r.r.r.r'];
+      case 'pyramid': return ['.......yy.......', '......cccc......', '.....cccccc.....', '....cccccccc....', '...cccccccccc...', '..cccccccccccc..', '.cccccccccccccc.', 'ccccccc..ccccccc', 'cccccccbbccccccc', 'cccccccbbccccccc'];
+      case 'colossus': return ['......o.....', '.....yo.....', '.....w......', '...www......', '...www......', '..wwwwww....', '..wwwww.....', '..wwwww.....', '...www......', '...w.w......', '...w.w......', '...w.w......', '.rrrrrrrr...', '.rRRRRRRr...', 'rrrrrrrrrr..', 'rRRRRRRRRr..'];
+      case 'library': return ['.......y........', '......vvv.......', '....vvvvvvv.....', '...vvvvvvvvv....', '.eeeeeeeeeeeeee.', 'eeeeeeeeeeeeeeee', '.e.eLe.ee.eLe.e.', '.e.eLe.ee.eLe.e.', '.e.eLe.bb.eLe.e.', 'eeeeeeebbeeeeeee', 'rrrrrrrrrrrrrrrr'];
+      case 'cathedral': return ['..y........y....', '..S........S....', '.SSS......SSS...', '.SSS......SSS...', '.SSS......SSS...', '.rrr..S...rrr...', '.rrr.SSS..rrr...', '.rLrSSSSS.rLr...', '.rrrrrrrrrrrr...', '.rLrroorrrrLr...', '.rrrooooorrrr...', '.rLrroorrrrLr...', '.rrrrbbrrrrrr...', 'rrrrrbbrrrrrrr..'];
+      case 'observatory': return ['....mmmm....', '...mmbbmm...', '..mmmbbmmm..', '..mmmmmmmm..', '..eeeeeeee..', '..eLeeeeLe..', '..eeeeeeee..', '..eeLeeLee..', '..eeeeeeee..', '.rrrrrrrrrr.', 'rrrrrrrrrrrr'];
+      case 'irontower': { const g = egrid(13, 30); g[0][6] = 'q'; for (let y = 1; y < 30; y++) { const t = y / 29, half = Math.round(0.5 + t * t * 5.5); g[y][6 - half] = 'W'; g[y][6 + half] = 'W'; if (y % 4 === 0) for (let x = 6 - half; x <= 6 + half; x++) g[y][x] = 'W'; } for (let x = 2; x <= 10; x++) g[20][x] = 'w'; return erows(g); }
+      case 'stadium': return ['....CCCCCCCCCC....', '..CCkCkCkCkCkCCC..', '.CCCGGGGGGGGGGCCC.', 'CCCGGGGeGGGGGGGCCC', '.CCCGGGGGGGGGGCCC.', '..CCCCCCCCCCCCCC..', '....DDDDDDDDDD....'];
+      case 'worldtower': { const g = egrid(11, 47); g[0][5] = 'q'; for (let y = 1; y < 6; y++) g[y][5] = 'Z'; let y0 = 6; for (let q = 0; q < 5; q++) { const w = 4 + q * 1.4 | 0, h = 6 + q; efacade(g, 5 - (w >> 1), y0, w | 1, h, q % 2 ? 'x' : 'X', q % 2 ? 'X' : 'x', q, 1); erect(g, 5 - (w >> 1), y0 + h - 1, w | 1, 1, 'v'); y0 += h; } return erows(g); }
+      case 'elevator': { const g = egrid(13, 64); for (let y = 0; y < 56; y++) g[y][6] = y % 9 === 4 ? 'Z' : 'v'; erect(g, 3, 56, 7, 3, 'Z'); erect(g, 1, 59, 11, 3, 'Z'); erect(g, 0, 62, 13, 1, 'z'); erect(g, 0, 63, 13, 1, 'C'); return erows(g); }
+    }
+    return null;
+  }
+  R._wonderSprite = (key) => makeSprite(wonderRows(key), Object.assign({}, BASEPAL, ERA_PAL, { k: [176, 60, 52], K: dark([176, 60, 52]), c: [214, 186, 120] }), false); // (for a sprite sheet)
   R._eraSprite = (type, band, v, era, kc) => { const rows = eraSprite(type, band, v, era); return rows ? makeSprite(rows, Object.assign({}, BASEPAL, ERA_PAL, { k: kc || [176, 60, 52], K: dark(kc || [176, 60, 52]) }), false) : makeSprite(B_SPR[type], Object.assign({}, BASEPAL, { k: kc || [176, 60, 52], K: dark(kc || [176, 60, 52]), c: [196, 162, 108] }), false); }; // (for a sprite sheet)
   function buildingSprite(b) {
     if (b.type === BT.FARM) return farmSprite(Math.min(3, (b.growth * 4) | 0));
+    if (b.type === BT.WONDER) { const k0 = Civ.kingdoms[b.kd], kc0 = k0 ? k0.color : [150, 150, 150]; return getSprite(`w|${b.wonder}|${b.kd}`, () => makeSprite(wonderRows(b.wonder) || wonderRows('mound'), Object.assign({}, BASEPAL, ERA_PAL, { k: kc0, K: dark(kc0), c: [214, 186, 120] }), false)); }
     const k = Civ.kingdoms[b.kd], kc = k ? k.color : [150, 150, 150], early = (b.era || 0) < 4 ? 1 : 0;
     const cc = Civ.cities[b.city], era = cc ? cc.era : b.era || 0;
     if (era >= 7) { // the later ages rebuild the town in their own look
@@ -1411,6 +1429,7 @@
   const LORD = [['..bbb..', '.bbbbb.', '.bsrsb.', '.bsssb.', 'bbkkkbb', 'bkkkkkb', 'bkkkkkb', 'bkkkkkb', '.kk.kk.', '.b...b.'], ['..bbb..', '.bbbbb.', '.bsrsb.', '.bsssb.', 'bbkkkbb', 'bkkkkkb', 'bkkkkkb', 'bkkkkkb', '.kkkkk.', '..b.b..']];
   // UFOs with their beams, the grey goo's shimmering edge, black holes, dragons
   const DRAGON = [['.....r.....r....', '....rr.....rr...', '...rrr.....rrr..', '..rrRr.....rRrr.', '.rrRRrr...rrRRr.', 'rrRRRRrrrrrRRRRr', 'rRRRRRRooRRRRRRr', '.....RRooRR.....', '......RRRR......', '.......RR.......', '.......RRy......', '........Ry......'], ['................', '................', '................', '................', '.....rr...rr....', '..rrrRRrrrRRrr..', 'rrRRRRRooRRRRRrr', 'r....RRooRR....r', '......RRRR......', '.......RR.......', '.......RRy......', '........Ry......']];
+  const KAIJU = [['......GGG.......', '.....GgGGG......', '.....GGyGG......', '....wGGGGG......', '.....GGGG.......', '..g..GGGGG......', '.ggg.GGGGGG.....', '..g.GGGGGGGG....', '...GGGGGGGGGG...', '...GGGGGGGGGGG..', '....GGGGGGGGGGG.', '....GG...GG..GGG', '....GG...GG.....', '...GGG..GGG.....'], ['......GGG.......', '.....GgGGG......', '.....GGyGG......', '....wGGGGG......', '.....GGGG.......', '..g..GGGGG......', '.ggg.GGGGGG.....', '..g.GGGGGGGG....', '...GGGGGGGGGG...', '...GGGGGGGGGGG..', '....GGGGGGGGGGG.', '.....GG..GG.GGG.', '....GG....GG....', '...GGG....GGG...']];
   function drawWonders(ox, oy, z, s) {
     for (const w of God.wonders) {
       const x = ox + w.x * z, y = oy + w.y * z;
@@ -1431,6 +1450,29 @@
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(255,200,120,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, r * 1.7, r * 0.5, tm * 0.6, 0, Math.PI * 2); ctx.stroke();
         ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      } else if (w.kind === 'rocket') {
+        const lift = w.t * w.t * 9;
+        ctx.globalCompositeOperation = 'lighter';
+        for (let q = 0; q < 8; q++) { const a = Math.max(0, 1 - q / 8); ctx.fillStyle = `rgba(255,${160 - q * 12},60,${0.6 * a})`; ctx.beginPath(); ctx.arc(x + Math.sin(q + tm * 20) * 1.5, y - lift + 6 + q * 4, 3 + q * 0.8, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalCompositeOperation = 'source-over';
+        for (let q = 0; q < 10; q++) { ctx.fillStyle = `rgba(230,230,235,${0.35 - q * 0.03})`; ctx.beginPath(); ctx.arc(x + Math.sin(q * 1.7) * q, y - Math.max(0, lift - 40 - q * 10) + 40 + q * 10, 4 + q, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = '#eef1f4'; ctx.fillRect(x - 2, y - lift - 12, 4, 14); ctx.fillStyle = '#c62828'; ctx.fillRect(x - 2, y - lift - 4, 4, 2); ctx.beginPath(); ctx.moveTo(x - 2, y - lift - 12); ctx.lineTo(x, y - lift - 17); ctx.lineTo(x + 2, y - lift - 12); ctx.fill();
+      } else if (w.kind === 'kraken') {
+        ctx.fillStyle = 'rgba(20,40,60,0.35)'; ctx.beginPath(); ctx.arc(x, y, 9 + Math.sin(tm * 2) * 1.5, 0, Math.PI * 2); ctx.fill();
+        for (let q = 0; q < 8; q++) {
+          const a = q / 8 * Math.PI * 2 + Math.sin(tm + q) * 0.3, len = 12 + Math.sin(tm * 3 + q * 1.3) * 5;
+          ctx.strokeStyle = '#6a2c70'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y);
+          ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.6 + Math.sin(tm * 4 + q) * 3, y + Math.sin(a) * len * 0.6 - 8, x + Math.cos(a) * len, y + Math.sin(a) * len - 4); ctx.stroke();
+        }
+        ctx.fillStyle = '#7b3486'; ctx.beginPath(); ctx.ellipse(x, y - 6, 7, 9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 4, y - 7, 2, 2); ctx.fillRect(x + 2, y - 7, 2, 2);
+      } else if (w.kind === 'kaiju') {
+        const f = (tm * 3) & 1, spr = getSprite(`kaiju|${f}`, () => makeSprite(KAIJU[f], Object.assign({}, BASEPAL, { G: [70, 96, 74], g: [110, 140, 104], y: [255, 220, 90], w: [230, 230, 220] }), false)), k = Math.max(2, s * 2.5);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y, 9 * k / 2, 3 * k / 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.translate(x, y); if (w.vx < 0) ctx.scale(-1, 1); ctx.drawImage(spr, -spr.width * k / 2, -spr.height * k, spr.width * k, spr.height * k); ctx.restore();
+      } else if (w.kind === 'locusts') {
+        const r = w.r * z;
+        for (let q = 0; q < 140; q++) { const a = q * 2.399 + tm * (1 + (q % 5) * 0.2), d = r * Math.sqrt(((q * 37) % 100) / 100); ctx.fillStyle = q % 3 ? '#3b3a1e' : '#6b6a2e'; ctx.fillRect(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7 - 6, 2, 1.5); }
       } else if (w.kind === 'dragon') {
         const f = (tm * 4) & 1, spr = getSprite(`dragon|${f}`, () => makeSprite(DRAGON[f], Object.assign({}, BASEPAL, { r: [176, 32, 30], R: [120, 20, 22], o: [255, 170, 60], y: [255, 220, 120] }), false));
         const k = Math.max(2, s * 2), ang = Math.atan2(w.vy, w.vx) + Math.PI / 2, lift = 26;

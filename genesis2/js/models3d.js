@@ -1078,6 +1078,87 @@
   }
   M.eraKit = eraKit;
 
+  // ============================================================ great wonders (4 x 4 cells)
+  const SANDSTONE = { c: 0xd8c08a, t: 'masonry' }, MARBLE = { c: 0xf0ece2, t: 'plaster' }, BRONZE = { c: 0xb07a3a, t: 'metal' }, VERD = { c: 0x6fae96, t: 'metal' };
+  M.wonderKit = function (k, key, kc, era) {
+    const flag = (kc[0] << 16) | (kc[1] << 8) | kc[2], smokes = [];
+    switch (key) {
+      case 'mound': // a great earthen mound ringed with standing stones, a stair to a fire on top
+        k.mound({ c: [104, 140, 76], t: 'grass' }, 0, 0.4, 0, 3.6, 2.2, 3.6);
+        for (let q = 0; q < 12; q++) { const a = q / 12 * Math.PI * 2; k.box({ c: 0x8f8a80, t: 'rock' }, Math.cos(a) * 1.85, 0, Math.sin(a) * 1.85, 0.22, 0.7, 0.16, -a); }
+        for (let q = 0; q < 6; q++) k.box({ c: 0x9c978f, t: 'masonry' }, 0, q * 0.25, 1.75 - q * 0.22, 0.5, 0.06, 0.2);
+        k.glow(0xff9a3c, 0, 1.45, 0, 0.3, 0.35, 0.3); smokes.push([0, 1.9, 0]);
+        break;
+      case 'pyramid': // a stepped pyramid with a gold cap
+        for (let q = 0; q < 7; q++) k.box(SANDSTONE, 0, q * 0.5, 0, 3.8 - q * 0.52, 0.5, 3.8 - q * 0.52);
+        k.cone({ c: 0xe2b64c, t: 'plain' }, 0, 3.5, 0, 0.5, 0.5, 0.5);
+        for (let q = 0; q < 7; q++) k.box({ c: 0xc8b07a, t: 'masonry' }, 0, q * 0.5, 1.9 - q * 0.26, 0.5, 0.5, 0.08);
+        k.glow(0xffc46b, 0, 0.1, 1.92, 0.3, 0.4, 0.02);
+        break;
+      case 'colossus': // a bronze giant over the harbour, torch raised
+        k.box({ c: 0xb0a898, t: 'masonry' }, 0, 0, 0, 2.6, 0.9, 2.6); k.box({ c: 0xb0a898, t: 'masonry' }, 0, 0.9, 0, 1.6, 0.4, 1.6);
+        for (const x of [-0.3, 0.3]) k.box(BRONZE, x, 1.3, 0, 0.3, 1.6, 0.34);
+        k.box(BRONZE, 0, 2.9, 0, 0.9, 1.5, 0.5); k.box(BRONZE, 0, 4.4, 0, 0.42, 0.5, 0.42);
+        k.cone(BRONZE, 0, 4.9, 0, 0.5, 0.25, 0.5);
+        k.box(BRONZE, 0.55, 3.4, 0, 0.22, 1.5, 0.22, 0, 0, -0.2); k.glow(0xffb040, 0.72, 4.95, 0, 0.22, 0.3, 0.22);
+        k.box(BRONZE, -0.55, 2.8, 0.1, 0.22, 1.0, 0.22, 0, 0.2, 0.15);
+        smokes.push([0.72, 5.3, 0]);
+        break;
+      case 'library': // a marble hall of columns under a great dome; scrolls glowing in its windows
+        k.box(MARBLE, 0, 0, 0, 3.8, 0.3, 3.4); k.box(MARBLE, 0, 0.3, -0.3, 3.0, 1.6, 2.2);
+        for (let q = 0; q < 8; q++) k.cyl(MARBLE, -1.5 + q * 0.43, 0.3, 1.3, 0.2, 1.6, 0.2);
+        k.box(MARBLE, 0, 1.9, 0.5, 3.4, 0.2, 1.8); k.prism(MARBLE, 0, 2.1, 1.1, 3.4, 0.5, 0.6, Math.PI / 2);
+        k.cyl(MARBLE, 0, 1.9, -0.3, 1.8, 0.5, 1.8); k.ico({ c: 0x9ab0b8, t: 'metal' }, 0, 2.7, -0.3, 1.9, 1.6, 1.9); k.box({ c: 0xe2b64c, t: 'plain' }, 0, 3.4, -0.3, 0.06, 0.4, 0.06);
+        for (let q = 0; q < 5; q++) k.glow(0xffd28a, -1.2 + q * 0.6, 0.6, 0.82, 0.2, 0.7, 0.02);
+        break;
+      case 'cathedral': { // a vast gothic cathedral with twin spires and a rose window
+        const st = { c: 0xc4bcae, t: 'masonry' }, dark = { c: 0x3a4048, t: 'tiles' };
+        k.box(st, 0, 0, 0, 1.6, 2.2, 3.4); k.prism(dark, 0, 2.2, 0, 1.7, 1.0, 3.44);
+        k.box(st, 0, 0, -0.4, 3.6, 1.8, 1.0); k.prism(dark, 0, 1.8, -0.4, 1.04, 0.8, 3.64, Math.PI / 2);
+        for (const x of [-0.65, 0.65]) { k.box(st, x, 0, 1.6, 0.66, 3.8, 0.66); k.cone(dark, x, 3.8, 1.6, 0.66, 2.0, 0.66); k.box({ c: 0xe2b64c, t: 'plain' }, x, 5.8, 1.6, 0.04, 0.3, 0.04); }
+        k.cone(dark, 0, 2.8, -0.4, 0.4, 2.4, 0.4);
+        for (const z of [-1.2, -0.4, 0.4]) for (const s of [-1, 1]) k.box(st, s * 1.0, 0, z, 0.3, 1.4, 0.2, 0, 0, s * 0.3); // flying buttresses
+        k.glowc(0xffb040, 0, 1.5, 1.94, 0.6, 0.02, 0.6, 0, Math.PI / 2);
+        for (let q = 0; q < 5; q++) { k.glow(0xff9a5a, 0.81, 0.8, -1.3 + q * 0.6, 0.02, 0.9, 0.18); k.glow(0xff9a5a, -0.81, 0.8, -1.3 + q * 0.6, 0.02, 0.9, 0.18); }
+        break;
+      }
+      case 'observatory': // a round tower on a terrace, a dome split open for a great telescope
+        k.box({ c: 0xd0c8b8, t: 'masonry' }, 0, 0, 0, 3.6, 0.5, 3.6);
+        k.cyl({ c: 0xe0d8c8, t: 'plaster' }, 0, 0.5, 0, 2.2, 2.4, 2.2); k.ico({ c: 0x8ca0b0, t: 'metal' }, 0, 3.0, 0, 2.3, 1.8, 2.3);
+        k.box({ c: 0x1a1a22, t: 'plain' }, 0, 3.0, 0.5, 0.4, 1.0, 1.2);
+        k.cyl({ c: 0x6a6a72, t: 'metal' }, 0, 3.2, 0.6, 0.3, 1.6, 0.3, 0, -0.7);
+        for (let q = 0; q < 6; q++) k.glow(0xffd28a, Math.cos(q) * 1.11, 1.3 + (q % 2) * 0.6, Math.sin(q) * 1.11, 0.12, 0.25, 0.12);
+        break;
+      case 'irontower': // a tall iron lattice tower on four arched legs
+        lattice(k, { c: 0x6a5a4a, t: 'metal' }, 0, 3.2, 1.6, 0.6);
+        lattice(k, { c: 0x6a5a4a, t: 'metal' }, 3.2, 3.2, 0.6, 0.25);
+        lattice(k, { c: 0x6a5a4a, t: 'metal' }, 6.4, 2.6, 0.25, 0.08);
+        k.box({ c: 0x5a4a3a, t: 'metal' }, 0, 1.6, 0, 2.6, 0.12, 2.6); k.box({ c: 0x5a4a3a, t: 'metal' }, 0, 3.2, 0, 1.4, 0.12, 1.4);
+        k.box({ c: 0x8a8a8a, t: 'metal' }, 0, 9.0, 0, 0.04, 0.8, 0.04); k.glow(0xff4a4a, 0, 9.8, 0, 0.1, 0.1, 0.1);
+        for (let q = 0; q < 4; q++) k.glow(0xffe2a0, (q % 2 ? 1 : -1) * 0.7, 3.25, (q < 2 ? 1 : -1) * 0.7, 0.1, 0.06, 0.1);
+        break;
+      case 'stadium': // an oval bowl of tiered seats round a green field, floodlights
+        for (let q = 0; q < 28; q++) { const a = q / 28 * Math.PI * 2; k.box({ c: 0xbab6ae, t: 'concrete' }, Math.cos(a) * 1.65, 0, Math.sin(a) * 1.3, 0.5, 1.0, 0.42, -a); k.box({ c: q % 2 ? flag : 0xe0e0e0, t: 'cloth' }, Math.cos(a) * 1.5, 0.95, Math.sin(a) * 1.18, 0.4, 0.06, 0.3, -a, 0.3); }
+        k.box({ c: [86, 150, 70], t: 'grass' }, 0, 0, 0, 2.2, 0.06, 1.6); for (let q = 0; q < 3; q++) k.box({ c: 0xf0f0f0, t: 'plain' }, -0.7 + q * 0.7, 0.06, 0, 0.03, 0.005, 1.5);
+        for (const [x, z] of [[-1.8, -1.4], [1.8, -1.4], [-1.8, 1.4], [1.8, 1.4]]) { k.box({ c: 0x8c939c, t: 'metal' }, x, 0, z, 0.08, 2.4, 0.08); k.glow(0xfff6d0, x, 2.4, z, 0.4, 0.15, 0.2); }
+        break;
+      case 'worldtower': // a supertall glass spire with sky gardens and a beacon
+        k.box({ c: 0x98948c, t: 'concrete' }, 0, 0, 0, 3.8, 0.4, 3.8);
+        for (let q = 0; q < 6; q++) { const w = 2.4 - q * 0.32; k.box({ c: q % 2 ? 0x86acd0 : 0x5e88b0, t: 'glass' }, 0, 0.4 + q * 2.2, 0, w, 2.2, w, q * 0.15); k.glow(0xbfe6ff, 0, 0.4 + q * 2.2 + 2.1, 0, w + 0.04, 0.08, w + 0.04, q * 0.15); }
+        k.cone({ c: 0xe4e8ee, t: 'metal' }, 0, 13.6, 0, 0.7, 3.4, 0.7); k.glow(0xff4a4a, 0, 17.0, 0, 0.14, 0.14, 0.14);
+        break;
+      case 'elevator': // a base station and a tether of light rising out of sight, a climber on it
+        k.cyl({ c: 0xe4e8ee, t: 'metal' }, 0, 0, 0, 3.8, 0.5, 3.8); k.glowc(0x7affd0, 0, 0.5, 0, 3.6, 0.04, 3.6);
+        k.cyl({ c: 0xe4e8ee, t: 'metal' }, 0, 0.5, 0, 1.6, 1.6, 1.6); k.cone({ c: 0xe4e8ee, t: 'metal' }, 0, 2.1, 0, 1.6, 0.8, 1.6);
+        k.glow(0x7ab8ff, 0, 2.8, 0, 0.12, 120, 0.12); k.glow(0xbfe6ff, 0, 2.8, 0, 0.3, 120, 0.04);
+        for (const y of [8, 22, 40]) k.cyl({ c: 0xe4e8ee, t: 'metal' }, 0, y, 0, 0.7, 0.4, 0.7);
+        for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2; k.box({ c: 0xbab6ae, t: 'concrete' }, Math.cos(a) * 1.5, 0.5, Math.sin(a) * 1.5, 0.6, 0.8, 0.6); }
+        break;
+      default: return null;
+    }
+    return smokes;
+  };
+
   // ============================================================ houses
   // a building's style comes from where its community lives, and its era
   M.styleOf = function (b) {

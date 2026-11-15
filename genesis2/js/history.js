@@ -173,6 +173,8 @@
       snap.physics = AG.Physics.state ? AG.Physics.state() : null;
       snap.diseases = clone(AG.DISEASES);
       snap.plague = AG.Plague ? clone(AG.Plague.state()) : null;
+      snap.realms = AG.Realms ? clone(AG.Realms.state()) : null;
+      snap.deeds = AG.Deeds ? clone(AG.Deeds.state()) : null;
       snap.events = History.events.slice(-1500).map((e) => Object.assign({}, e)); snap.nextId = History.nextId;
       snap.god = AG.God.state ? AG.God.state() : null;
     });
@@ -219,6 +221,8 @@
     if (s.physics && AG.Physics.setState) AG.Physics.setState(s.physics);
     AG.DISEASES.splice(0, AG.DISEASES.length, ...clone(s.diseases));
     if (AG.Plague) AG.Plague.restore(s.plague);
+    if (AG.Realms) AG.Realms.restore(s.realms);
+    if (AG.Deeds) AG.Deeds.restore(s.deeds);
     History.events = s.events.map((e) => Object.assign({}, e)); History.nextId = s.nextId;
     if (s.god && AG.God.setState) AG.God.setState(s.god);
     AG.Flow.cache.clear(); AG.Proj.reset && AG.Proj.reset();

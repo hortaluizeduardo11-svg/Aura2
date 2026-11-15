@@ -11,7 +11,7 @@
   const God = (AG.God = {
     tool: 'inspect', cur: null, brush: { r: 5, str: 0.6, shape: 'round' },
     input: { dx: 0, dy: 0, act: false, power: false, aimX: 0, aimY: 0, moveTo: null },
-    possessed: -1, tornadoes: [], meteors: [], impacts: [], shake: 0, disease: 0, pendingKd: -1,
+    possessed: -1, tornadoes: [], meteors: [], impacts: [], shake: 0, disease: 0, pendingKd: -1, pendingCity: -1,
     down: false, wx: 0, wy: 0,
   });
 
@@ -104,7 +104,7 @@
   God.CATS = [
     { id: 'look', name: 'Watch' }, { id: 'land', name: 'Terrain' }, { id: 'geo', name: 'Geology' }, { id: 'elem', name: 'Elements' }, { id: 'sky', name: 'Weather' },
     { id: 'life', name: 'Life' }, { id: 'divine', name: 'Divine' }, { id: 'ruin', name: 'Disasters' }, { id: 'deep', name: 'Deep' },
-    { id: 'peoples', name: 'Peoples' }, { id: 'war', name: 'War' }, { id: 'lab', name: 'Plague lab' },
+    { id: 'peoples', name: 'Peoples' }, { id: 'war', name: 'War' }, { id: 'lab', name: 'Plague lab' }, { id: 'realm', name: 'Realms' },
   ];
   const plateSel = { id: -1 };
   God.TOOLS = [
@@ -256,6 +256,32 @@
         AG.FX.burst(c.x, c.y, 'magic', 20);
         toast(`${p.name} is loose in ${c.name}`);
       } },
+    // realms: rulers, revolutions, towns and wonders
+    ...[
+      ['crown', 'Crown', '#ffca28', 'Tap a community: its ablest person takes power (in the capital a coup; elsewhere the town breaks away as a kingdom under them).', 'crown'],
+      ['assassin', 'Assassinate', '#424242', 'Tap a realm: its ruler dies a mysterious death. A disputed succession may tear the realm.', 'assassinate'],
+      ['hero', 'Hero', '#ef6c00', 'Tap a community: a hero of legend rises there and leads its realm\'s armies.', 'hero'],
+      ['prophet', 'Prophet', '#ce93d8', 'Tap a community: a prophet has a vision and preaches a new faith.', 'prophet'],
+      ['golden', 'Golden age', '#ffe082', 'Tap a realm: sixty years of plenty, order and learning.', 'golden'],
+      ['revolution', 'Revolution', '#e53935', 'Tap a realm: the people overthrow their rulers and proclaim a republic.', 'revolution'],
+    ].map(([id, name, color, desc, fn]) => ({ id, cat: 'realm', name, mode: 'click', color, desc, click: (x, y) => { const r = AG.Realms[fn](x, y); toast(r.ok ? r.text : r.why); if (r.ok) AG.FX.burst(x, y, 'magic', 16); } })),
+    { id: 'unite', cat: 'realm', name: 'Unite', mode: 'click', color: '#4db6ac', desc: 'Tap a realm, then a second: the second joins the first, peacefully, as one realm.',
+      click: (x, y) => pairOf(x, y, (A, B) => { const r = AG.Realms.unite(A, B); toast(r.ok ? r.text : r.why); }) },
+    { id: 'exodus', cat: 'realm', name: 'Exodus', mode: 'click', color: '#a1887f', desc: 'Tap a community, then open land: half its people set out and found a new home there.',
+      click: (x, y) => {
+        const pend = God.pendingCity >= 0 ? Civ.cities[God.pendingCity] : null;
+        if (!pend || !pend.alive) { const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20); if (!c) { toast('Tap a community first'); return; } God.pendingCity = c.id; toast(`${c.name} is ready to set out: now tap open land`); return; }
+        God.pendingCity = -1; const r = AG.Realms.exodus(pend, x, y); toast(r.ok ? r.text : r.why);
+      } },
+    { id: 'town', cat: 'realm', name: 'Found a village', mode: 'click', color: '#8d6e63', desc: 'Tap open land: a new village rises, with the arts of its neighbours\' age.', click: (x, y) => { const r = AG.Realms.found(x, y, false); toast(r.ok ? r.text : r.why); } },
+    { id: 'metropolis', cat: 'realm', name: 'Found a city', mode: 'click', color: '#5c6bc0', desc: 'Tap open land: a great city of the most advanced age in the world rises at once, seat of a new state.', click: (x, y) => { const r = AG.Realms.found(x, y, true); toast(r.ok ? r.text : r.why); } },
+    { id: 'wonder', cat: 'realm', name: 'Great wonder', mode: 'click', color: '#ffd54f', desc: 'Tap a town: it raises the great wonder of its age (one of each in the world: the Great Mound, the Pyramid, the Colossus, the Library, the Cathedral, the Observatory, the Iron Tower, the Stadium, the World Tower, the Space Elevator). Rich states build them too.',
+      click: (x, y) => { const r = AG.Realms.raise(Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20), true); toast(r.ok ? r.text : r.why); } },
+    { id: 'launch', cat: 'realm', name: 'Launch', mode: 'click', color: '#90caf9', desc: 'Tap a town that knows rocketry: a rocket goes up now (and with spaceflight, may found a colony beyond the world).',
+      click: (x, y) => { const r = AG.Realms.launch(Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20), true); toast(r.ok ? r.text : r.why); } },
+    { id: 'kraken', cat: 'ruin', name: 'Kraken', mode: 'click', color: '#7b1fa2', desc: 'Raise a kraken from the nearest sea: it sinks ships and smashes harbours until it is driven off.', click: (x, y) => { if (!God.summon('kraken', x, y)) toast('No sea near enough for a kraken'); } },
+    { id: 'kaiju', cat: 'ruin', name: 'Kaiju', mode: 'click', color: '#558b2f', desc: 'Wake a colossal monster that walks on the greatest cities, trampling all in its path. Spears cannot hurt it; tanks and jets can.', click: (x, y) => God.summon('kaiju', x, y) },
+    { id: 'locusts', cat: 'ruin', name: 'Locusts', mode: 'click', color: '#827717', desc: 'A swarm of locusts that eats the fields bare, town after town, and brings famine.', click: (x, y) => God.summon('locusts', x, y, God.brush.r) },
     // the far future (and the far past): wonders and terrors
     { id: 'eureka', cat: 'peoples', name: 'Eureka', mode: 'click', color: '#ffee58', desc: 'Tap a community: it leaps into its next age at once, every invention of that age understood.',
       click: (x, y) => {
@@ -343,7 +369,7 @@
 
   God.select = function (id) {
     const t = God.byId[id]; if (!t) return;
-    God.tool = id; God.cur = t; God.pendingKd = -1;
+    God.tool = id; God.cur = t; God.pendingKd = -1; God.pendingCity = -1;
     if (AG.Render) { if (t.deep) AG.Render.view = 0; else if (t.cat !== 'look' && t.cat !== 'sky' && AG.Render.view === 0) AG.Render.view = 1; }
   };
   // Every act is logged (tick, tool, place, brush) so a replay can repeat it exactly.
@@ -445,6 +471,15 @@
     if (kind === 'ufo') { w.life = 7; w.took = false; }
     else if (kind === 'goo') { w.life = 26; w.r = 0.5; w.max = 8 + (r || 4) * 1.4; AG.History.event('god', `Grey goo boils up ${placeName(x, y)}: tiny machines begin to eat the world`, { x, y, cause: 'grey goo' }); }
     else if (kind === 'hole') { w.life = 12; AG.History.event('god', `A black hole opens ${placeName(x, y)}`, { x, y, cause: 'a black hole' }); }
+    else if (kind === 'kraken') {
+      let best = null, bd = 1e9; // it rises from the nearest sea
+      for (let dy = -30; dy <= 30; dy++) for (let dx = -30; dx <= 30; dx++) { const cx = (x + dx) | 0, cy = (y + dy) | 0; if (cx < 2 || cy < 2 || cx >= W - 2 || cy >= H - 2) continue; if (Wd.passSea(cy * W + cx) && dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; best = [cx + 0.5, cy + 0.5]; } }
+      if (!best) return null;
+      w.x = best[0]; w.y = best[1]; w.life = 75; w.hp = 500; w.hit = 0; w.tgt = -1;
+      AG.History.event('god', `A kraken rises from the sea ${placeName(w.x, w.y)}`, { x: w.x, y: w.y, cause: 'a kraken' });
+    } else if (kind === 'kaiju') { w.life = 100; w.hp = 3200; w.hit = 0; w.stomp = 0; w.tgt = -1; w.vx = 0; w.vy = 0; w.name = (AG.Lang ? AG.Lang.personName(-1, 1) : 'Old Stone') + ' the Behemoth'; AG.History.event('god', `A colossal monster, ${w.name}, wakes ${placeName(x, y)}`, { x, y, cause: 'a kaiju' }); }
+    else if (kind === 'locusts') { w.life = 40; w.r = 4 + (r || 4) * 0.4; w.bite = 0; w.vx = 0; w.vy = 0; AG.History.event('god', `A plague of locusts darkens the sky ${placeName(x, y)}`, { x, y, cause: 'locusts' }); }
+    else if (kind === 'rocket') { w.life = 9; }
     else if (kind === 'dragon') { w.life = 70; w.hp = 260; w.vx = 0; w.vy = 0; w.breath = 0; w.tgt = -1; w.name = (AG.Lang ? AG.Lang.personName(-1, 1) : 'Old Red') + ' the Dragon'; AG.History.event('god', `A dragon, ${w.name}, takes wing ${placeName(x, y)}`, { x, y, cause: 'a dragon' }); }
     God.wonders.push(w);
     if (God.wonders.length > 12) God.wonders.shift();
@@ -494,6 +529,62 @@
         Wd.wakeArea(w.x | 0, w.y | 0, Math.ceil(w.r) + 2);
         God.shake = Math.max(God.shake, 4);
         if (w.t > w.life) { w.done = true; AG.History.event('god', `The black hole ${placeName(w.x, w.y)} evaporates, leaving a deep pit`, { x: w.x, y: w.y, cause: 'a black hole' }); if (AG.View3D && AG.View3D.invalidate) AG.View3D.invalidate(); if (AG.Render) AG.Render.invalidate(); }
+      } else if (w.kind === 'rocket') {
+        if (w.t > w.life) w.done = true;
+      } else if (w.kind === 'kraken') {
+        let c = w.tgt >= 0 ? Civ.cities[w.tgt] : null;
+        if (!c || !c.alive) { c = null; let bd = 1e18; for (const q of Civ.cities) { if (!q.alive || !q.coastal) continue; const d = AG.dist2(q.x, q.y, w.x, w.y); if (d < bd && d < 140 * 140) { bd = d; c = q; } } w.tgt = c ? c.id : -1; }
+        if (c) { const dx = c.x - w.x, dy = c.y - w.y, d = Math.hypot(dx, dy) || 1; if (d > 5) { const nx = w.x + dx / d * dt * 5, ny = w.y + dy / d * dt * 5; if (Wd.passSea((ny | 0) * W + (nx | 0))) { w.x = nx; w.y = ny; } else { const sx = w.x - dy / d * dt * 5, sy = w.y + dx / d * dt * 5; if (Wd.passSea((sy | 0) * W + (sx | 0))) { w.x = sx; w.y = sy; } } } }
+        w.hit += dt;
+        if (w.hit > 0.8) {
+          w.hit = 0;
+          for (const j of unitsIn(w.x, w.y, 8, 1)) if (U.sp[j] === SP.SHIP || Math.hypot(U.x[j] - w.x, U.y[j] - w.y) < 3) Ent.kill(j, 'the kraken');
+          let smashed = 0;
+          eachCell(w.x, w.y, 5, (i) => { if (Wd.bgrid[i] && smashed < 1 && rnd() < 0.2) { Civ.damageBuilding(Wd.bgrid[i] - 1, 200, -1); smashed++; } });
+          if (c && Math.hypot(c.x - w.x, c.y - w.y) < 9) {
+            killFolded(c, 0.02, 'the kraken');
+            const sold = Civ.persons(c).filter((P) => P.job === AG.J.SOLDIER).length;
+            w.hp -= sold * 0.3 * (AG.Warfare ? Math.min(40, AG.Warfare.arms(c)) : 1) + (Tech.knows(c, 'gunpowder') ? 4 : 0);
+          }
+          Wd.wakeArea(w.x | 0, w.y | 0, 6);
+          if (w.hp <= 0) { w.done = true; if (AG.Deeds) AG.Deeds.note('kraken'); AG.History.event('god', `The defenders${c ? ' of ' + c.name : ''} drive the kraken back into the deep`, { x: w.x, y: w.y, cause: 'war' }); }
+        }
+        if (!w.done && w.t > w.life) { w.done = true; AG.History.event('god', `The kraken sinks back into the deep ${placeName(w.x, w.y)}`, { x: w.x, y: w.y, cause: 'a kraken' }); }
+      } else if (w.kind === 'kaiju') {
+        let c = w.tgt >= 0 ? Civ.cities[w.tgt] : null;
+        if (!c || !c.alive || c.members.length < 3) { c = null; let bv = -1; for (const q of Civ.cities) { if (!q.alive || q.members.length < 3) continue; const d = Math.hypot(q.x - w.x, q.y - w.y); if (d > 220) continue; const v = q.members.length / (10 + d); if (v > bv) { bv = v; c = q; } } w.tgt = c ? c.id : -1; }
+        const tx = c ? c.x : w.x, ty = c ? c.y : w.y, dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy) || 1;
+        if (d > 2) { w.vx = dx / d * 3; w.vy = dy / d * 3; w.x = AG.clamp(w.x + w.vx * dt, 2, W - 3); w.y = AG.clamp(w.y + w.vy * dt, 2, H - 3); }
+        w.stomp += dt; w.hit += dt;
+        if (w.stomp > 0.3) {
+          w.stomp = 0;
+          eachCell(w.x, w.y, 1.8, (i) => { if (Wd.bgrid[i]) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1); if (Wd.veg[i] > 30) Wd.veg[i] = 30; });
+          for (const j of unitsIn(w.x, w.y, 2, 1)) Ent.kill(j, 'trampled by a monster');
+          Wd.wakeArea(w.x | 0, w.y | 0, 3); God.shake = Math.max(God.shake, 3);
+        }
+        if (c && d < 6 && w.hit > 0.6) {
+          w.hit = 0;
+          killFolded(c, 0.03, w.name);
+          const sold = Civ.persons(c).filter((P) => P.job === AG.J.SOLDIER).length;
+          w.hp -= sold * 0.06 * (AG.Warfare ? Math.min(400, AG.Warfare.arms(c)) : 1);
+          AG.FX.burst(w.x, w.y, 'debris', 10);
+          if (w.hp <= 0) { w.done = true; if (AG.Deeds) AG.Deeds.note('kaiju'); AG.FX.burst(w.x, w.y, 'explosion', 60); AG.History.event('god', `The ${Civ.kingdoms[c.kd].name} bring down ${w.name} at ${c.name}`, { x: c.x, y: c.y, comm: c.id, cause: 'war' }); }
+        }
+        if (!w.done && w.t > w.life) { w.done = true; AG.History.event('god', `${w.name} wades into the sea and is gone`, { x: w.x, y: w.y, cause: 'a kaiju' }); }
+      } else if (w.kind === 'locusts') {
+        let c = null, bd = 1e18;
+        for (const q of Civ.cities) { if (!q.alive || q.nomadic) continue; const d = AG.dist2(q.x, q.y, w.x, w.y); if (d < bd && d < 100 * 100 && q.id !== w.last) { bd = d; c = q; } }
+        const tx = c ? c.x : w.x + Sky.wind.x * 20, ty = c ? c.y : w.y + Sky.wind.y * 20, dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy) || 1;
+        w.vx += ((dx / d) * 4 + Sky.wind.x * 3 - w.vx) * Math.min(1, dt); w.vy += ((dy / d) * 4 + Sky.wind.y * 3 - w.vy) * Math.min(1, dt);
+        w.x = AG.clamp(w.x + w.vx * dt, 2, W - 3); w.y = AG.clamp(w.y + w.vy * dt, 2, H - 3);
+        w.bite += dt;
+        if (w.bite > 0.5) {
+          w.bite = 0;
+          eachCell(w.x, w.y, w.r, (i) => { if (Wd.veg[i] > 20) Wd.veg[i] = Math.max(10, Wd.veg[i] * 0.6) | 0; if (Wd.cereal) Wd.cereal[i] >>= 1; const bi = Wd.bgrid[i]; if (bi) { const b = Civ.buildings[bi - 1]; if (b && b.type === AG.BT.FARM) b.growth = 0; } });
+          for (const q of Civ.cities) if (q.alive && Math.hypot(q.x - w.x, q.y - w.y) < w.r + 5) { q.food *= 0.85; if (q.food < 0 && !q.famine) q.famine = true; if (c && q.id === c.id && Math.hypot(q.x - w.x, q.y - w.y) < 3) w.last = q.id; }
+          Wd.wakeArea(w.x | 0, w.y | 0, Math.ceil(w.r) + 1);
+        }
+        if (w.t > w.life) { w.done = true; AG.History.event('god', `The locusts ${placeName(w.x, w.y)} die away, leaving bare fields`, { x: w.x, y: w.y, cause: 'locusts' }); }
       } else if (w.kind === 'dragon') {
         let c = w.tgt >= 0 ? Civ.cities[w.tgt] : null;
         if (!c || !c.alive || c.members.length < 2 || (w.over || 0) > 8) { w.over = 0; c = null; let bd = 1e18; for (const q of Civ.cities) { if (!q.alive || q.members.length < 3 || q.id === w.tgt) continue; const d = AG.dist2(q.x, q.y, w.x, w.y); if (d < bd && d < 160 * 160) { bd = d; c = q; } } w.tgt = c ? c.id : -1; }
@@ -513,7 +604,7 @@
             // the town fights back with the arms of its age
             const sold = Civ.persons(c).filter((P) => P.job === AG.J.SOLDIER).length;
             w.hp -= sold * 0.35 * (AG.Warfare ? Math.min(30, AG.Warfare.arms(c)) : 1);
-            if (w.hp <= 0) { w.done = true; AG.FX.burst(w.x, w.y, 'explosion', 40); AG.History.event('god', `The defenders of ${c.name} bring down ${w.name}`, { x: c.x, y: c.y, comm: c.id, cause: 'war' }); witness(c.x, c.y, 20, AG.People.MK.VICTORY, 'the fall of the dragon', 0.8); }
+            if (w.hp <= 0) { w.done = true; if (AG.Deeds) AG.Deeds.note('dragon'); AG.FX.burst(w.x, w.y, 'explosion', 40); AG.History.event('god', `The defenders of ${c.name} bring down ${w.name}`, { x: c.x, y: c.y, comm: c.id, cause: 'war' }); witness(c.x, c.y, 20, AG.People.MK.VICTORY, 'the fall of the dragon', 0.8); }
           }
         }
         if (!w.done && w.t > w.life) { w.done = true; AG.History.event('god', `${w.name} flies off to the high mountains`, { x: w.x, y: w.y, cause: 'a dragon' }); }
@@ -554,6 +645,7 @@
     God.shake = 30;
     Civ.experience(x, y, 'fire', 6); Civ.experience(x, y, 'death', 4);
     witness(x, y, r * 6, AG.People.MK.DISASTER, 'the flash brighter than the sun', -1);
+    if (AG.Deeds) AG.Deeds.note('bomb');
     AG.History.event('war', `A bomb falls ${placeName(x, y)}${dead ? `; ${dead} die in the fire` : ''}`, { x, y, cause: 'divine wrath' });
     for (const k of Civ.kingdoms) if (k.alive) for (const o of Civ.kingdoms) if (o.alive && o !== k) k.mods[o.id] -= 5; // (the world is shaken)
     return dead;

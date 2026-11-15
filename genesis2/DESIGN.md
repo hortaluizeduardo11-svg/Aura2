@@ -742,12 +742,44 @@ are recomputed from its type and bought traits. Each year step:
 
 ### 9.8 Wonders and terrors (`god.js`)
 
-`God.wonders` holds the UFO, grey goo, black hole and dragon, advanced in real time like the
-meteors. The UFO takes up to three people and may teach its community an invention of its next
+`God.wonders` holds the UFO, grey goo, black hole, dragon, kraken, kaiju, locust swarm and
+rockets, advanced in real time like the meteors. The kraken rises in the nearest sea, keeps to
+the water, sinks ships and smashes buildings near the shore of the nearest coastal town; the
+kaiju walks on the biggest town in reach, flattening buildings in its path, and only the arms of
+a late age wear its 3,200 strength down; the locusts fly with the wind toward farmland, strip
+crops and cut stores by 15% every half second over each town they cross. The UFO takes up to three people and may teach its community an invention of its next
 age; grey goo widens to a set radius turning land to grey rock and unmaking everything in it;
 the black hole lowers the land into a pit, pulls creatures in and swallows towns; the dragon
 flies to the nearest town, breathes fire (burning cells, buildings and people) and is worn down
 by the town's soldiers in proportion to the arms of their age.
+
+### 9.10 Realms, wonders and deeds (`realms.js`, `deeds.js`)
+
+The realm powers act through the ordinary records: Crown picks a community's ablest adult
+(ambition, fame, lore and fighting, age) and makes them ruler (a coup in the capital; elsewhere
+`War.secede` then crowns them); Assassinate kills the ruler, costs stability and legitimacy and
+may make an outlying town secede; Hero gives the hero trait, full fighting skill and fame, and
+makes them the realm's general; Prophet forces `War.foundReligion` and names the faith after the
+prophet; Golden age sets `k.golden` (stability each year, food for hungry towns) and inspires
+every town; Revolution sets `k.republic` (named "Republic of ..."), removes the old ruler,
+clears corruption and halves inequality; Unite transfers every city of one realm to the other;
+Exodus moves half a community into a new one where the god points (settled if the old one was).
+Found builds a realm: a band from the people's gene pool, the inventions of the chosen age,
+settling, extra townsfolk, and instant buildings (the citadel, temples and markets first, at the
+centre, then the usual plan, then homes for everyone).
+
+Great wonders are a building type (`BT.WONDER`, 4 x 4) with `b.wonder` naming the design; one of
+each per world (`Realms.everBuilt` remembers ones destroyed). Their effects are summed per realm
+each year into `k.wonderFx` (learning multiplies `Civ.learning`; stability, legitimacy and gold
+accrue). States of 150+ people with a surplus build them at 0.3% a year. The space program
+launches at 2% a year with rocketry and 6% with spaceflight; a launch with spaceflight founds a
+colony 30% of the time (`k.colonies`, +5% learning each, up to +50%).
+
+`Deeds` holds 34 deeds, each marked once with its year: read from the world every year (ages,
+peoples, population, empires, wonders standing, a pandemic's reach, a century of peace, a world
+that lost three quarters of its people) or noted by the systems when they happen (a colony, an
+annexation, a vassal, the bomb, a cure, a horde cut down, the night lord slain, a dragon, kaiju
+or kraken defeated, a town founded, a republic). Both modules are saved with the world.
 
 ### 9.9 Peoples (`races.js`)
 

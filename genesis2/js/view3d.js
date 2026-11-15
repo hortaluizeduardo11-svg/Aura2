@@ -1229,9 +1229,10 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
   function merlonRing(k, hex, y, r, n, size) {
     for (let q = 0; q < n; q++) { const a = (q / n) * Math.PI * 2; k.box(hex, Math.cos(a) * r, y, Math.sin(a) * r, size, size * 1.1, size, -a); }
   }
-  function kitFor(type, kc, v, style, era) {
+  function kitFor(type, kc, v, style, era, b) {
     const k = new Kit(), flagC = hexOf(kc), roof = roofOf(kc, v), smokes = [];
     const M3 = AG.Models3D;
+    if (type === BT.WONDER && M3 && M3.wonderKit) { const sm = M3.wonderKit(k, b ? b.wonder : 'mound', kc, era || 0); if (sm) { const out = k.done(); out.smoke = sm; return out; } }
     if (M3 && style) { const sm = M3.houseKit(k, type, style, kc, v, era || 0, roof); if (sm) { const out = k.done(); out.smoke = sm; return out; } }
     const pal = M3 && style ? M3.palette(style) : null, STONE = pal ? pal.STONE : STONE_, STONE2 = pal ? pal.STONE2 : STONE2_;
     switch (type) {
@@ -1495,16 +1496,16 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
   const eraKey = (era) => (era >= 7 ? 'e' + Math.min(era, 14) : era >= 4 ? 1 : era >= 2 ? 0 : -1); // (each later age has its own look)
   function keyOf(b) {
     const c = Civ.cities[b.city], era = c ? c.era : 0, style = AG.Models3D ? AG.Models3D.styleOf(b) : '';
-    return `${b.type}|${b.kd}|${b.id % 3}|${style}|${eraKey(era)}`;
+    return `${b.type}|${b.kd}|${b.id % 3}|${style}|${eraKey(era)}|${b.wonder || ''}`;
   }
   function model(b) {
     if (b.prog < 1) return siteModel(b);
     const kn = Civ.kingdoms[b.kd], kc = kn ? kn.color : [150, 150, 150], v = b.id % 3;
     const c = Civ.cities[b.city], era = c ? c.era : 0, style = AG.Models3D ? AG.Models3D.styleOf(b) : '';
-    const key = `${b.type}|${b.kd}|${v}|${style}|${eraKey(era)}`;
+    const key = `${b.type}|${b.kd}|${v}|${style}|${eraKey(era)}|${b.wonder || ''}`;
     let kit = modelCache.get(key);
     if (!kit) {
-      kit = kitFor(b.type, kc, v, style, era);
+      kit = kitFor(b.type, kc, v, style, era, b);
       const fk = new Kit(); fk.box(STONE2, 0, -2, 0, b.w * 0.92, 2.02, b.h * 0.92); // foundation hides any slope underneath
       kit.base = fk.done().lit;
       modelCache.set(key, kit);
@@ -1773,6 +1774,27 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
         prop(w.x - fx * 1.05, gy + lift + 0.05, w.y - fz * 1.05, 0.14, 0.12, 0.7, ry, [130, 26, 26]);
         for (const side of [-1, 1]) prop(w.x + rx * side * 0.95, gy + lift + 0.2 + flap * 0.35, w.y + rz * side * 0.95, 1.5, 0.05, 0.75, ry, [140, 28, 28], -side * flap * 0.5);
         if (w.breath > 0 && w.tgt >= 0) prop(w.x + fx * 1.4, gy + lift - 0.4, w.y + fz * 1.4, 0.3, 0.3, 1.2, ry, [255, 170, 60], 0.6);
+      } else if (w.kind === 'rocket') {
+        const lift = w.t * w.t * 1.2, ry = 0;
+        prop(w.x, gy + 0.3 + lift, w.y, 0.42, 3.2, 0.42, ry, [238, 241, 244]); prop(w.x, gy + 0.3 + lift + 2.0, w.y, 0.44, 0.25, 0.44, ry, [198, 40, 40]);
+        prop(w.x, gy + 0.3 + lift + 3.2, w.y, 0.3, 0.5, 0.3, ry, [238, 241, 244]);
+        for (let q = 0; q < 6; q++) prop(w.x + Math.sin(q * 2 + t * 30) * 0.08, gy + 0.3 + lift - 0.4 - q * 0.5, w.y + Math.cos(q * 3 + t * 30) * 0.08, 0.5 - q * 0.05 + q * 0.1, 0.5, 0.5 - q * 0.05 + q * 0.1, q, q < 2 ? [255, 230, 120] : q < 4 ? [255, 150, 60] : [210, 210, 214]);
+      } else if (w.kind === 'kraken') {
+        const sea = Math.max(gy, 0);
+        for (let q = 0; q < 8; q++) { const a = q / 8 * Math.PI * 2 + t * 0.3, sway = Math.sin(t * 2 + q) * 0.4; for (let s2 = 0; s2 < 5; s2++) { const rr = 1.2 + s2 * 0.5, hh = Math.sin((s2 / 4) * Math.PI) * (2.2 + sway); prop(w.x + Math.cos(a) * rr, sea + hh, w.y + Math.sin(a) * rr, 0.4 - s2 * 0.06, 0.6, 0.4 - s2 * 0.06, -a, [110, 44, 120], sway * 0.5); } }
+        if (nh < MAXU - 1) place(heads, nh++, w.x, sea + 1.2, w.y, 2.2, 2.6, 2.2, t * 0.2, [122, 52, 134], 0);
+        prop(w.x + 0.5, sea + 1.6, w.y + 0.9, 0.3, 0.3, 0.1, 0, [255, 213, 79]); prop(w.x - 0.5, sea + 1.6, w.y + 0.9, 0.3, 0.3, 0.1, 0, [255, 213, 79]);
+      } else if (w.kind === 'kaiju') {
+        const ry = Math.atan2(w.vx, w.vy), fx = Math.sin(ry), fz = Math.cos(ry), rx = Math.cos(ry), rz = -Math.sin(ry), step = Math.sin(t * 4) * 0.3, K = 2.2;
+        for (const side of [-1, 1]) prop(w.x + rx * side * 0.6 * K + fx * step * side, gy, w.y + rz * side * 0.6 * K + fz * step * side, 0.6 * K, 1.4 * K, 0.7 * K, ry, [70, 96, 74]);
+        prop(w.x, gy + 1.3 * K, w.y, 1.5 * K, 2.2 * K, 1.2 * K, ry, [76, 104, 80]);
+        prop(w.x + fx * 0.4 * K, gy + 3.4 * K, w.y + fz * 0.4 * K, 0.9 * K, 0.8 * K, 1.1 * K, ry, [80, 110, 84]);
+        prop(w.x + fx * 0.95 * K, gy + 3.55 * K, w.y + fz * 0.95 * K, 0.5 * K, 0.12 * K, 0.08, ry, [255, 220, 90]);
+        prop(w.x - fx * 1.2 * K, gy + 0.9 * K, w.y - fz * 1.2 * K, 0.6 * K, 0.6 * K, 2.0 * K, ry, [70, 96, 74], 0.2);
+        for (let q = 0; q < 5; q++) prop(w.x - fx * (q - 1) * 0.35 * K, gy + (3.2 - q * 0.35) * K, w.y - fz * (q - 1) * 0.35 * K, 0.1 * K, 0.5 * K, 0.3 * K, ry, [150, 190, 150]);
+        for (const side of [-1, 1]) prop(w.x + rx * side * 0.85 * K + fx * 0.4 * K, gy + 2.4 * K, w.y + rz * side * 0.85 * K + fz * 0.4 * K, 0.3 * K, 0.9 * K, 0.3 * K, ry, [70, 96, 74], side * 0.4);
+      } else if (w.kind === 'locusts') {
+        for (let q = 0; q < 90; q++) { const a = q * 2.399 + t * (1 + (q % 5) * 0.2), d = w.r * Math.sqrt(((q * 37) % 100) / 100); prop(w.x + Math.cos(a) * d, gy + 0.8 + ((q * 13) % 10) * 0.12 + Math.sin(t * 9 + q) * 0.1, w.y + Math.sin(a) * d, 0.08, 0.04, 0.12, a, q % 3 ? [60, 58, 30] : [107, 106, 46]); }
       } else if (w.kind === 'hole') {
         const r = w.r * Math.min(1, w.t / 2) * (w.t > w.life - 2 ? Math.max(0, (w.life - w.t) / 2) : 1);
         if (nh < MAXU - 1) place(heads, nh++, w.x, gy + 0.6 + r * 0.5, w.y, r * 1.2, r * 1.2, r * 1.2, t, [3, 2, 6], 0); // (a sphere of nothing)

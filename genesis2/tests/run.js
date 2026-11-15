@@ -516,6 +516,32 @@ test('plague lab: a pathogen spreads between communities, earns DNA, is noticed 
   return `${p.name}: ${maxComms} communities, ${p.dead} dead, DNA ${dna}, cure ${Math.round(p.cure * 100)}%${p.cured ? ' (cured)' : ''}; rumour ${r.name}: peak ${r.peak} believers`;
 });
 
+test('realms: a god founds towns, raises wonders (one of each), crowns, revolts and unites; deeds are marked', () => {
+  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Civ = AG.Civ, Rm = AG.Realms, T = AG.Tech, Wd = AG.World;
+  for (let y = 0; y < 200; y += 5) AG.Sim.yearStep(5);
+  const spots = [];
+  const inland = (x, y) => { for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) { const i = (y + dy) * W + x + dx; if (!Wd.passLand(i) || Wd.ice[i] || Wd.owner[i] >= 0 || Wd.elev[i] > 0.62) return false; } return true; };
+  for (let y = 15; y < H - 15; y += 5) for (let x = 15; x < W - 15; x += 5) if (inland(x, y)) spots.push([x, y]);
+  assert(spots.length > 4, `open inland country to found on (${spots.length})`);
+  for (const c of Civ.cities) if (c.alive) for (const t of T.LIST) if (t.era <= 9) T.learn(c, t, 'god');
+  const made = [];
+  for (let q = 0; q < spots.length && made.length < 3; q += 3) { const r = Rm.found(spots[q][0], spots[q][1], true); if (r.ok) made.push(r.c); }
+  assert(made.length >= 2, `cities founded (${made.length})`);
+  const m = made[0];
+  assert(!m.nomadic && m.members.length > 100 && m.era >= 9 && m.keep >= 0, `a built city of the most advanced age (${m.members.length} people, ${T.ERAS[m.era]}, ${m.buildings.length} buildings)`);
+  const w1 = Rm.raise(m, true), w2 = Rm.raise(made[1], true);
+  assert(w1.ok && w2.ok && w1.b.wonder !== w2.b.wonder, `two different wonders (${w1.ok && w1.b.wname}, ${w2.ok && w2.b.wname})`);
+  AG.Sim.yearStep(1);
+  assert(Civ.kingdoms[m.kd].wonderFx, 'a wonder strengthens its realm');
+  const k1 = Civ.kingdoms[m.kd];
+  assert(Rm.revolution(m.x, m.y).ok && k1.republic && /^Republic of/.test(k1.name), `a revolution proclaims a republic (${k1.name})`);
+  assert(Rm.crown(made[1].x, made[1].y).ok, 'a ruler is crowned');
+  const before = k1.cities.length, B = Civ.kingdoms[made[1].kd];
+  assert(Rm.unite(k1, B).ok && k1.cities.length > before && !B.alive, 'two realms become one');
+  for (const k of ['town', 'wonder', 'republic']) assert(AG.Deeds.got[k] !== undefined, 'deed: ' + k);
+  return `${made.length} cities; ${Rm.standing().map((b) => b.wname).join(' and ')}; ${k1.name} of ${k1.cities.length} communities; ${AG.Deeds.count()} deeds`;
+});
+
 test('textures: every surface tiles seamlessly, averages a neutral grey, and is the same every run', () => {
   const AG = load({ W: 64, H: 64, modules: ['core', 'textures'] }), T = AG.Textures, S = 256;
   T.build(S);

@@ -275,10 +275,11 @@
   function cure(p) {
     const d = p.d, T = TYPES[p.type];
     p.cured = true; p.done = true; p.curedYear = Math.floor(year());
+    if (AG.Deeds) AG.Deeds.note('cure');
     let healed = 0;
     for (const P of AG.People.map.values()) { if (P.died !== null) continue; if (P.dis === d + 1) { P.dis = 0; healed++; } P.imm |= 1 << d; if (P.body >= 0 && AG.U.alive[P.body]) { AG.U.dis[P.body] = 0; AG.U.imm[P.body] |= 1 << d; } }
     sync(p);
-    for (const l of Pl.lords) if (l.p === p.id && l.alive) { l.alive = false; AG.History.event('plague', `Hunters armed with the cure slay ${l.name}, lord of the night`, { x: l.x, y: l.y, cause: p.name }); }
+    for (const l of Pl.lords) if (l.p === p.id && l.alive) { l.alive = false; if (AG.Deeds) AG.Deeds.note('nightlord'); AG.History.event('plague', `Hunters armed with the cure slay ${l.name}, lord of the night`, { x: l.x, y: l.y, cause: p.name }); }
     AG.History.event('plague', T.info ? `The truth catches up with ${p.name}: the rumour fades (${healed} freed of it)` : `A cure for ${p.name} is found and shared (${healed} healed)`, { cause: 'medicine' });
   }
   Pl.cure = cure;
@@ -336,7 +337,7 @@
       const p = Pl.get(h.p);
       for (let q = 0; q < killed; q++) { const P = ps[(rnd() * ps.length) | 0]; if (P && P.died === null) { if (p && rnd() < 0.3) infect(P, p); else { AG.People.die(P, 'the hollow horde'); h.n += 0.6; } } }
       if (killed > 2) AG.History.event('plague', `A hollow horde falls on ${tgt.name}${killed ? `; ${killed} are lost` : ''}`, { x: tgt.x, y: tgt.y, comm: tgt.id, cause: 'the blight' });
-      if (h.n < 2) { h.alive = false; AG.History.event('plague', `The defenders of ${tgt.name} cut down the last of a hollow horde`, { x: tgt.x, y: tgt.y, comm: tgt.id, cause: 'war' }); }
+      if (h.n < 2) { h.alive = false; if (AG.Deeds) AG.Deeds.note('horde'); AG.History.event('plague', `The defenders of ${tgt.name} cut down the last of a hollow horde`, { x: tgt.x, y: tgt.y, comm: tgt.id, cause: 'war' }); }
     }
     Pl.hordes = Pl.hordes.filter((h) => h.alive);
   }
@@ -367,7 +368,7 @@
         const sold = ps.filter((P) => P.job === AG.J.SOLDIER).length, arms = AG.Warfare ? AG.Warfare.arms(c) : 1;
         if (rnd() < dy * 0.15 * Math.min(1, sold / 10)) {
           l.hp -= 8 * arms;
-          if (l.hp <= 0) { l.alive = false; AG.History.event('plague', `Hunters of ${c.name} slay ${l.name}, lord of the night`, { x: c.x, y: c.y, comm: c.id, cause: 'war' }); }
+          if (l.hp <= 0) { l.alive = false; if (AG.Deeds) AG.Deeds.note('nightlord'); AG.History.event('plague', `Hunters of ${c.name} slay ${l.name}, lord of the night`, { x: c.x, y: c.y, comm: c.id, cause: 'war' }); }
           else if (rnd() < 0.3) AG.History.event('plague', `Hunters of ${c.name} wound ${l.name}, lord of the night, who flees`, { x: c.x, y: c.y, comm: c.id, cause: 'war' });
         }
       }

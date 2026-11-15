@@ -403,10 +403,11 @@
     if (k.religion < 0) foundReligion(k, c);
     else if (c.religion !== k.religion) convert(c, k.religion, null);
   };
-  function foundReligion(k, c) {
-    if (k.religion >= 0) return;
+  War.foundReligion = (k, c, force) => foundReligion(k, c, force);
+  function foundReligion(k, c, force) {
+    if (k.religion >= 0 && !force) return;
     const cands = Civ.kingdoms.filter((o) => o.alive && o.id !== k.id && o.religion >= 0 && k.opinion[o.id] > 15);
-    if (cands.length && rnd() < 0.4) { const o = pick(cands); setReligion(k, o.religion); AG.History.event('faith', `The ${k.name} embraces the ${Civ.religions[o.religion].name}`, { x: capX(k), y: capY(k), polity: k.id }); return; }
+    if (!force && cands.length && rnd() < 0.4) { const o = pick(cands); setReligion(k, o.religion); AG.History.event('faith', `The ${k.name} embraces the ${Civ.religions[o.religion].name}`, { x: capX(k), y: capY(k), polity: k.id }); return; }
     // the gods are what the people lived through
     const doms = Object.entries(k.exp).sort((a, b) => b[1] - a[1]);
     const n = 2 + ri(3), deities = [], used = new Set();
@@ -537,12 +538,14 @@
     AG.Warfare.yearStep(dy);
     diplomacy(dy); warTick(dy); religionYear(dy); tradeYear(dy); outbreaks(dy);
     if (AG.Plague) AG.Plague.yearStep(dy);
+    if (AG.Realms) AG.Realms.yearStep(dy);
+    if (AG.Deeds) AG.Deeds.yearStep(dy);
     if (AG.Races) AG.Races.yearStep(dy);
   };
   War.tick = function () {
     const t = AG.tick, Y = AG.YEAR_TICKS;
     if (t % 120 === 30) { diplomacy(120 / Y); warTick(120 / Y); }
-    if (t % 240 === 90) { religionYear(240 / Y); tradeYear(240 / Y); outbreaks(240 / Y); if (AG.Plague) AG.Plague.yearStep(240 / Y); }
+    if (t % 240 === 90) { religionYear(240 / Y); tradeYear(240 / Y); outbreaks(240 / Y); if (AG.Plague) AG.Plague.yearStep(240 / Y); if (AG.Realms) AG.Realms.yearStep(240 / Y); if (AG.Deeds) AG.Deeds.yearStep(240 / Y); }
     if (t % 10 === 0) for (const sq of Civ.squads) if (sq.alive) squadTick(sq);
     if (t % 20 === 0) for (const c of Civ.cities) if (c.alive && c.materialized) captureCheck(c);
     if (t % 15 === 0) defenses();

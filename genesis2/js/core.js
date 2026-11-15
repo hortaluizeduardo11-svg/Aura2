@@ -239,7 +239,7 @@
   // Types 0-10 keep v1's art slots (the keep is a citadel, slot 3 is now a granary); 11+ are the
   // homes and monuments of bands and early villages.
   AG.BT = { KEEP: 0, HOUSE: 1, FARM: 2, GRANARY: 3, WINDMILL: 3, TEMPLE: 4, MARKET: 5, MINE: 6, TOWER: 7, WALL: 8, DOCK: 9, WORKSHOP: 10,
-    TENT: 11, HEARTH: 12, HUT: 13, PEN: 14, MEGALITH: 15, SHRINE: 16, HALL: 17 };
+    TENT: 11, HEARTH: 12, HUT: 13, PEN: 14, MEGALITH: 15, SHRINE: 16, HALL: 17, WONDER: 18 };
   AG.BUILD = [
     { key: 'keep', name: 'Citadel', w: 4, h: 4, hp: 500, wood: 20, stone: 30, tech: 'masonry' },
     { key: 'house', name: 'House', w: 2, h: 2, hp: 90, wood: 6, stone: 2, tech: 'mudbrick' },
@@ -259,6 +259,7 @@
     { key: 'megalith', name: 'Stone circle', w: 3, h: 3, hp: 400, wood: 0, stone: 24, tech: 'megaliths' },
     { key: 'shrine', name: 'Shrine', w: 1, h: 1, hp: 60, wood: 2, stone: 2, tech: 'burial' },
     { key: 'hall', name: 'Great hall', w: 3, h: 2, hp: 260, wood: 22, stone: 4, tech: 'shelters' },
+    { key: 'wonder', name: 'Great wonder', w: 4, h: 4, hp: 3000, wood: 0, stone: 0, tech: null },
   ];
   AG.HOMES = [AG.BT.TENT, AG.BT.HUT, AG.BT.HOUSE];
 
