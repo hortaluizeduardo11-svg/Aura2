@@ -232,6 +232,43 @@ The genome is diploid: 16 loci × 2 alleles, each allele u8.
 - **Extinction:** a species is extinct when its census reaches 0. Mass extinctions follow
   large-igneous-province eruptions (volcanic winter plus heat stress) and impacts.
 
+### 4.4.1 Deep-time periods, the sea, legends and visitors
+
+- **Archetypes:** grazer, predator, bird, primate on land; **fish** (shoaling and reef fish,
+  sea grazers) and **shark** (sea hunters, marine reptiles, toothed whales) in the sea.
+  `isSea(a) = a >= FISH`. Sea species occupy sea regions (crust under sea level) and connect
+  across water, so a sea population is split by land bridges the way a land one is by straits.
+- **Sea environment** per region: sea fraction, water temperature, shelf (shallow continental
+  crust) and the connected sea basin. Sea optima come from water temperature and shelf: warm
+  shelf fish grow small, social and bright (reef fish), open-ocean fish large and fast (tuna),
+  shelf hunters medium, open-ocean hunters huge.
+- **Niches:** each species carries `niche {size, social, speed}`, inherited with small shifts.
+  The local optimum is offset by the niche, and carrying capacity `K` falls with crowding from
+  species of the same kind weighted by niche overlap (`0.55 + 0.45·overlap`), so similar species
+  divide a region instead of collapsing into one.
+- **Periods** (start, in compressed Myr, scaled to the world's span to its Dawn): Cambrian 0,
+  Ordovician 12, Silurian 20, Devonian 26, Carboniferous 34, Permian 42, Triassic 50, Jurassic
+  62, Cretaceous 76, Paleogene 92, Neogene 106, Quaternary 116 (after the Dawn: the present).
+  `commonName(sp)` names a species by archetype, size, niche, climate and period: a sea hunter
+  is an anomalocarid, a sea scorpion, a placoderm, an ichthyosaur, a plesiosaur, a mosasaur, a
+  shark or an orca; a land grazer a dicynodont, a sauropod, a stegosaur, a horse.
+- **Lifecycle:** the world starts with three fish and two shark founders. At 26 Myr eight land
+  founders crawl out (`seedLand`), placed by niche. At 92 Myr an asteroid (`impact`) kills
+  most large animals; `refill` lets survivors of a related archetype take over empty niches.
+  Land vegetation is painted by `Geo.greening()`: bare to 18 Myr, mosses to 26, forests to 34.
+- **Legends:** at a deep-time speciation a daughter rarely (1%) turns legendary (`myth`), and
+  stays legendary: unicorn or behemoth, griffin or manticore, phoenix or roc, yeti, hippocampus,
+  sea serpent or leviathan. A god can raise one with the Legend tool (`Life.seedMyth`).
+- **Visitors:** once per world a comet may seed an alien lineage (`alien`): tripod striders,
+  xeno stalkers, skyrays, greys, glow jellies, void squid. A god can drop one with Star seed
+  (`Life.seedAlien`). Alien genomes start far from local optima, so they thrive or die out.
+- **Rendering:** sea creatures are never bodies. `biota.js` draws them in the 3D close-up from
+  the regions in view: each sea region gets a density budget (`0.22 × sea cells`) shared among
+  its sea species by `√n`, every creature on a stable hashed anchor circling at the depth its
+  kind keeps (`creatures.js`: length range, mode swim/bottom/drift/fixed/walk/fly, depth,
+  shoal size). Reefs, kelp and seagrass are laid on shallow sea cells by water temperature and
+  period. Deep-time and history-mode land animals are drawn the same way (Watch mode uses bodies).
+
 ### 4.5 Person (`People`), the canonical human record
 
 ```

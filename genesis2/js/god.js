@@ -73,6 +73,27 @@
       }
     };
   }
+  // a new lineage set down by a god (a creature of legend, or life from a comet): in Watch time its
+  // first bodies walk at once; the sea and deep time draw it from its regions (biota.js)
+  function newLineage(x, y, alien) {
+    const Life = AG.Life, A = Life.ARCH, i = (y | 0) * W + (x | 0);
+    if (i < 0 || i >= AG.N) return;
+    const sea = Wd.elev[i] < AG.SEA;
+    if (sea && Wd.frozen[i]) { toast('The sea is frozen over here'); return; }
+    const arch = sea ? (rnd() < 0.6 ? A.FISH : A.SHARK) : alien ? [A.GRAZER, A.PREDATOR, A.BIRD][(rnd() * 3) | 0] : [A.GRAZER, A.PREDATOR, A.BIRD, A.PRIMATE][(rnd() * 4) | 0];
+    const sp = alien ? Life.seedAlien(Life.regionOf(x, y), arch) : Life.seedMyth(Life.regionOf(x, y), arch);
+    if (!sp) return;
+    AG.FX.burst(x, y, alien ? 'ember' : 'magic', 10);
+    if (!sea && AG.mode === 'watch') {
+      const kind = [SP.GRAZER, SP.PREDATOR, SP.BIRD, SP.APE][arch];
+      for (let k = 0, n = 0; k < 24 && n < 4; k++) {
+        const px = x + (rnd() - 0.5) * 6, py = y + (rnd() - 0.5) * 6, j = (py | 0) * W + (px | 0);
+        if (px > 1 && py > 1 && px < W - 1 && py < H - 1 && Wd.passLand(j) && Ent.spawn(kind, px, py, { layer: 1, force: true, species: sp }) >= 0) n++;
+      }
+    }
+    toast(`${alien ? 'A comet seeds the' : 'A legend is born: the'} ${Life.plural(sp.common)}${AG.View3D && AG.View3D.active ? '' : ' (zoom in to see them)'}`);
+    if (AG.Deeds) AG.Deeds.note(alien ? 'starseed' : 'legend');
+  }
   function storm(type) { return (x, y) => { Sky.spawnStorm(type, x, y, 14 + God.brush.r * 2.2, 1100, false); if (type === 'thunder') Civ.experience(x, y, 'storm', 1); toast(`${Sky.STORMS[type].name} summoned`); }; }
   const toast = (m) => AG.UI && AG.UI.toast(m);
   function realmAt(x, y) { const c = Civ.cityAt(x, y); return c ? Civ.kingdoms[c.kd] : null; }
@@ -181,6 +202,8 @@
         if (rnd() < 0.3) AG.FX.burst(x, y, 'heal', 3);
         if (rnd() < 0.2) Civ.experience(x, y, 'harvest', 0.2);
       } },
+    { id: 'legend', cat: 'life', name: 'Legend', mode: 'click', color: '#f8d64e', desc: 'Raise a creature of legend from the life here: a unicorn, griffin or roc on land, a hippocampus or sea serpent in the sea. Its lineage lives, spreads and evolves like any other.', click: (x, y) => newLineage(x, y, false) },
+    { id: 'starseed', cat: 'life', name: 'Star seed', mode: 'click', color: '#62c23f', desc: 'Drop a comet that seeds life from another world: tripod striders, xeno stalkers and skyrays on land, glow jellies and void squid in the sea. It competes with the life of this one.', click: (x, y) => newLineage(x, y, true) },
     // divine
     { id: 'bless', cat: 'divine', name: 'Bless', mode: 'brush', color: '#ffe082', desc: 'Heal and strengthen. Those touched remember a miracle.',
       apply: (x, y, k) => {

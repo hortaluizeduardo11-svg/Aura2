@@ -78,11 +78,11 @@
     { id: 'peoples', name: 'Peoples', icon: 'tab-peoples', groups: [['Peoples', ['people', 'race-sylvan', 'race-stonekin', 'race-ashborn', 'race-saurian', 'race-hivekin', 'race-tidefolk', 'race-lithari', 'race-voidborn']], ['Biology', ['uplift']], ['Ages', ['eureka', 'brain', 'inspire']], ['Look', [['panel:world', 'Peoples']]]] },
     { id: 'realms', name: 'Realms', icon: 'tab-realms', groups: [['Rulers', ['crown', 'assassin', 'hero', 'prophet']], ['Realm', ['golden', 'revolution', 'unite', 'exodus']], ['Build', ['town', 'metropolis', 'wonder', 'launch']], ['Look', [['panel:deeds', 'Deeds'], ['panel:war', 'War room']]]] },
     { id: 'war', name: 'War', icon: 'tab-war', groups: [['Diplomacy', ['declare', 'treaty', 'alliance', 'harmony', 'discord']], ['Command', ['levy', 'fortify', 'blitz', 'revolt']], ['Doom', ['nuke']], ['Look', [['panel:war', 'War room'], ['ov:realms', 'Realms']]]] },
-    { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Look', [['panel:life', 'Tree of life']]]] },
+    { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Wonders', ['legend', 'starseed']], ['Look', [['panel:life', 'Tree of life'], ['dive', 'Dive']]]] },
     { id: 'weather', name: 'Weather', icon: 'tab-weather', groups: [['Storms', ['rain', 'thunder', 'blizzard', 'heat', 'bolt']], ['Elements', ['water', 'lava', 'acid', 'fire', 'freeze', 'drain']]] },
     { id: 'plague', name: 'Plague', icon: 'tab-plague', groups: [['Lab', [['panel:plague', 'Plague lab'], 'zero', 'plague']], ['Watch', [['ov:plague', 'Sickness map'], ['panel:war', 'War room']]]] },
     { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse', 'locusts']], ['Sci-fi', ['ufo', 'goo', 'hole']], ['Monsters', ['dragon', 'kraken', 'kaiju']]] },
-    { id: 'world', name: 'World', icon: 'tab-world', groups: [['Look', ['inspect']], ['Layer', [['view:0', 'Underground'], ['view:1', 'Surface'], ['view:2', 'Sky']]],
+    { id: 'world', name: 'World', icon: 'tab-world', groups: [['Look', ['inspect']], ['Layer', [['view:0', 'Underground'], ['view:1', 'Surface'], ['view:2', 'Sky'], ['dive', 'Dive']]],
       ['Map', [['ov:realms', 'Realms'], ['ov:faith', 'Faiths'], ['ov:language', 'Languages'], ['ov:era', 'Eras'], ['ov:genes', 'Genes'], ['ov:rock', 'Rock'], ['ov:resources', 'Resources'], ['ov:heat', 'Climate'], ['ov:none', 'Plain'], ['trade', 'Trade routes']]],
       ['Windows', [['panel:inspect', 'Inspector'], ['panel:world', 'World stats'], ['minimap', 'Minimap']]], ['Game', [['act:save', 'Save'], ['act:load', 'Load'], ['act:timelapse', 'Time-lapse'], ['act:menu', 'Settings'], ['act:title', 'Title screen']]]] },
   ];
@@ -142,6 +142,7 @@
     if (k === 'ov') return R.overlay === v;
     if (k === 'trade') return R.showTrade;
     if (k === 'minimap') return AG.Settings.v.minimap !== 'off';
+    if (k === 'dive') return !!(AG.Biota && AG.Biota.dive);
     if (k === 'panel') return !$('#panel').hidden && UI.tab === v;
     return false;
   }
@@ -151,6 +152,7 @@
     else if (k === 'ov') setOverlay(v);
     else if (k === 'trade') { R.showTrade = !R.showTrade; R.invalidate && R.invalidate(); }
     else if (k === 'minimap') AG.Settings.set('minimap', AG.Settings.v.minimap === 'off' ? 'on' : 'off');
+    else if (k === 'dive') toggleDive();
     else if (k === 'panel') { if (worldOn(key)) setPanel(false); else { setPanel(true); setTab(v); } }
     else if (k === 'act') {
       if (v === 'save') UI.save();
@@ -161,6 +163,15 @@
     }
     refreshBarState();
   }
+  // the dive: the sea turns clear in the 3D close-up, showing its reefs and everything swimming there
+  function toggleDive() {
+    if (!AG.Biota) return;
+    AG.Biota.dive = !AG.Biota.dive;
+    if (AG.Biota.dive) { if (AG.Deeds) AG.Deeds.note('dive'); UI.toast(R.is3D() ? 'Diving: the sea turns clear (U to surface)' : 'Diving: zoom in to the 3D close-up to see under the sea'); }
+    else UI.toast('Surfaced');
+    refreshBarState();
+  }
+  UI.toggleDive = toggleDive;
   function setOverlay(v) {
     R.overlay = OVERLAYS.includes(v) ? v : 'none'; R.bordersDirty = true;
     refreshBarState();
@@ -188,7 +199,7 @@
     if (brief) tipTimer = setTimeout(hideTip, 2600);
   }
   function hideTip() { clearTimeout(tipTimer); const el = tipEl(); if (el) el.hidden = true; }
-  const WX_TIPS = { view: 'Which layer of the world to look at (Tab cycles them).', ov: 'What the map shows over the land (B cycles the overlays).', trade: 'Show the routes of trade between communities.', minimap: 'The small map of the whole world.', panel: 'Open or close this window.', act: '' };
+  const WX_TIPS = { view: 'Which layer of the world to look at (Tab cycles them).', ov: 'What the map shows over the land (B cycles the overlays).', trade: 'Show the routes of trade between communities.', minimap: 'The small map of the whole world.', dive: 'See under the sea in the 3D close-up: the water turns clear over the reefs, kelp and everything swimming there (key U).', panel: 'Open or close this window.', act: '' };
 
   // ============================================================ the tool dock
   // Two slots on the left edge: the brush (its size and shape, drawn as pixels) and the power in
@@ -444,6 +455,7 @@
       case '[': if (R.is3D()) AG.View3D.turn(-Math.PI / 8); break;
       case ']': if (R.is3D()) AG.View3D.turn(Math.PI / 8); break;
       case 'n': if (R.is3D()) AG.View3D.north(); break;
+      case 'u': toggleDive(); break;
     }
   }
 
@@ -477,7 +489,7 @@
     const day = Sky.daylight();
     const sun = AG.mode === 'deep' ? '#ff9d4d' : day > 0.6 ? '#ffd166' : day > 0.15 ? '#f08a4b' : '#8aa2d8';
     let label;
-    if (AG.mode === 'deep') label = Geo.label();
+    if (AG.mode === 'deep') label = AG.Life && AG.Life.periodName ? `${Geo.label()} · ${AG.Life.periodName()}` : Geo.label();
     else {
       const season = AG.mode === 'watch' ? ' · ' + Sky.SEASONS[Sky.season()] : '';
       const storm = AG.mode === 'watch' && Sky.storms.find((s) => Math.abs(s.x - R.cam.x) < 80 && Math.abs(s.y - R.cam.y) < 60);
@@ -999,6 +1011,7 @@
         <kbd>Right-drag · two fingers</kbd><span>Pan · pinch to zoom</span>
         <kbd>Scroll · + / −</kbd><span>Zoom (past 8× the camera tilts into the 3D close-up)</span>
         <kbd>[ ] · N</kbd><span>In 3D: turn left or right, face north</span>
+        <kbd>U</kbd><span>In 3D: dive (the sea turns clear over its reefs and sea life)</span>
         <kbd>WASD · arrows</kbd><span>Pan the camera, or walk while possessing</span>
         <kbd>Space</kbd><span>Pause, or strike while possessing</span>
         <kbd>1 2 3 · 4 5</kbd><span>Watch at 1×, 4×, 16× · Centuries · Millennia</span>

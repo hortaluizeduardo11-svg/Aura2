@@ -46,6 +46,9 @@
     ['dragon', 'Myth', 'Dragonslayer', 'Defenders bring down a dragon', null],
     ['kaiju', 'Myth', 'Monster down', 'Defenders bring down a kaiju', null],
     ['kraken', 'Myth', 'Calm seas', 'Drive off a kraken', null],
+    ['legend', 'Myth', 'Here be dragons', 'Raise a creature of legend', null],
+    ['starseed', 'Myth', 'Visitors', 'Seed life from another world', null],
+    ['dive', 'Myth', 'Twenty fathoms', 'Dive under the sea in the close-up', null],
     ['ashes', 'Myth', 'From the ashes', 'The world loses three quarters of its people, and lives on', null],
   ].map(([key, group, name, desc, check]) => ({ key, group, name, desc, check }));
   Dd.LIST = LIST;

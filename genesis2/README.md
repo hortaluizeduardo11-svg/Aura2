@@ -3,7 +3,13 @@
 A god sandbox of deep time that runs in the browser. Every world is born in Year 0 as one
 unified supercontinent of its own shape, and its calendar counts forward from there: Year 1, 2,
 3, through hundreds of millions of years. Plates drift, rift and collide, and evolving species
-spread and split as the land moves. When a primate lineage has evolved the minds for it (a
+spread and split as the land moves. Life begins in the sea (trilobites, jellyfish and
+anomalocarids in the Cambrian, then sea scorpions, armoured fish and the first sharks), crawls
+onto bare land in the Devonian, and runs through the giant insects of the coal forests, the
+sail-backs, the dinosaurs, pterosaurs, ichthyosaurs, plesiosaurs and mosasaurs, an asteroid
+that ends them, and the mammals, birds, reef fish, sharks and whales of today. Creatures of
+legend (unicorns, griffins, rocs, sea serpents) and life from other worlds can arise among them.
+Zoom in on the sea and dive to see it all swimming over coral reefs and kelp forests. When a primate lineage has evolved the minds for it (a
 different year in every world), people appear, and from then on history runs on its own:
 - hunter-gatherer bands spread, split and marry between camps
 - languages drift apart
@@ -72,6 +78,8 @@ the title screen back.
 - Drag uses the selected tool (Inspect pans).
 - Scroll or pinch to zoom. Past 8× the camera tilts into a 3D close-up.
 - Right-drag turns and tilts in 3D; `[` and `]` turn, `N` faces north.
+- `U` dives: in the 3D close-up the sea turns clear, showing its reefs and everything swimming
+  there (also the Dive switch in the Creatures and World tabs).
 - `1`–`5` set the speeds and Space pauses.
 - `Tab` cycles layers and `B` cycles overlays.
 - `Esc` cancels, closes the brush window, releases a possessed body, or opens the menu. On the
@@ -99,7 +107,7 @@ Settings take effect at once and are saved in the browser.
 - **War:** the war room: every war with its score, generals, arms and fronts, the last battle,
   vassals and alliances.
 - **Lab:** the plague lab (below).
-- **Deeds:** the deeds this world has lived through (34 of them, from the first farmers to a
+- **Deeds:** the deeds this world has lived through (37 of them, from the first farmers to a
   colony around another star), the great wonders standing, and the space program.
 - **World:** save/load, time-lapse, scenarios, new world, engine stats, the census of peoples and
   diseases. Graphics settings are in the menu.
@@ -110,7 +118,11 @@ Settings take effect at once and are saved in the browser.
   the world.
 - **Elements and weather:** pour water or lava, rain, drought, lightning.
 - **Life:** spawn species, and raise, lower or mutate a chosen gene in the creatures under the
-  brush.
+  brush. **Legend** raises a creature of legend from the life where you tap (a unicorn,
+  behemoth, griffin, manticore, phoenix, roc or yeti on land; a hippocampus, sea serpent or
+  leviathan in the sea), and **Star seed** drops a comet that seeds life from another world
+  (tripod striders, xeno stalkers, skyrays, greys, glow jellies, void squid). Both lineages live,
+  spread, compete and evolve like any other, in deep time or in history.
 - **Divine:** bless, curse, plague (with a disease designer), send a dream, omens, inspire,
   harmony, discord.
 - **Ruin:** meteors (they fly in real time, even while paused, with a 3D flight and impact up
@@ -194,6 +206,31 @@ tap a community with Patient zero.
     its mate signal until it can no longer interbreed: a new species, with a parent link in the
     tree of life
   - predators and prey, competition and mass extinctions
+  - **the periods of deep time**, compressed into the world's own span: Cambrian, Ordovician,
+    Silurian, Devonian, Carboniferous, Permian, Triassic, Jurassic, Cretaceous, Paleogene,
+    Neogene and Quaternary (the top bar names the current one). Each species is named for what
+    it is in its period, so the same lineage of sea hunters is an anomalocarid, then a sea
+    scorpion, a placoderm, a shark; land grazers go from dicynodonts to sauropods and stegosaurs
+    to horses and bison. Life starts in the sea with three kinds of fish-like grazers and two
+    hunters; land stays bare until the first plants of the Silurian and forests of the Devonian,
+    when life crawls out of the sea. At the end of the Cretaceous an asteroid kills most large
+    animals, and the survivors radiate into the empty niches.
+  - **the sea:** sea species (shoaling fish, reef fish, grazers like dugongs and turtles, rays,
+    sharks, marine reptiles, whales) live in sea regions by water temperature and by shelf or
+    open ocean, each with a niche (size, sociality, speed) so that similar species divide the
+    sea between them instead of being one
+  - **legends and visitors:** rarely a lineage turns legendary on its own, and once a comet may
+    bring life from another world; the god can do both at will
+- **Life in the 3D close-up** (`creatures.js`, `biota.js`): every sea kind and every deep-time
+  kind has its own model (trilobites, ammonites, sea scorpions, placoderms, ichthyosaurs,
+  plesiosaurs, mosasaurs, sharks, rays, octopus, whales, sauropods, stegosaurs, raptors, great
+  theropods, pterosaurs, giant millipedes, the creatures of legend and of other worlds). The sea
+  is drawn from its regional populations: each kind swims at its own depth (trilobites and crabs
+  on the floor, reef fish over the coral, whales near the surface), fish in shoals, the commonest
+  kinds seen most. Warm shallows grow coral reefs (branching, brain, fan and table corals,
+  anemones and sponges), cold ones kelp forests and seagrass, and before corals existed,
+  stromatolites. The water clears as you zoom in, with caustics on the floor, and Dive makes it
+  fully clear. In deep time the land animals are drawn the same way.
 - **Habitats** (`habitat.js`): animals live where their kind would.
   - Each species reads its needs from its genes and kind: the temperature it is built for, open
     plains or forest or the edge between, slopes and heights (ibex up on the crags, mammoths and
