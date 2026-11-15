@@ -516,7 +516,7 @@ for (const t of tests) {
     console.log(`  ok   ${t.name}${note ? `  (${note})` : ''}  ${Date.now() - s} ms`);
   } catch (e) {
     fail++;
-    console.log(`  FAIL ${t.name}\n       ${e.message}`);
+    console.log(`  FAIL ${t.name}\n       ${e.message}`); if (process.env.STACK) console.log(e.stack);
   }
 }
 console.log(`\n${pass} passed, ${fail} failed in ${((Date.now() - t0) / 1000).toFixed(1)} s`);

@@ -315,6 +315,8 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     return m;
   }
   Kit.prototype.glow = function (hex, x, y, z, sx, sy, sz, ry) { this.lamp.push({ geo: GEO.box, c: rgbOf(hex), x, y, z, sx, sy, sz, ry }); return this; };
+  Kit.prototype.glowc = function (hex, x, y, z, sx, sy, sz, ry, rx, rz) { this.lamp.push({ geo: GEO.cyl, c: rgbOf(hex), x, y, z, sx, sy, sz, ry, rx, rz }); return this; }; // (glowing rings and tubes)
+  Kit.prototype.glowi = function (hex, x, y, z, sx, sy, sz) { this.lamp.push({ geo: GEO.ico, c: rgbOf(hex), x, y, z, sx, sy, sz }); return this; }; // (glowing orbs)
   Kit.prototype.done = function () { return { lit: merge(this.lit), glow: this.lamp.length ? merge(this.lamp) : null }; };
 
   // ------------------------------------------------------------ setup
@@ -1490,15 +1492,16 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     g.userData = { kd: b.kd, site: true, rise: wall, riseH: h * 0.9 };
     return g;
   }
+  const eraKey = (era) => (era >= 7 ? 'e' + Math.min(era, 14) : era >= 4 ? 1 : era >= 2 ? 0 : -1); // (each later age has its own look)
   function keyOf(b) {
     const c = Civ.cities[b.city], era = c ? c.era : 0, style = AG.Models3D ? AG.Models3D.styleOf(b) : '';
-    return `${b.type}|${b.kd}|${b.id % 3}|${style}|${era >= 4 ? 1 : era >= 2 ? 0 : -1}`;
+    return `${b.type}|${b.kd}|${b.id % 3}|${style}|${eraKey(era)}`;
   }
   function model(b) {
     if (b.prog < 1) return siteModel(b);
     const kn = Civ.kingdoms[b.kd], kc = kn ? kn.color : [150, 150, 150], v = b.id % 3;
     const c = Civ.cities[b.city], era = c ? c.era : 0, style = AG.Models3D ? AG.Models3D.styleOf(b) : '';
-    const key = `${b.type}|${b.kd}|${v}|${style}|${era >= 4 ? 1 : era >= 2 ? 0 : -1}`;
+    const key = `${b.type}|${b.kd}|${v}|${style}|${eraKey(era)}`;
     let kit = modelCache.get(key);
     if (!kit) {
       kit = kitFor(b.type, kc, v, style, era);
@@ -1543,11 +1546,116 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
 
   // ------------------------------------------------------------ creatures
   const CARGO = [[150, 110, 66], [120, 190, 70], [150, 104, 60], [160, 160, 160], [180, 100, 70], [250, 210, 70], [110, 220, 255]];
+  // the age a unit belongs to (its community's, else its realm's capital's)
+  function eraOfU(i) {
+    const c = U.city[i] >= 0 ? Civ.cities[U.city[i]] : null;
+    if (c) return c.era || 0;
+    const k = U.kd[i] >= 0 ? Civ.kingdoms[U.kd[i]] : null, cap = k ? Civ.capitalOf(k) : null;
+    return cap ? cap.era || 0 : 0;
+  }
+  // Ships, carts, siege engines and airships of the later ages: steamers and freighters, lorries,
+  // cannon and tanks, aircraft; and in the Space Age everything hovers on light.
+  function vehicleOfAge(i, sp, era, x, g, y, ry, fx, fz, rx, rz, kc, t, prop) {
+    const space = era >= 13, hov = Math.sin(t * 2.5 + i) * 0.04;
+    if (sp === SP.SHIP) {
+      const w = Math.max(g, 0) + Math.sin(t * 2 + i) * 0.03, rock = Math.sin(t * 1.6 + i) * 0.03, S = 1.8, at = (f, o) => [x + fx * f * S + rx * (o || 0) * S, y + fz * f * S + rz * (o || 0) * S];
+      if (space) { const yy = w + 0.35 + hov; prop(x, yy, y, 0.5 * S, 0.14 * S, 1.1 * S, ry, [232, 236, 242], rock); let [a, b] = at(-0.2); prop(a, yy + 0.14 * S, b, 0.3 * S, 0.12 * S, 0.4 * S, ry, [130, 190, 240]); prop(x, yy - 0.05, y, 0.42 * S, 0.03, 0.9 * S, ry, PLASMA); return true; }
+      prop(x, w - 0.12 * S, y, 0.4 * S, 0.24 * S, 1.15 * S, ry, era >= 10 ? [110, 116, 124] : [40, 40, 44], rock);
+      let [a, b] = at(0.55); prop(a, w - 0.1 * S, b, 0.26 * S, 0.2 * S, 0.2 * S, ry, era >= 10 ? [104, 110, 118] : [36, 36, 40], rock);
+      if (era >= 10) { [a, b] = at(-0.32); prop(a, w + 0.12 * S, b, 0.32 * S, 0.3 * S, 0.24 * S, ry, [226, 228, 232], rock); for (let q = 0; q < 3; q++) { [a, b] = at(0.3 - q * 0.17); prop(a, w + 0.12 * S, b, 0.3 * S, 0.14 * S, 0.14 * S, ry, [[196, 70, 50], [60, 100, 170], [70, 150, 90]][(q + i) % 3], rock); } [a, b] = at(-0.3); prop(a, w + 0.42 * S, b, 0.02, 0.2 * S, 0.02, ry, [60, 60, 60]); }
+      else { [a, b] = at(-0.1); prop(a, w + 0.12 * S, b, 0.3 * S, 0.14 * S, 0.5 * S, ry, [226, 220, 204], rock); [a, b] = at(0.05); prop(a, w + 0.26 * S, b, 0.1 * S, 0.34 * S, 0.1 * S, ry, [30, 30, 30]); prop(a, w + 0.5 * S, b, 0.11 * S, 0.08 * S, 0.11 * S, ry, kc); [a, b] = at(-0.45); prop(a, w + 0.12 * S, b, 0.02, 0.5 * S, 0.02, ry, [60, 50, 40]); }
+      return true;
+    }
+    if (sp === SP.AIRSHIP) {
+      if (era < 10) return false; // (balloons and airships until aircraft)
+      plane(x, g, y, i, era, kc, t, prop, 3);
+      return true;
+    }
+    if (sp === SP.CATAPULT) {
+      if (era < 10) { // a cannon on its carriage
+        prop(x, g + 0.08, y, 0.3, 0.12, 0.5, ry, [96, 70, 48]); for (const side of [-1, 1]) prop(x + rx * side * 0.2, g, y + rz * side * 0.2, 0.04, 0.26, 0.26, ry, [62, 42, 28]);
+        prop(x + fx * 0.12, g + 0.2, y + fz * 0.12, 0.1, 0.1, 0.62, ry, era >= 9 ? [60, 64, 70] : [70, 56, 40], -0.15);
+        return true;
+      }
+      const yy = space ? g + 0.35 + hov : g, hull = space ? [226, 232, 238] : era >= 12 ? [96, 100, 92] : [88, 100, 64];
+      prop(x, yy + 0.1, y, 0.62, 0.22, 0.95, ry, hull); prop(x - fx * 0.05, yy + 0.32, y - fz * 0.05, 0.38, 0.16, 0.42, ry, hull.map((c) => c * 0.9));
+      prop(x + fx * 0.42, yy + 0.38, y + fz * 0.42, 0.06, 0.06, 0.7, ry, space ? PLASMA : [50, 52, 50]);
+      if (space) prop(x, yy - 0.04, y, 0.56, 0.03, 0.86, ry, PLASMA);
+      else for (const side of [-1, 1]) prop(x + rx * side * 0.33, yy, y + rz * side * 0.33, 0.12, 0.16, 0.98, ry, [40, 40, 38]); // tracks
+      prop(x - fx * 0.05, yy + 0.49, y - fz * 0.05, 0.12, 0.02, 0.12, ry, kc);
+      return true;
+    }
+    // carts become steam wagons, lorries, then hover freighters
+    const yy = space ? g + 0.35 + hov : g;
+    prop(x - fx * 0.08, yy + 0.12, y - fz * 0.08, 0.36, 0.3, 0.62, ry, space ? [226, 232, 238] : kc.map((c) => c * 0.8 + 30));
+    prop(x + fx * 0.32, yy + 0.12, y + fz * 0.32, 0.34, 0.3, 0.22, ry, space ? [130, 190, 240] : era >= 10 ? [200, 204, 210] : [40, 40, 44]);
+    if (era < 10 && !space) prop(x + fx * 0.32, yy + 0.42, y + fz * 0.32, 0.06, 0.18, 0.06, ry, [30, 30, 30]);
+    if (space) prop(x, yy - 0.04, y, 0.32, 0.03, 0.7, ry, PLASMA);
+    else for (const side of [-1, 1]) for (const fb of [-0.25, 0.3]) prop(x + rx * side * 0.19 + fx * fb, yy, y + rz * side * 0.19 + fz * fb, 0.04, 0.16, 0.16, ry, [30, 30, 30]);
+    if (U.carry[i]) prop(x - fx * 0.08, yy + 0.42, y - fz * 0.08, 0.28, 0.14, 0.4, ry, CARGO[U.carry[i]] || CARGO[0]);
+    return true;
+  }
+  // an aircraft circling (x, y): propeller planes, then jets, then saucers in the Space Age
+  function plane(x, g, y, i, era, kc, t, prop, r) {
+    const space = era >= 13, a0 = t * (era >= 11 ? 0.8 : 0.6) + i, cx = x + Math.cos(a0) * r, cz = y + Math.sin(a0) * r, hdg = -a0, lift = space ? 7 + Math.sin(t * 2 + i) * 0.1 : 6, f2 = Math.sin(hdg), f3 = Math.cos(hdg);
+    if (space) { prop(cx, g + lift, cz, 1.2, 0.18, 1.2, hdg, [232, 236, 242]); prop(cx, g + lift + 0.15, cz, 0.5, 0.2, 0.5, hdg, [130, 190, 240]); prop(cx, g + lift - 0.1, cz, 1.0, 0.03, 1.0, hdg + t, PLASMA); return; }
+    const body = era >= 11 ? [196, 200, 206] : [110, 120, 96];
+    prop(cx, g + lift, cz, 0.16, 0.16, 1.1, hdg, body); prop(cx - f2 * (era >= 11 ? 0.1 : 0), g + lift + 0.02, cz - f3 * (era >= 11 ? 0.1 : 0), era >= 11 ? 1.0 : 1.4, 0.03, era >= 11 ? 0.42 : 0.26, hdg, body);
+    prop(cx - f2 * 0.48, g + lift + 0.05, cz - f3 * 0.48, 0.5, 0.03, 0.14, hdg, body); prop(cx - f2 * 0.5, g + lift + 0.15, cz - f3 * 0.5, 0.03, 0.22, 0.14, hdg, kc);
+    if (era < 11) prop(cx + f2 * 0.56, g + lift, cz + f3 * 0.56, 0.4, 0.04, 0.02, hdg, [40, 40, 40], t * 30); // a propeller
+  }
+  const GUN = [46, 44, 42], DRAB = [92, 104, 62], ARMOUR = [226, 232, 238], PLASMA = [120, 255, 220];
   function updateUnits(alpha, t) {
     const M3 = AG.Models3D;
     let np = 0, nh = 0, nhat = 0, nb = 0, nprop = 0;
     const x1 = wx0 + ws, y1 = wy0 + ws, PM = MAXU * 2 - 4;
     const prop = (x, y, z, sx, sy, sz, ry, rgb, roll) => { if (nprop < PM) place(props, nprop++, x, y, z, sx, sy, sz, ry, rgb, 0, roll); };
+    // A soldier's arms and armour follow the age: spear and shield; sword and kite shield; pike or
+    // musket; rifle and pack; helmet, rifle and webbing; carbine and vest; armour and a plasma rifle.
+    const gear = (i, x, gy, y, kk, ry, fx, fz, rx, rz, kc, t) => {
+      const era = eraOfU(i), R = (o, f) => [x + rx * o * kk + fx * f * kk, y + rz * o * kk + fz * f * kk];
+      if (era < 7) {
+        prop(x + rx * 0.14 * kk, gy + 0.05, y + rz * 0.14 * kk, 0.025, 0.62 * kk, 0.025, ry, [150, 120, 84]);
+        prop(x + rx * 0.14 * kk, gy + 0.66 * kk, y + rz * 0.14 * kk, 0.05, 0.08, 0.05, ry, [210, 214, 222]);
+        prop(x - rx * 0.13 * kk + fx * 0.02, gy + 0.13 * kk, y - rz * 0.13 * kk + fz * 0.02, 0.028, 0.15 * kk, 0.13 * kk, ry, kc); // a shield in the realm's colour
+        prop(x - rx * 0.145 * kk + fx * 0.02, gy + 0.195 * kk, y - rz * 0.145 * kk + fz * 0.02, 0.012, 0.03 * kk, 0.03 * kk, ry, [214, 190, 120]);
+        return;
+      }
+      if (era === 7) { // sword and a tall kite shield
+        let [a, b] = R(0.14, 0.06); prop(a, gy + 0.18 * kk, b, 0.02, 0.3 * kk, 0.02, ry, [214, 218, 226]); prop(a, gy + 0.16 * kk, b, 0.06 * kk, 0.015, 0.02, ry, [150, 120, 84]);
+        [a, b] = R(-0.13, 0.03); prop(a, gy + 0.07 * kk, b, 0.025, 0.24 * kk, 0.13 * kk, ry, kc); prop(a + fx * 0.004, gy + 0.18 * kk, b + fz * 0.004, 0.026, 0.03 * kk, 0.1 * kk, ry, [236, 232, 220]);
+        return;
+      }
+      if (era === 8) { // pike, or a matchlock musket
+        const [a, b] = R(0.13, 0.04);
+        if (U.uid[i] % 2) { prop(a, gy + 0.02, b, 0.018, 0.95 * kk, 0.018, ry, [130, 100, 70]); prop(a, gy + 0.97 * kk, b, 0.03, 0.07, 0.03, ry, [210, 214, 222]); }
+        else prop(a, gy + 0.22 * kk, b, 0.025, 0.025, 0.48 * kk, ry, [96, 70, 48], -0.6);
+        return;
+      }
+      if (era <= 9) { // a rifle with bayonet, a pack in the realm's colour
+        let [a, b] = R(0.12, 0.05); prop(a, gy + 0.22 * kk, b, 0.022, 0.022, 0.46 * kk, ry, [86, 60, 40], -0.5); [a, b] = R(0.12, 0.25); prop(a, gy + 0.36 * kk, b, 0.01, 0.01, 0.12 * kk, ry, [214, 218, 226], -0.5);
+        [a, b] = R(0, -0.1); prop(a, gy + 0.22 * kk, b, 0.12 * kk, 0.12 * kk, 0.06 * kk, ry, kc.map((c) => c * 0.7));
+        return;
+      }
+      const [ha, hb] = R(0, 0);
+      if (era <= 11) { // helmet, rifle, webbing
+        prop(ha, gy + 0.43 * kk, hb, 0.14 * kk, 0.06 * kk, 0.15 * kk, ry, DRAB);
+        let [a, b] = R(0.11, 0.08); prop(a, gy + 0.24 * kk, b, 0.025, 0.03, 0.36 * kk, ry, GUN, -0.35); [a, b] = R(0, -0.09); prop(a, gy + 0.2 * kk, b, 0.12 * kk, 0.14 * kk, 0.06 * kk, ry, DRAB);
+        return;
+      }
+      if (era <= 12) { // a carbine and a plate vest
+        prop(ha, gy + 0.43 * kk, hb, 0.14 * kk, 0.06 * kk, 0.15 * kk, ry, [60, 64, 60]);
+        prop(ha, gy + 0.23 * kk, hb, 0.15 * kk, 0.14 * kk, 0.11 * kk, ry, [70, 76, 70]);
+        const [a, b] = R(0.1, 0.12); prop(a, gy + 0.26 * kk, b, 0.03, 0.04, 0.3 * kk, ry, [24, 24, 26], -0.2);
+        return;
+      }
+      // the Space Age: white armour, a lit visor, a plasma rifle that pulses
+      prop(ha, gy + 0.42 * kk, hb, 0.15 * kk, 0.1 * kk, 0.16 * kk, ry, ARMOUR);
+      let [a, b] = R(0, 0.075); prop(a, gy + 0.43 * kk, b, 0.11 * kk, 0.03 * kk, 0.02, ry, PLASMA);
+      prop(ha, gy + 0.22 * kk, hb, 0.16 * kk, 0.16 * kk, 0.12 * kk, ry, ARMOUR);
+      [a, b] = R(0.1, 0.12); prop(a, gy + 0.26 * kk, b, 0.035, 0.045, 0.32 * kk, ry, [200, 206, 214], -0.2);
+      const pulse = 0.7 + 0.3 * Math.sin(t * 6 + i); [a, b] = R(0.1, 0.27); prop(a, gy + 0.28 * kk, b, 0.03, 0.03, 0.06 * kk, ry, PLASMA.map((c) => c * pulse), -0.2);
+    };
     for (let i = 0; i < U.hi && np < MAXU - 1 && nb < MAXU - 1 && nh < MAXU - 1; i++) {
       if (!U.alive[i] || U.layer[i] === 0) continue;
       const x = U.px[i] + (U.x[i] - U.px[i]) * alpha, y = U.py[i] + (U.y[i] - U.py[i]) * alpha;
@@ -1573,12 +1681,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
           if (civ && M3 && M3.ready) { // a person in the clothes of their land and era, with their own skin and hair
             const kk = k * 0.92 * (U.sex[i] === 1 ? 1.03 : 0.97);
             M3.person(i, x, g + bob, y, kk, ry, wob);
-            if (U.job[i] === J.SOLDIER || U.sq[i] >= 0) {
-              prop(x + rx * 0.14 * kk, g + bob + 0.05, y + rz * 0.14 * kk, 0.025, 0.62 * kk, 0.025, ry, [150, 120, 84]);
-              prop(x + rx * 0.14 * kk, g + bob + 0.66 * kk, y + rz * 0.14 * kk, 0.05, 0.08, 0.05, ry, [210, 214, 222]);
-              prop(x - rx * 0.13 * kk + fx * 0.02, g + bob + 0.13 * kk, y - rz * 0.13 * kk + fz * 0.02, 0.028, 0.15 * kk, 0.13 * kk, ry, kc); // a shield in the realm's colour
-              prop(x - rx * 0.145 * kk + fx * 0.02, g + bob + 0.195 * kk, y - rz * 0.145 * kk + fz * 0.02, 0.012, 0.03 * kk, 0.03 * kk, ry, [214, 190, 120]);
-            }
+            if (U.job[i] === J.SOLDIER || U.sq[i] >= 0) gear(i, x, g + bob, y, kk, ry, fx, fz, rx, rz, kc, t);
             if (U.carry[i]) prop(x - fx * 0.1 * kk, g + bob + 0.2 * kk, y - fz * 0.1 * kk, 0.1 * kk, 0.1 * kk, 0.08 * kk, ry, CARGO[U.carry[i]]);
             break;
           }
@@ -1616,6 +1719,8 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
           break;
         }
         case 'vehicle': {
+          const era = eraOfU(i);
+          if (era >= 9 && vehicleOfAge(i, sp, era, x, g, y, ry, fx, fz, rx, rz, kc, t, prop)) break;
           if (sp === SP.SHIP) {
             const w = Math.max(g, 0) + Math.sin(t * 2 + i) * 0.03, rock = Math.sin(t * 1.6 + i) * 0.05;
             const S = 1.6;
@@ -1643,6 +1748,14 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
           break;
         }
       }
+    }
+    // air cover: realms of the Modern age and after send aircraft over their marching armies
+    for (const s of Civ.squads) {
+      if (!s.alive || s.cx < wx0 || s.cy < wy0 || s.cx >= x1 || s.cy >= y1) continue;
+      const k = Civ.kingdoms[s.kd], cap = k ? Civ.capitalOf(k) : null, era = cap ? cap.era || 0 : 0;
+      if (era < 10) continue;
+      const g = V.groundAt(s.cx, s.cy), kc = k.color;
+      for (let q = 0; q < 2; q++) plane(s.cx, g, s.cy, s.id * 3.1 + q * Math.PI, era, kc, t, prop, 4 + q * 1.5);
     }
     people.count = np; heads.count = nh; hats.count = nhat; beasts.count = nb; props.count = nprop;
     for (const m of [people, heads, hats, beasts, props]) flag(m);

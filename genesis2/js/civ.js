@@ -181,9 +181,10 @@
     const k = (t) => Tech.knows(c, t);
     switch (job) {
       case J.GATHER: return (k('foraging') ? 1.3 : 1) * (k('groundstone') ? 1.05 : 1);
-      case J.HUNT: return (k('spear') ? 1.4 : 1) * (k('bow') ? 1.3 : 1) * (k('dogs') ? 1.15 : 1) * (k('microliths') ? 1.08 : 1);
-      case J.FISH: return (k('fishing') ? 1 : 0.25) * (k('boats') ? 1.25 : 1) * (k('sailing') ? 1.1 : 1);
-      case J.FARM: return (k('irrigation') ? 1.4 : 1) * (k('plough') ? 1.4 : 1) * (k('astronomy') ? 1.1 : 1) * (k('iron') ? 1.15 : 1) * (k('groundstone') ? 1.05 : 1);
+      case J.HUNT: return (k('spear') ? 1.4 : 1) * (k('bow') ? 1.3 : 1) * (k('dogs') ? 1.15 : 1) * (k('microliths') ? 1.08 : 1) * (k('muskets') ? 1.15 : 1) * (k('rifling') ? 1.1 : 1);
+      case J.FISH: return (k('fishing') ? 1 : 0.25) * (k('boats') ? 1.25 : 1) * (k('sailing') ? 1.1 : 1) * (k('oceangoing') ? 1.2 : 1) * (k('combustion') ? 1.25 : 1);
+      case J.FARM: return (k('irrigation') ? 1.4 : 1) * (k('plough') ? 1.4 : 1) * (k('astronomy') ? 1.1 : 1) * (k('iron') ? 1.15 : 1) * (k('groundstone') ? 1.05 : 1) *
+        (k('windmills') ? 1.15 : 1) * (k('fertilizer') ? 1.4 : 1) * (k('combustion') ? 1.15 : 1) * (k('greenrev') ? 1.4 : 1) * (k('genetics') ? 1.2 : 1) * (1 + Math.min(0.5, (c.future || 0) * 0.02));
       case J.HERD: return k('herding') ? (k('riding') ? 1.15 : 1) : 0;
       default: return 1;
     }
@@ -345,7 +346,9 @@
   function housing(c) {
     if (c.nomadic) return 9999;
     const b = counts(c, true);
-    return 8 + b[BT.TENT] * 4 + b[BT.HUT] * 5 + b[BT.HOUSE] * 7 + b[BT.HALL] * 6 + b[BT.KEEP] * 10;
+    // later ages build taller (townhouses, tenements, towers): each house holds more people
+    const tall = 1 + Math.max(0, (c.era || 0) - 6) * 0.1;
+    return 8 + b[BT.TENT] * 4 + b[BT.HUT] * 5 + (b[BT.HOUSE] * 7 + b[BT.HALL] * 6 + b[BT.KEEP] * 10) * tall;
   }
   Civ.housing = housing;
 
@@ -391,7 +394,7 @@
       id, race: 0, lang, gov: gov === undefined ? 0 : gov, name: '', color, dark: color.map((v) => (v * 0.55) | 0), css: AG.css(color),
       alive: true, cities: [], capital: -1, religion: o.religion === undefined ? -1 : o.religion,
       opinion: new Float32Array(MAXK), war: new Uint8Array(MAXK), warSince: new Float32Array(MAXK), mods: new Float32Array(MAXK), trade: new Float32Array(MAXK),
-      ally: new Uint8Array(MAXK), tribute: new Int16Array(MAXK).fill(-1),
+      ally: new Uint8Array(MAXK), tribute: new Int16Array(MAXK).fill(-1), score: new Float32Array(MAXK), general: 0, vassal: -1,
       exp: { fire: 0, water: 0, storm: 0, earth: 0, plague: 0, harvest: 0, war: 0, watcher: 0, death: 0, sun: 1, sea: 0, moon: 0.5 },
       king: -1, ruler: 0, pop: 0, founded: year(), fell: 0, exhaustion: 0, inspire: 0, banner: BANNERS(), kills: 0, losses: 0, atWar: false,
       inst: [], inequality: 0.08, stability: 0.6, legit: 0.6, unrest: 0, treasury: 0, laws: 0, history: [], culture: { agrarian: 0, martial: 0, mercantile: 0, mystic: 0 },
@@ -891,6 +894,13 @@
     return best;
   };
   // What tech.js needs to know about a community.
+  // Institutions of learning multiply invention: printing, universities, science, computers, the
+  // net and artificial minds (and a little more for every future technology).
+  function learning(c) {
+    const k = (t) => Tech.knows(c, t);
+    return (k('printing') ? 1.35 : 1) * (k('universities') ? 1.3 : 1) * (k('scientific') ? 1.5 : 1) * (k('computers') ? 1.5 : 1) * (k('internet') ? 1.5 : 1) * (k('ai') ? 2 : 1) * (1 + Math.min(1, (c.future || 0) * 0.03));
+  }
+  Civ.learning = learning;
   Civ.techContext = function (c) {
     const k = Civ.kingdoms[c.kd], s = c.survey || survey(c), ps = persons(c);
     let inno = 0, ni = 0;
@@ -905,7 +915,7 @@
       pop: ps.length, sedentary: c.sedentary, farming: Tech.knows(c, 'cultivation'), res: s.res, tradeRes: c.tradeRes, cereal: s.cereal / Math.max(1, s.cells) * 6, water: c.water, coast: c.coastal, river: c.river, forest: s.forest / Math.max(1, s.cells),
       stone: s.stone > 20, cold: s.temp < 0.28, wolves, domesticable: !!dom, domesticableName: dom ? dom.common : '', horses,
       contacts: c.contacts.size, gov: k ? k.gov : 0, war: k ? k.atWar : false, deaths: c.stats.deaths, stable: AG.Geo.climate.anomaly > -0.065 && AG.Geo.climate.aerosol < 0.02, // a warm, settled climate
-      innovation: (ni ? inno / ni : 0.5) * (AG.Races ? AG.Races.of(c).wit : 1), stability: k ? 0.6 + k.stability * 0.6 : 1, maxSkill, visible: c.materialized, inspired: c.inspired > year(),
+      innovation: (ni ? inno / ni : 0.5) * (AG.Races ? AG.Races.of(c).wit : 1) * learning(c), faith: c.religion != null && c.religion >= 0, stability: k ? 0.6 + k.stability * 0.6 : 1, maxSkill, visible: c.materialized, inspired: c.inspired > year(),
     };
   };
 

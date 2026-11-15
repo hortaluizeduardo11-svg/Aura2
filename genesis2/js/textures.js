@@ -3,7 +3,8 @@
  * downloaded): grass blades, soil with pebbles, rippled sand, faceted rock with cracks and lichen,
  * snow, leaf litter, ploughed furrows, dry-stone masonry with mortar and moss, cobbles, wooden
  * planks, logs, layered thatch, clay roof tiles, plaster, hide with stitched seams, bark, leaves,
- * pine needles, fur, woven cloth, ice, basalt and stratified cliff faces.
+ * pine needles, fur, woven cloth, ice, basalt and stratified cliff faces; and for the later ages
+ * brick in running bond, cast concrete, glass curtain walls and riveted metal panels.
  * Every texture tiles seamlessly and is a detail map: its average is a neutral 50% grey, so it
  * multiplies the colour the simulation gives a surface (a meadow's season, a realm's roof, an
  * animal's coat) instead of replacing it. The renderer samples them from one texture array by
@@ -12,11 +13,11 @@
 'use strict';
 (function () {
   const AG = window.AG;
-  const NAMES = ['plain', 'grass', 'dirt', 'sand', 'rock', 'snow', 'litter', 'farm', 'masonry', 'cobble', 'planks', 'logs', 'thatch', 'tiles', 'plaster', 'hide', 'bark', 'leaves', 'needles', 'fur', 'cloth', 'ice', 'basalt', 'cliff'];
+  const NAMES = ['plain', 'grass', 'dirt', 'sand', 'rock', 'snow', 'litter', 'farm', 'masonry', 'cobble', 'planks', 'logs', 'thatch', 'tiles', 'plaster', 'hide', 'bark', 'leaves', 'needles', 'fur', 'cloth', 'ice', 'basalt', 'cliff', 'brick', 'concrete', 'glass', 'metal'];
   const L = {}; NAMES.forEach((n, i) => (L[n.toUpperCase()] = i));
   // repeats per world unit (a land cell is one unit, about 2.8 m; models are built near that scale)
   // (real sizes: a stone course ~0.45 m, a thatch course ~0.35 m, a roof tile ~0.3 m, a plank ~0.25 m)
-  const SCALE = { plain: 1, grass: 1.1, dirt: 0.8, sand: 0.9, rock: 0.45, snow: 0.5, litter: 0.9, farm: 0.9, masonry: 1.1, cobble: 1.5, planks: 1.1, logs: 1.2, thatch: 1.1, tiles: 1.2, plaster: 0.8, hide: 1.2, bark: 2.2, leaves: 1.6, needles: 2.2, fur: 4, cloth: 5, ice: 0.4, basalt: 0.6, cliff: 0.5 };
+  const SCALE = { plain: 1, grass: 1.1, dirt: 0.8, sand: 0.9, rock: 0.45, snow: 0.5, litter: 0.9, farm: 0.9, masonry: 1.1, cobble: 1.5, planks: 1.1, logs: 1.2, thatch: 1.1, tiles: 1.2, plaster: 0.8, hide: 1.2, bark: 2.2, leaves: 1.6, needles: 2.2, fur: 4, cloth: 5, ice: 0.4, basalt: 0.6, cliff: 0.5, brick: 1.6, concrete: 0.5, glass: 0.4, metal: 0.7 };
   const Tx = (AG.Textures = { NAMES, L, SCALE: NAMES.map((n) => SCALE[n]), size: 0, data: null, ms: 0 });
 
   // ------------------------------------------------------------ tools
@@ -315,6 +316,54 @@
         set(d, o, l, bi % 2 ? [1.05, 1, 0.92] : [0.96, 0.97, 1.01]);
       });
       for (let k = 0; k < 10; k++) { let x = r() * S, y = r() * S; for (let q = 0; q < 8; q++) { const nx = x + (r() - 0.5) * 8, ny = y + 6 + r() * 8; im.line(x, y, nx, ny, 1.4, 1, [0.15, 0.14, 0.13], 0.7); x = nx; y = ny; } }
+    },
+    // ---- the later ages
+    brick(im, S, N, r) {
+      // running bond: 16 courses, each brick its own fired tone, the joints recessed (no joint on the edge)
+      const rows = 16, h = S / rows, cols = 8, w = S / cols, tone = Array.from({ length: rows * cols }, () => (r() - 0.5) * 0.2);
+      im.each((x, y, o, d) => {
+        const yy = (y + h * 0.5) % S, row = Math.floor(yy / h), off = row % 2 ? w / 2 : 0, xx = (x + w * 0.25 + off) % S, col = Math.floor(xx / w), u = xx - col * w, t = yy - row * h;
+        if (u < 1.6 || t < 1.6) { set(d, o, 0.62 + (fbm(N, S, x, y, 32, 32, 2) - 0.5) * 0.1, [1, 1, 0.96]); return; } // mortar
+        let l = 0.42 + tone[row * cols + col] + (fbm(N, S, x, y, 16, 16, 3) - 0.5) * 0.14;
+        if (u < 3.2 || t < 3.2) l *= 0.86; // the shadow of the recessed joint
+        const burnt = fbm(N, S, x + 40, y + 9, 8, 8, 2) > 0.7;
+        set(d, o, l, burnt ? [0.9, 0.9, 0.94] : [1.06, 0.98, 0.92]);
+      });
+      for (let k = 0; k < 400; k++) im.dot(r() * S, r() * S, 0.6 + r() * 0.8, [0.3, 0.28, 0.27], 0.5);
+    },
+    concrete(im, S, N, r) {
+      // cast in forms: big smooth panels, faint board marks, tie holes, rain streaks
+      im.each((x, y, o, d) => {
+        const yy = (y + S / 4) % S, xx = (x + S / 4) % S;
+        let l = 0.5 + (fbm(N, S, x, y, 4, 4, 4) - 0.5) * 0.16 + (fbm(N, S, x, y, 32, 32, 2) - 0.5) * 0.06;
+        if (yy % (S / 2) < 1.5 || xx % (S / 2) < 1.5) l *= 0.72; // panel joints
+        l += Math.sin((y / S) * 24 * Math.PI) * 0.012; // board marks
+        const streak = fbm(N, S, x, y, 24, 2, 3); if (streak > 0.62) l *= 1 - (streak - 0.62) * 0.8;
+        set(d, o, l, [0.99, 1, 1.01]);
+      });
+      for (const [cx, cy] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) for (const dx of [-0.12, 0.12]) for (const dy of [-0.12, 0.12]) im.dot((cx + dx) * S, (cy + dy) * S, 2, [0.22, 0.22, 0.23], 0.9);
+    },
+    glass(im, S, N, r) {
+      // a curtain wall: dark panes reflecting a sky gradient, slim mullions, a few lit or blinded panes
+      const n = 8, p = S / n, pane = Array.from({ length: n * n }, () => r());
+      im.each((x, y, o, d) => {
+        const xx = (x + p * 0.5) % S, yy = (y + p * 0.5) % S, cx = Math.floor(xx / p), cy = Math.floor(yy / p), u = xx - cx * p, v = yy - cy * p;
+        if (u < 2.2 || v < 2.2) { set(d, o, 0.62, [1, 1, 1.02]); return; } // mullions
+        const q = pane[cy * n + cx], refl = 0.24 + (1 - v / p) * 0.22 + (u / p) * 0.06 + (fbm(N, S, x, y, 4, 4, 2) - 0.5) * 0.1;
+        if (q > 0.86) { set(d, o, 0.62 + (v / p) * 0.1, [1.1, 1.02, 0.86]); return; } // blinds drawn
+        set(d, o, refl, [0.86, 0.98, 1.16]);
+      });
+    },
+    metal(im, S, N, r) {
+      // brushed panels with seams and rivets
+      const n = 4, p = S / n, tone = Array.from({ length: n * n }, () => (r() - 0.5) * 0.12);
+      im.each((x, y, o, d) => {
+        const xx = (x + p * 0.5) % S, yy = (y + p * 0.5) % S, cx = Math.floor(xx / p), cy = Math.floor((yy + (cx % 2) * p * 0.5) % S / p), u = xx - cx * p, v = ((yy + (cx % 2) * p * 0.5) % S) - cy * p;
+        if (u < 1.6 || v < 1.6) { set(d, o, 0.22, N1); return; }
+        let l = 0.5 + tone[cy * n + cx] + (fbm(N, S, x, y, 64, 2, 2) - 0.5) * 0.08 + (fbm(N, S, x, y, 4, 4, 3) - 0.5) * 0.08;
+        if ((u < 6 || p - u < 6) && Math.abs((v % 16) - 8) < 1.6) l = 0.7; // rivets
+        set(d, o, l, [0.98, 1, 1.03]);
+      });
     },
   };
 

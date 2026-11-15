@@ -103,7 +103,7 @@
   God.CATS = [
     { id: 'look', name: 'Watch' }, { id: 'land', name: 'Terrain' }, { id: 'geo', name: 'Geology' }, { id: 'elem', name: 'Elements' }, { id: 'sky', name: 'Weather' },
     { id: 'life', name: 'Life' }, { id: 'divine', name: 'Divine' }, { id: 'ruin', name: 'Disasters' }, { id: 'deep', name: 'Deep' },
-    { id: 'peoples', name: 'Peoples' },
+    { id: 'peoples', name: 'Peoples' }, { id: 'war', name: 'War' },
   ];
   const plateSel = { id: -1 };
   God.TOOLS = [
@@ -244,6 +244,23 @@
     ...(AG.Races ? AG.Races.BASE.filter((R) => R.key !== 'human' && !R.uplift).map((R) => ({ id: 'race-' + R.key, cat: 'peoples', name: R.name, mode: 'click', color: AG.css(R.look.skin ? R.look.skin[1] : [200, 160, 120]),
       desc: `${R.desc} Tap open land to set down a band${R.startEra ? ' (they arrive with the knowledge of the Industrial Age)' : ''}.`,
       click: (x, y) => { if (!AG.Races.seed(R.id, x, y)) toast('Peoples can only be set down on open, dry land after the Dawn'); } })) : []),
+    // war: the god of battles
+    { id: 'declare', cat: 'war', name: 'Declare war', mode: 'click', color: '#e53935', desc: 'Tap the realm that attacks, then the realm it attacks. Vassals and allies join their side.',
+      click: (x, y) => pairOf(x, y, (A, B) => { if (A.war[B.id]) toast(`${A.name} and ${B.name} are already at war`); else { Civ.declareWar(A, B, 'at the command of the heavens'); toast(`War: the ${A.name} against the ${B.name}`); } }) },
+    { id: 'treaty', cat: 'war', name: 'Peace treaty', mode: 'click', color: '#90caf9', desc: 'Tap two realms at war. They make peace on the terms the war score gives: a city annexed, vassalage, tribute, or a white peace.',
+      click: (x, y) => pairOf(x, y, (A, B) => { if (!A.war[B.id]) { toast(`${A.name} and ${B.name} are not at war`); return; } const t = AG.Warfare.makePeace(A, B, 'by divine decree'); toast({ white: 'A white peace: nobody gains', tribute: 'Peace, with tribute to the victor', vassal: 'Peace: the loser becomes a vassal', annex: 'Peace: the victor annexes a city' }[t]); }) },
+    { id: 'alliance', cat: 'war', name: 'Alliance', mode: 'click', color: '#4fc3f7', desc: 'Tap two realms to bind them in an alliance: each joins the other\'s defensive wars.',
+      click: (x, y) => pairOf(x, y, (A, B) => { if (A.war[B.id]) Civ.makePeace(A, B, 'to become allies'); A.ally[B.id] = B.ally[A.id] = 1; A.opinion[B.id] = B.opinion[A.id] = Math.max(60, A.opinion[B.id]); AG.History.event('alliance', `The ${A.name} and the ${B.name} swear an alliance before the heavens`, { polity: A.id, cause: 'divine will' }); toast(`${A.name} and ${B.name} are allies`); }) },
+    { id: 'revolt', cat: 'war', name: 'Incite revolt', mode: 'click', color: '#ff7043', desc: 'Tap a community: it rises against its realm and founds its own (its old masters may march to crush it).',
+      click: (x, y) => { const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20); if (!c) { toast('Tap a community'); return; } const k = Civ.kingdoms[c.kd]; if (k.cities.length < 2) { toast(`${c.name} is the whole of its realm`); return; } AG.War.secede(c, 'stirred to revolt by the heavens'); AG.FX.burst(c.x, c.y, 'spark', 30); } },
+    { id: 'levy', cat: 'war', name: 'Levy', mode: 'click', color: '#8d6e63', desc: 'Tap a community: its able adults take up arms.',
+      click: (x, y) => { const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20); if (!c) { toast('Tap a community'); return; } const n = AG.Warfare.levy(c); toast(n ? `${n} of ${c.name} take up arms` : `Nobody left to call up in ${c.name}`); } },
+    { id: 'fortify', cat: 'war', name: 'Fortify', mode: 'click', color: '#9e9e9e', desc: 'Tap a community: walls and towers rise around it at once.',
+      click: (x, y) => { const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20); if (!c || c.nomadic) { toast('Tap a settled community'); return; } c.stone += 200; c.wood += 100; if (!c.wallPlan) AG.War.planWalls(c); AG.War.buildWall(c, true); AG.FX.burst(c.x, c.y, 'holy', 30); toast(`${c.name} is walled`); } },
+    { id: 'blitz', cat: 'war', name: 'Blitz', mode: 'click', color: '#ffca28', desc: 'Tap a community at war: its realm strikes every enemy at once from there, fast and hard.',
+      click: (x, y) => { const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20); if (!c) { toast('Tap a community'); return; } if (!AG.Warfare.blitz(c)) toast(`The ${Civ.kingdoms[c.kd].name} are at peace`); } },
+    { id: 'nuke', cat: 'war', name: 'The bomb', mode: 'click', color: '#fff176', desc: 'Only a god sends this: a blinding flash, a firestorm, a crater and fallout that poisons the land for years. (Peoples never use it on their own.)',
+      click: (x, y) => God.nuke(x, y, 6 + God.brush.r * 0.35) },
     { id: 'uplift', cat: 'peoples', name: 'Uplift', mode: 'click', color: '#a1887f', desc: 'Raise the apes near here to minds: they found a people of their own, with their own tongue.',
       click: (x, y) => { if (!AG.Races || !AG.Races.uplift(x, y)) toast('There are no apes to uplift near here (or the Dawn has not come)'); } },
     { id: 'dig', cat: 'deep', name: 'Dig', mode: 'brush', color: '#795548', desc: 'Hollow out caverns.', deep: true, apply: (x, y) => deep(x, y, (i) => { if (Wd.ug[i] !== UG.BEDROCK && !Wd.ugOpen(i)) Wd.ug[i] = UG.CAVE; }) },
@@ -261,6 +278,15 @@
     const r = Math.ceil(God.brush.r);
     for (let oy = -r; oy <= r; oy += 8) for (let ox = -r; ox <= r; ox += 8) Wd.wakeU(AG.clamp((x + ox) | 0, 0, W - 1), AG.clamp((y + oy) | 0, 0, H - 1));
     Wd.wakeU(x | 0, y | 0);
+  }
+  // two realms in turn (the first tap remembers the first)
+  function pairOf(x, y, fn) {
+    const k = realmAt(x, y);
+    if (!k) { toast('Tap inside a realm\'s borders'); return; }
+    if (God.pendingKd < 0 || God.pendingKd === k.id || !Civ.kingdoms[God.pendingKd].alive) { God.pendingKd = k.id; toast(`${k.name} chosen: now tap the second realm`); return; }
+    const A = Civ.kingdoms[God.pendingKd]; God.pendingKd = -1;
+    A.exp.watcher += 2; k.exp.watcher += 2;
+    fn(A, k);
   }
   function twoRealms(x, y, peace) {
     const k = realmAt(x, y);
@@ -368,6 +394,43 @@
     const c = Civ.nearestCity(x, y, -1, 50);
     return c ? `near ${c.name}` : 'in the wilds';
   }
+  // The bomb: a flash, a fireball, a shallow crater, a firestorm ring and fallout (blighted, ashen
+  // land and a sickness) that lingers; the people of every community in reach die or are maimed.
+  God.nuke = function (x, y, r) {
+    if (AG.History.flushSnap) AG.History.flushSnap();
+    const height = AG.View3D && AG.View3D.ok ? AG.View3D.groundAt(x, y) : 0;
+    Sky.flash = 1;
+    eachCell(x, y, r * 2.4, (i, f, cx, cy, dd) => {
+      const d = dd / r;
+      if (Wd.bgrid[i] && d < 1.6) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1); else if (Wd.bgrid[i] && d < 2.4) Civ.damageBuilding(Wd.bgrid[i] - 1, 120, -1);
+      if (d < 0.7) { Wd.elev[i] = Math.max(0.03, Wd.elev[i] - 0.05 * (1 - d / 0.7)); Wd.soil[i] = SO.ASH; Wd.veg[i] = 0; Wd.snow[i] = 0; Wd.frozen[i] = 0; Wd.heat[i] = 1.2; }
+      else if (d < 1.6) { Wd.soil[i] = rnd() < 0.5 ? SO.BLIGHT : SO.ASH; Wd.veg[i] = 0; Wd.fire[i] = 250; Wd.heat[i] = Math.min(1.2, Wd.heat[i] + 0.6); }
+      else if (Wd.veg[i] > 20 && rnd() < 0.6) { Wd.fire[i] = 220; if (rnd() < 0.4) Wd.soil[i] = SO.BLIGHT; }
+      if (rnd() < 0.5) { Wd.gas[i] = Math.min(1, Wd.gas[i] + 0.6); Wd.gt[i] = GT.SMOKE; }
+    });
+    for (const j of unitsIn(x, y, r * 2, 1)) Ent.damage(j, 500 * (1 - Math.sqrt(AG.dist2(U.x[j], U.y[j], x, y)) / (r * 2.2)), -1, 'the bomb');
+    for (const j of unitsIn(x, y, r * 2, 2)) Ent.damage(j, 400, -1, 'the bomb');
+    let dead = 0;
+    for (const c of Civ.cities) { // the folded people of every community in reach
+      if (!c.alive) continue;
+      const d = Math.sqrt(AG.dist2(c.x, c.y, x, y)) / r;
+      if (d > 2.6) continue;
+      const share = d < 1 ? 0.9 : d < 1.8 ? 0.5 : 0.15;
+      for (const P of Civ.persons(c).slice()) { if (P.body >= 0 && U.alive[P.body]) continue; if (rnd() < share) { AG.People.die(P, 'the bomb'); dead++; } else if (rnd() < share) AG.People.injure(P, -1, 0.6, 'the bomb', 0); }
+    }
+    Wd.wakeArea(x | 0, y | 0, Math.ceil(r * 2.6)); Wd.wakeU(x | 0, y | 0); Wd.epoch++;
+    AG.FX.burst(x, y, 'explosion', 140); AG.FX.burst(x, y, 'ember', 60); AG.FX.burst(x, y, 'debris', 40);
+    God.impacts.push({ x, y, r: r * 1.4, height, water: false, age: 0 });
+    if (God.impacts.length > 12) God.impacts.shift();
+    if (AG.View3D && AG.View3D.invalidate) AG.View3D.invalidate();
+    if (AG.Render) AG.Render.invalidate();
+    God.shake = 30;
+    Civ.experience(x, y, 'fire', 6); Civ.experience(x, y, 'death', 4);
+    witness(x, y, r * 6, AG.People.MK.DISASTER, 'the flash brighter than the sun', -1);
+    AG.History.event('war', `A bomb falls ${placeName(x, y)}${dead ? `; ${dead} die in the fire` : ''}`, { x, y, cause: 'divine wrath' });
+    for (const k of Civ.kingdoms) if (k.alive) for (const o of Civ.kingdoms) if (o.alive && o !== k) k.mods[o.id] -= 5; // (the world is shaken)
+    return dead;
+  };
   function meteorImpact(m) {
     const { x, y, r } = m;
     if (AG.History.flushSnap) AG.History.flushSnap();

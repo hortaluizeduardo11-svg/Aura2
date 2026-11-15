@@ -11,7 +11,7 @@
   const { RES, SK } = AG;
   const rnd = () => AG.rnd();
   const has = (ctx, r) => ctx.res[r] > 0;
-  const ERAS = ['Paleolithic', 'Mesolithic', 'Neolithic', 'Chalcolithic', 'Bronze Age', 'Iron Age', 'Classical'];
+  const ERAS = ['Paleolithic', 'Mesolithic', 'Neolithic', 'Chalcolithic', 'Bronze Age', 'Iron Age', 'Classical', 'Medieval', 'Renaissance', 'Industrial', 'Modern', 'Atomic', 'Information', 'Space Age', 'Stellar'];
   const GOV = { band: 0, tribe: 1, chiefdom: 2, state: 3 };
   // key, name, era, prerequisites, difficulty (≈ years for a 50-person community of average
   // minds once conditions are met), condition factor, minimum population to keep it, skill that
@@ -67,11 +67,69 @@
     ['medicine', 'Medicine', 6, ['herbal', 'writing'], 2200, null, 300, SK.LORE, null, 'Physicians: far fewer die of illness and in childbirth'],
     ['engineering', 'Engineering', 6, ['mathematics', 'masonry'], 2200, null, 400, SK.BUILD, null, 'Aqueducts, cranes and siege engines'],
     ['navigation', 'Navigation', 6, ['sailing', 'astronomy'], 2200, (c) => (c.coast ? 1 : 0), 200, SK.LORE, null, 'Steering by the stars: open-sea voyages'],
+    // ---- Medieval: lords and castles, steel, mills, monasteries, the compass
+    ['feudalism', 'Feudalism', 7, ['law', 'riding'], 1600, (c) => (c.gov >= GOV.state ? 1 : 0), 110, SK.LORE, null, 'Land for service: lords, vassals and serfs'],
+    ['stirrup', 'Stirrup', 7, ['riding', 'iron'], 1200, null, 110, SK.CRAFT, null, 'Riders braced in the saddle'],
+    ['chivalry', 'Chivalry', 7, ['stirrup', 'feudalism'], 1300, null, 110, SK.FIGHT, null, 'Armoured knights (+35% fighting)'],
+    ['steel', 'Steel', 7, ['iron', 'engineering'], 1500, null, 110, SK.CRAFT, null, 'Hard steel blades and tools'],
+    ['castles', 'Castles', 7, ['masonry', 'fortification', 'feudalism'], 1300, null, 110, SK.BUILD, null, 'Stone castles hold the land'],
+    ['crossbow', 'Crossbow', 7, ['bow', 'engineering'], 1200, null, 110, SK.CRAFT, null, 'Bolts that pierce armour'],
+    ['windmills', 'Mills', 7, ['engineering', 'granaries'], 1200, null, 110, SK.BUILD, null, 'Wind and water grind the grain (+15% farming)'],
+    ['monasteries', 'Monasteries', 7, ['philosophy', 'writing'], 1200, (c) => (c.faith ? 1 : 0.4), 110, SK.LORE, null, 'Houses of prayer that copy and keep books'],
+    ['alchemy', 'Alchemy', 7, ['medicine', 'philosophy'], 1500, null, 110, SK.LORE, null, 'The search for the elements (the way to gunpowder)'],
+    ['compass', 'Compass', 7, ['navigation'], 1200, (c) => (c.coast ? 1 : 0.2), 110, SK.LORE, null, 'A needle that finds north'],
+    ['guilds', 'Guilds', 7, ['coinage', 'feudalism'], 1100, null, 110, SK.CRAFT, null, 'Masters and apprentices: crafts grow'],
+    // ---- Renaissance: printing, gunpowder, banks, universities, ocean ships
+    ['printing', 'Printing press', 8, ['alphabet', 'guilds', 'monasteries'], 1300, (c) => (c.pop >= 150 ? 1 : 0.3), 140, SK.CRAFT, null, 'Books for many: learning speeds up'],
+    ['gunpowder', 'Gunpowder', 8, ['alchemy', 'steel'], 1200, null, 140, SK.CRAFT, null, 'Black powder: cannons and handguns'],
+    ['banking', 'Banking', 8, ['guilds', 'mathematics'], 1100, null, 140, SK.LORE, null, 'Credit and banks: trade and states grow'],
+    ['universities', 'Universities', 8, ['printing', 'monasteries'], 1100, (c) => (c.pop >= 180 ? 1 : 0.3), 140, SK.LORE, null, 'Schools of learning (+30% invention)'],
+    ['optics', 'Optics', 8, ['printing', 'astronomy'], 1100, null, 140, SK.CRAFT, null, 'Lenses and telescopes'],
+    ['muskets', 'Muskets', 8, ['gunpowder'], 1000, null, 140, SK.CRAFT, null, 'Musketeers (+40% fighting)'],
+    ['oceangoing', 'Ocean ships', 8, ['compass', 'sailing'], 1100, (c) => (c.coast ? 1 : 0), 140, SK.CRAFT, null, 'Great ships that cross oceans'],
+    // ---- Industrial: science, steam, railways, factories, rifles, vaccines
+    ['scientific', 'Scientific method', 9, ['universities', 'optics'], 1000, null, 160, SK.LORE, null, 'Experiment and proof (+50% invention)'],
+    ['steam', 'Steam power', 9, ['scientific', 'steel'], 950, null, 160, SK.CRAFT, null, 'Engines of iron and fire'],
+    ['railways', 'Railways', 9, ['steam', 'roads'], 900, null, 160, SK.BUILD, null, 'Iron roads bind distant cities'],
+    ['factories', 'Factories', 9, ['steam', 'banking'], 900, null, 160, SK.CRAFT, null, 'Mass production in smoking mills'],
+    ['rifling', 'Rifles', 9, ['muskets', 'steel'], 900, null, 160, SK.CRAFT, null, 'Rifled guns (+50% fighting)'],
+    ['vaccines', 'Vaccines', 9, ['medicine', 'scientific'], 900, null, 160, SK.LORE, null, 'Pox no longer kill (far fewer die of disease)'],
+    ['fertilizer', 'Fertilizer', 9, ['scientific', 'plough'], 900, null, 160, SK.FARM, null, 'Fields fed by chemistry (+40% farming)'],
+    ['electricity', 'Electricity', 9, ['scientific'], 950, null, 160, SK.LORE, null, 'Power through wires'],
+    // ---- Modern: engines, flight, radio, tanks, antibiotics, assembly lines
+    ['combustion', 'Combustion engine', 10, ['steam', 'factories'], 850, null, 170, SK.CRAFT, null, 'Petrol engines: cars and trucks'],
+    ['flight', 'Flight', 10, ['combustion'], 800, null, 170, SK.CRAFT, null, 'Aircraft rule the sky'],
+    ['radio', 'Radio', 10, ['electricity'], 800, null, 170, SK.LORE, null, 'Voices through the air'],
+    ['tanks', 'Tanks', 10, ['combustion', 'rifling'], 800, null, 170, SK.CRAFT, null, 'Armoured machines of war'],
+    ['antibiotics', 'Antibiotics', 10, ['vaccines'], 800, null, 170, SK.LORE, null, 'Infections cured'],
+    ['massprod', 'Assembly line', 10, ['factories', 'electricity'], 800, null, 170, SK.CRAFT, null, 'Goods for everyone'],
+    // ---- Atomic: fission, rockets, computers, jets, the green revolution
+    ['fission', 'Nuclear fission', 11, ['radio', 'scientific'], 800, (c) => (c.gov >= GOV.state ? 1 : 0), 180, SK.LORE, null, 'The power in the atom'],
+    ['rocketry', 'Rocketry', 11, ['flight'], 750, null, 180, SK.CRAFT, null, 'Rockets to the edge of space'],
+    ['computers', 'Computers', 11, ['radio', 'electricity'], 750, null, 180, SK.LORE, null, 'Thinking machines (+50% invention)'],
+    ['jets', 'Jet aircraft', 11, ['flight', 'rocketry'], 700, null, 180, SK.CRAFT, null, 'Jets cross the world in hours'],
+    ['greenrev', 'Green revolution', 11, ['fertilizer', 'antibiotics'], 700, null, 180, SK.FARM, null, 'New crops feed billions (+40% farming)'],
+    // ---- Information: the net, satellites, genetics, robots, renewables
+    ['internet', 'Internet', 12, ['computers', 'radio'], 700, null, 180, SK.LORE, null, 'The whole world talks at once (+50% invention)'],
+    ['satellites', 'Satellites', 12, ['rocketry', 'computers'], 650, null, 180, SK.CRAFT, null, 'Eyes in orbit'],
+    ['genetics', 'Genetics', 12, ['antibiotics', 'computers'], 650, null, 180, SK.LORE, null, 'Reading and writing life'],
+    ['robotics', 'Robotics', 12, ['computers', 'massprod'], 650, null, 180, SK.CRAFT, null, 'Machines that work'],
+    ['renewables', 'Renewable power', 12, ['electricity', 'computers'], 650, null, 180, SK.BUILD, null, 'Sun and wind power the cities'],
+    // ---- Space Age: thinking machines, fusion, spaceflight, nanotech, colonies
+    ['ai', 'Artificial minds', 13, ['internet', 'robotics'], 910, null, 190, SK.LORE, null, 'Minds of silicon (doubles invention)'],
+    ['fusion', 'Fusion power', 13, ['fission', 'computers'], 910, null, 190, SK.CRAFT, null, 'Star-fire on earth'],
+    ['spaceflight', 'Spaceflight', 13, ['satellites', 'fusion'], 910, null, 190, SK.CRAFT, null, 'Ships to the moon and planets'],
+    ['nanotech', 'Nanotechnology', 13, ['genetics', 'robotics'], 910, null, 190, SK.CRAFT, null, 'Machines the size of molecules'],
+    ['colonies', 'Space colonies', 13, ['spaceflight'], 910, null, 190, SK.BUILD, null, 'Cities beyond the sky'],
+    // ---- Stellar: the stars themselves
+    ['warp', 'Warp drive', 14, ['spaceflight', 'fusion', 'ai'], 1200, null, 200, SK.LORE, null, 'Faster than light: the stars are open'],
+    ['terraforming', 'Terraforming', 14, ['nanotech', 'fusion'], 1120, null, 200, SK.BUILD, null, 'Whole worlds remade'],
+    ['uploads', 'Mind uploading', 14, ['ai', 'genetics'], 1200, null, 200, SK.LORE, null, 'Minds that outlive their bodies'],
   ];
   const LIST = T.map(([key, name, era, pre, diff, cond, minPop, skill, accident, desc], id) => ({ id, key, name, era, pre, diff, cond, minPop, skill, accident, desc }));
   const IDX = {}; LIST.forEach((t) => (IDX[t.key] = t.id));
   for (const t of LIST) t.preIds = t.pre.map((k) => { if (IDX[k] === undefined) throw new Error('unknown prerequisite ' + k); return IDX[k]; });
-  const MARK = { bow: 1, microliths: 1, cultivation: 2, herding: 2, copper: 3, bronze: 4, iron: 5, philosophy: 6 };
+  const MARK = { bow: 1, microliths: 1, cultivation: 2, herding: 2, copper: 3, bronze: 4, iron: 5, philosophy: 6, feudalism: 7, printing: 8, steam: 9, combustion: 10, fission: 11, internet: 12, spaceflight: 13, warp: 14 };
   const STARTING = ['fire', 'knapping', 'speech'];
   const KEEP_ALWAYS = new Set(['fire', 'knapping', 'speech', 'spear', 'shelters', 'foraging', 'hides']);
 
@@ -87,7 +145,17 @@
     for (const k in MARK) if (c.tech[IDX[k]]) e = Math.max(e, MARK[k]);
     return e;
   };
-  Tech.eraName = (c) => ERAS[Tech.eraOf(c)];
+  Tech.eraName = (c) => ERAS[Tech.eraOf(c)] + (c.future ? ` (future ${c.future})` : '');
+  // Past the Stellar age there is always more to learn: future technologies, one after another,
+  // each a level higher (and harder) than the last. They speed invention, farming and war a little.
+  Tech.futureStep = function (c, ctx, dy) {
+    if (Tech.eraOf(c) < 14) return;
+    const lvl = c.future || 0, p = (1 / ((800 + lvl * 120) * PACE)) * Math.sqrt(Math.max(1, ctx.pop) / 50) * ctx.innovation * (1 + 0.15 * Math.min(6, ctx.contacts));
+    if (rnd() < 1 - Math.pow(1 - Math.min(0.5, p), dy)) {
+      c.future = lvl + 1;
+      if (c.future % 5 === 0 || !Tech.firsts['future' + c.future]) { if (!Tech.firsts['future' + c.future]) Tech.firsts['future' + c.future] = { year: Math.floor(AG.Geo.year), comm: c.id, name: c.name }; AG.History.event('invention', `${c.name} reaches future technology ${c.future}`, { x: c.x, y: c.y, comm: c.id }); }
+    }
+  };
   Tech.count = (c) => { let n = 0; for (let k = 0; k < LIST.length; k++) n += c.tech[k]; return n; };
 
   // Probability of discovery per year for one community (0 if impossible).
@@ -104,6 +172,7 @@
   // One community's year(s): discovery, then loss. ctx comes from civ.js (Civ.techContext).
   Tech.yearStep = function (c, ctx, dy) {
     const out = [];
+    Tech.futureStep(c, ctx, dy);
     for (const t of LIST) {
       const p = Tech.chance(c, t, ctx);
       if (p > 0 && rnd() < 1 - Math.pow(1 - Math.min(0.5, p), dy)) { Tech.learn(c, t, 'discovered', ctx); out.push(t); }
@@ -173,6 +242,8 @@
       case 'dogs': return 'wolves have followed the camp';
       case 'writing': return 'a chiefdom needs its accounts kept';
       case 'irrigation': return 'a river and many mouths to feed';
+      case 'printing': return 'a large city with scholars and guilds';
+      case 'fission': return 'a state with the means to split the atom';
       default: return '';
     }
   }

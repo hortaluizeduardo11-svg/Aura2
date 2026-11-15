@@ -692,7 +692,7 @@
   // Map overlays. Per-cell ones read the land (plates, rock, resources, temperature, strain);
   // per-community ones colour territories (realms, faiths, languages, eras, genetics).
   const ROCK_C = [[214, 160, 150], [70, 70, 90], [214, 196, 140], [150, 110, 160], [200, 80, 60], [120, 170, 110]];
-  const ERA_C = [[170, 150, 120], [140, 190, 120], [230, 200, 90], [210, 130, 70], [220, 170, 60], [140, 150, 170], [240, 240, 255]];
+  const ERA_C = [[170, 150, 120], [140, 190, 120], [230, 200, 90], [210, 130, 70], [220, 170, 60], [140, 150, 170], [240, 240, 255], [150, 110, 190], [200, 90, 150], [120, 80, 70], [90, 150, 210], [90, 220, 160], [70, 200, 240], [180, 240, 255], [255, 255, 200]];
   function updateBorders() {
     bpix.fill(0);
     const mode = R.overlay;
@@ -1011,9 +1011,89 @@
       return makeSprite(rows, { c: crop, d: [104, 78, 48], W: [96, 64, 40] }, false);
     });
   }
+  // ------------------------------------------------------------ the later ages (2D)
+  // From the Medieval age on, towns are drawn in the look of their age (models3d.js has the 3D
+  // designs): drawn sprites for the Medieval to Industrial ages, generated blocks and towers for
+  // the modern ones (window patterns differ from building to building).
+  const ERA_PAL = { B: [172, 88, 66], n: [122, 62, 50], C: [194, 190, 182], D: [138, 136, 130], x: [130, 182, 228], X: [70, 110, 162], z: [120, 255, 210], Z: [236, 240, 244], L: [255, 226, 150], S: [82, 90, 104], q: [210, 60, 50], t: [214, 182, 120] };
+  const ERA_SPR = [
+    { // Medieval and Renaissance
+      [BT.HOUSE]: ['...KK...', '..KKKK.r', '.KKKKKKr', 'KKKKKKKK', '.eWeeWe.', '.eLeeLe.', '.WWWWWW.', '.rrrrrr.', '.rLrrbr.', '.rrrrbr.'],
+      [BT.HUT]: ['..KKKK..', '.KKKKKK.', 'KKKKKKKK', '.eWeeWe.', '.WWWWWW.', '.rLrrbr.', '.rrrrbr.'],
+      [BT.HALL]: ['.........K..', '........KKK.', '........rLr.', '..KKKKKKrrr.', '.KKKKKKKKKKK', 'KKKKKKKKKKKK', '.rrrrrrrrrr.', '.rLrLrLrLrr.', '.rrrrrrrrrr.', '.r.r.r.r.rr.', '.r.r.r.r.rr.', 'rrrrrrrrrrrr'],
+      [BT.TEMPLE]: ['..y......y..', '..S......S..', '.SSS....SSS.', '.SSS....SSS.', '.rrr....rrr.', '.rrrSSSSrrr.', '.rLrSSSSrLr.', '.rrrrrrrrrr.', '.rLrryyrrLr.', '.rrryyyyrrr.', '.rLrryyrrLr.', '.rrrrbbrrrr.', '.rrrrbbrrrr.', 'rrrrrrrrrrrr'],
+      [BT.GRANARY]: ['e.......e', '.e.....e.', '..e...e..', '...eWe...', '...WWW...', '..eWeWe..', '.e.eee.e.', 'e..eLe..e', '...eee...', '..eeeee..', '..eebee..', '..eebee..'],
+    },
+    { // Industrial
+      [BT.HOUSE]: ['.n....n.', '.n....n.', 'SSSSSSSS', '.SSSSSS.', 'BBBBBBBB', 'BLBBLBBL', 'BBBBBBBB', 'BLBBLBBL', 'BBBBBBBB', 'BbBBBbBB', 'BbBBBbBB'],
+      [BT.HUT]: ['.n....n.', 'SSSSSSSS', '.SSSSSS.', 'BBBBBBBB', 'BLBBLBBL', 'BBBBBBBB', 'BbBBBbBB'],
+      [BT.HALL]: ['.....KK.....', '.....K......', '....SSS.....', '....ByB.....', '....BBB.....', '.eeeeeeeeee.', 'eeeeeeeeeeee', 'tttttttttttt', 'tLtetLtetLtt', 'tttetttetttt', 'tLtetbbetLtt', 'tttetbbetttt', 'CCCCCCCCCCCC'],
+      [BT.TEMPLE]: ['.........y..', '.........S..', '........SSS.', '........SSS.', '.......SSSSS', '........nnn.', '........nyn.', '..SSSSSSnnn.', '.SSSSSSSnnn.', 'SSSSSSSSnnn.', '.nnnnnnnnnn.', '.nLnnLnnnLn.', '.nLnnLnnnLn.', '.nnnnnnnnbn.', '.nnnnnnnnbn.', 'nnnnnnnnnnnn'],
+      [BT.KEEP]: ['.......KK.......', '.......K........', '.......e........', '......vvv.......', '.....vvvvv......', '....vvvvvvv.....', '....eeeeeee.....', '....e.e.e.e.....', 'eeeeeeeeeeeeeeee', 'eLeLeLeeeeLeLeLe', 'eeeeeee.e.eeeeee', 'eLeLeLe.e.eLeLeL', 'eeeeeeebbeeeeeee', 'CCCCCCCCCCCCCCCC'],
+      [BT.WORKSHOP]: ['.n.......n..', '.n.......n..', '.n...n...n..', '.n...n...n..', 'Sn.S.nS.Sn.S', 'SnSSSnSSSnSS', 'SSSSSSSSSSSS', 'BBBBBBBBBBBB', 'BLLBBLLBBLLB', 'BBBBBBBBBBBB', 'BLLBBbbBBLLB', 'BBBBBbbBBBBB'],
+      [BT.GRANARY]: ['.CC.CC..', 'CCCCCC..', 'CDCCDC.W', 'CDCCDCWW', 'CDCCDCW.', 'CDCCDCWW', 'CCCCCCW.', 'CDCCDCW.', 'CDCCDCW.', 'CCCCCCW.'],
+      [BT.MARKET]: ['....xxxx....', '..xxxxxxxx..', '.xxxxxxxxxx.', 'BBBBByBBBBBB', 'BLBLBBBLBLBB', 'BBBBBBBBBBBB', 'BLBLBbbBLBLB', 'BBBBBbbBBBBB'],
+    },
+  ];
+  function egrid(w, h) { return Array.from({ length: h }, () => Array(w).fill('.')); }
+  function erect(g, x0, y0, w, h, ch) { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (g[y] && x >= 0 && x < g[y].length) g[y][x] = ch; }
+  function efacade(g, x0, y0, w, h, wall, win, seed, dx) { erect(g, x0, y0, w, h, wall); for (let y = y0 + 1; y < y0 + h - 1; y += 2) for (let x = x0 + 1; x < x0 + w - 1; x += dx || 2) if ((x * 7 + y * 13 + seed * 5) % 6 !== 0) g[y][x] = win; }
+  const erows = (g) => g.map((r) => r.join(''));
+  function eraSprite(type, band, v, era) {
+    if (band <= 1) { const t = ERA_SPR[band][type]; return t || (band === 1 && type === BT.HUT ? ERA_SPR[1][BT.HOUSE] : null); }
+    const tall = era >= 14 ? 1.3 : 1;
+    if (type === BT.HOUSE || type === BT.HUT) {
+      const hut = type === BT.HUT;
+      if (band === 2) {
+        if (v === 1) { const g = egrid(8, 7); erect(g, 1, 0, 6, 1, 'S'); erect(g, 0, 1, 8, 1, 'S'); efacade(g, 0, 2, 8, 5, 'e', 'L', v, 3); g[5][2] = 'b'; g[6][2] = 'b'; return erows(g); } // a suburban house
+        const h = hut ? 10 : 14 + v, g = egrid(8, h + 1); g[0][5] = 'R'; g[0][6] = 'R'; efacade(g, 0, 1, 8, h, v ? 'B' : 'C', 'L', v + era); g[h][3] = 'b'; g[h][4] = 'b'; return erows(g);
+      }
+      if (band === 3) {
+        if (v === 1) { const g = egrid(8, 8); erect(g, 0, 0, 8, 1, 'X'); efacade(g, 0, 1, 5, 7, 'Z', 'x', v, 2); efacade(g, 5, 3, 3, 5, 'w', 'L', v); return erows(g); }
+        const h = (hut ? 12 : 18 + v * 2), g = egrid(8, h + 1); erect(g, 1, 0, 6, 1, 'v'); efacade(g, 0, 1, 8, h, 'x', 'X', v + era, 1); for (let y = 3; y < h; y += 4) erect(g, 0, y, 8, 1, 'Z'); return erows(g);
+      }
+      if (v === 1) { const g = egrid(9, 7); erect(g, 2, 0, 5, 1, 'x'); erect(g, 1, 1, 7, 2, 'x'); erect(g, 0, 3, 9, 3, 'x'); g[4][4] = 'L'; erect(g, 0, 6, 9, 1, 'z'); return erows(g); } // a dome
+      const h = Math.round((hut ? 14 : 22 + v * 3) * tall), g = egrid(7, h + 3); g[0][3] = 'z'; erect(g, 3, 1, 1, 2, 'Z'); efacade(g, 1, 3, 5, h, 'Z', 'v', v + era); for (let y = 6; y < h + 3; y += 6) erect(g, 0, y, 7, 1, 'z'); return erows(g);
+    }
+    switch (type) {
+      case BT.HALL: { const g = egrid(12, 9); g[0][10] = 'K'; g[0][11] = 'K'; for (let y = 1; y < 9; y++) g[y][10] = 'R'; if (band === 2) { efacade(g, 0, 2, 10, 4, 'C', 'L', 1); for (let x = 1; x < 10; x += 2) erect(g, x, 6, 1, 3, 'C'); erect(g, 2, 6, 6, 3, 'X'); } else if (band === 3) { erect(g, 1, 2, 8, 1, 'Z'); efacade(g, 0, 3, 10, 6, 'x', 'X', 2, 1); } else { erect(g, 4, 5, 2, 4, 'Z'); erect(g, 0, 3, 10, 2, 'Z'); erect(g, 0, 5, 10, 1, 'z'); erect(g, 3, 1, 4, 2, 'x'); } return erows(g); }
+      case BT.TEMPLE: { if (band === 2) return ['..........y.', '..........C.', '.....C....C.', '....CCC...C.', '...CCCCC..C.', '..CCCyCCC.C.', '.CCCCyCCCCC.', 'CCCCyyyCCCC.', 'CCCCyyyCCCCC', 'DDDDDDDDDDDD']; if (band === 3) return ['.....xx.....', '....xxxx....', '...xxXXxx...', '..xxXyyXxx..', '.xxXyyyyXxx.', 'xxXXyyyyXXxx', 'ZZZZZZZZZZZZ']; return ['.....z.....', '.....Z.....', '....ZZZ....', '..zzzzzzz..', '....ZvZ....', '....ZvZ....', '.zzzzzzzzz.', '....ZvZ....', '...ZZvZZ...', 'ZZZZZZZZZZZ']; }
+      case BT.KEEP: {
+        if (band === 2) { const g = egrid(16, 27); g[0][7] = 'q'; for (let y = 1; y < 4; y++) g[y][7] = 'R'; erect(g, 6, 4, 3, 2, 'Z'); efacade(g, 5, 6, 5, 5, 't', 'L', 1); efacade(g, 3, 11, 9, 6, 't', 'L', 2); efacade(g, 1, 17, 13, 10, 't', 'L', 3); g[26][7] = 'b'; g[26][6] = 'b'; return erows(g); }
+        if (band === 3) { const g = egrid(16, 36); g[0][7] = 'q'; for (let y = 1; y < 5; y++) g[y][7] = 'Z'; efacade(g, 5, 5, 6, 7, 'x', 'X', 1, 1); efacade(g, 4, 12, 8, 9, 'X', 'x', 2, 1); efacade(g, 2, 21, 12, 15, 'x', 'X', 3, 1); for (let y = 8; y < 36; y += 5) erect(g, 2 + (y < 21 ? 2 : 0), y, y < 21 ? 8 : 12, 1, 'Z'); erect(g, 5, 33, 6, 3, 'k'); return erows(g); }
+        const g = egrid(16, era >= 14 ? 40 : 26); const H = g.length; if (era >= 14) for (let y = 0; y < H - 4; y++) g[y][13] = 'v'; // the sky tether
+        for (let y = H - 22; y < H - 1; y++) { g[y][3] = 'q'; g[y][6] = 'q'; if (y % 3 === 0) erect(g, 3, y, 4, 1, 'q'); } // the launch tower
+        g[H - 21][9] = 'Z'; erect(g, 8, H - 20, 3, 2, 'Z'); erect(g, 8, H - 18, 3, 13, 'Z'); erect(g, 8, H - 12, 3, 1, 'k'); erect(g, 7, H - 6, 1, 2, 'R'); erect(g, 11, H - 6, 1, 2, 'R'); erect(g, 8, H - 5, 3, 1, 'R'); erect(g, 0, H - 2, 16, 1, 'z'); erect(g, 0, H - 1, 16, 1, 'C'); return erows(g);
+      }
+      case BT.WORKSHOP: {
+        if (band === 2) { if (era >= 11) return ['..........q..', '.CC..CC...C..', '..C...C...C..', '..C...C...q..', '.C.C.C.C..C..', 'CCCCCCCC..C..', 'CCCCCCCCCCCCC', 'CDDDDDCCCDDDC', 'CCCCCCCCCCCCC']; return ['..........q.', '..........C.', '..........C.', '..........q.', '..mmmmmmm.C.', '.mmmmmmmmmC.', 'mmmmmmmmmmmm', 'mLmmLmmLmmLm', 'mmmmmmmmmmmm', 'mmmmbbmmmmmm']; }
+        if (band === 3) return ['.........e.e', '..........e.', '.........e.e', '..........Z.', '..........Z.', '..........Z.', 'ZZZZZZZZZ.Z.', 'ZmZmZmZmZ.Z.', 'ZZZZZZZZZ.Z.', 'ZvvvvvvvZ.Z.', 'ZZZZZZZZZZZZ'];
+        return ['............', '..mmmmmmmm..', '.mm......mm.', 'mm..zzzz..mm', 'm..zZZZZz..m', 'mm..zzzz..mm', '.mm......mm.', '..mmmmmmmm..', 'ZZZZZZZZZZZZ'];
+      }
+      case BT.MARKET: { if (band === 2) return ['............', 'CCCCkkkkCCCC', 'CCCCCCCCCCCC', 'CCxxCCCCxxCC', 'CCxxCbbCxxCC', 'DDDDDDDDDDDD', 'D.e.D.e.D.e.']; if (band === 3) return ['...ZZZZZZ...', '.ZZxxxxxxZZ.', 'ZxxxxxxxxxxZ', 'xxkkkkkxxvxx', 'xxkkkkkxxxxx', 'xxxxxbbxxxxx', 'DDDDDDDDDDDD']; return ['....xxxx....', '..xxxxxxxx..', '.xxxzxxzxxx.', 'xxxxxxxxxxxx', 'xzxxxxxxxxzx', 'zzzzzzzzzzzz']; }
+      case BT.GRANARY: { if (band === 2) return ['CCCCCCC.', 'CDCDCDC.', 'CCCCCCC.', 'CDCDCDC.', 'CDCDCDC.', 'CDCDCDC.', 'CDCDCDC.', 'CCCCCCC.', 'CDCDCDC.', 'CCCCCCC.']; if (band === 3) { const g = egrid(7, 15); efacade(g, 0, 0, 7, 15, 'x', 'g', 3, 1); return erows(g); } return ['.........', '.xx.xx.xx', 'xggxggxgg', 'xggxggxgg', 'zzzzzzzzz']; }
+      case BT.TOWER: { if (band === 2) return ['...o...', '...R...', '..R.R..', '..R.R..', '..RRR..', '..R.R..', '.R...R.', '.RRRRR.', '.R...R.', 'R.....R', 'CCCCCCC', 'CbbbbbC', 'CCCCCCC']; if (band === 3) return ['..ZZZ..', '.ZZZZZ.', 'ZZZZZZZ', '.ZZZZZ.', '...C...', '...C...', '..CCC..', '..CCC..', '..CCC..', '.CCCCC.']; return ['..ppp..', '.ppppp.', '..ppp..', '...Z...', '..zZz..', '...Z...', '..ZZZ..', '..ZZZ..', '.ZZZZZ.', 'ZZZZZZZ']; }
+      case BT.DOCK: { if (band >= 2) return band === 4 ? ['........', '..ZZZZ..', '.ZvvvvZ.', '.zzzzzz.', 'CCCCCCCC'] : ['K......K', 'KKKKKKKK', 'K.R....K', 'K.R....K', 'KqvgK..K', 'KqvgK..K', 'CCCCCCCC']; return null; }
+      case BT.WALL: { if (band >= 2) return band === 4 ? ['vvvv', 'vzvz', 'vvvv', 'ZZZZ'] : ['R.R.', 'CCCC', 'CDCC', 'CCDC', 'CCCC']; return band === 1 ? ['n.n.', 'nnnn', 'nBnn', 'nnBn', 'nnnn'] : null; }
+    }
+    return null;
+  }
+  R._eraSprite = (type, band, v, era, kc) => { const rows = eraSprite(type, band, v, era); return rows ? makeSprite(rows, Object.assign({}, BASEPAL, ERA_PAL, { k: kc || [176, 60, 52], K: dark(kc || [176, 60, 52]) }), false) : makeSprite(B_SPR[type], Object.assign({}, BASEPAL, { k: kc || [176, 60, 52], K: dark(kc || [176, 60, 52]), c: [196, 162, 108] }), false); }; // (for a sprite sheet)
   function buildingSprite(b) {
     if (b.type === BT.FARM) return farmSprite(Math.min(3, (b.growth * 4) | 0));
     const k = Civ.kingdoms[b.kd], kc = k ? k.color : [150, 150, 150], early = (b.era || 0) < 4 ? 1 : 0;
+    const cc = Civ.cities[b.city], era = cc ? cc.era : b.era || 0;
+    if (era >= 7) { // the later ages rebuild the town in their own look
+      const band = era >= 13 ? 4 : era >= 12 ? 3 : era >= 10 ? 2 : era >= 9 ? 1 : 0, v = b.id % 3, big = era >= 14 && band === 4 ? 1 : era >= 11 && band === 2 ? 1 : 0;
+      const key = `e${b.type}|${b.kd}|${band}|${v}|${big}`;
+      const hit = cache.get(key);
+      if (hit !== undefined) { if (hit) return hit; }
+      else {
+        const rows = eraSprite(b.type, band, v, band === 4 ? (big ? 14 : 13) : band === 2 ? (big ? 11 : 10) : era);
+        if (rows) return getSprite(key, () => makeSprite(rows, Object.assign({}, BASEPAL, ERA_PAL, { k: kc, K: dark(kc) }), false));
+        cache.set(key, null); // (this type keeps its older look)
+      }
+    }
     return getSprite(`b${b.type}|${b.kd}|${early}`, () => {
       const pal = Object.assign({}, BASEPAL, { k: kc, K: dark(kc), c: [196, 162, 108] });
       if (early && b.type === BT.HOUSE) Object.assign(pal, { w: [188, 150, 104], W: [140, 108, 72], k: [196, 170, 96], K: [150, 124, 70] }); // mud brick and thatch

@@ -208,7 +208,7 @@
     const la = clone(s.lang); AG.Lang.list = la.list; AG.Lang.splits = la.splits; AG.Lang.changes = la.changes;
     const te = clone(s.tech); AG.Tech.banned = new Set(te.banned); AG.Tech.firsts = te.firsts; AG.Tech.discoveries = te.discoveries; AG.Tech.losses = te.losses;
     const cv = clone(s.civ);
-    AG.Civ.kingdoms = cv.kingdoms; AG.Civ.cities = cv.cities; AG.Civ.buildings = cv.buildings; AG.Civ.resetFree(); AG.Civ.religions = cv.religions; AG.Civ.squads = cv.squads; AG.Civ.routes = cv.routes; AG.Civ.expeditions = cv.expeditions; AG.Civ.contact.set(cv.contact); AG.Civ.embodied = cv.embodied;
+    AG.Civ.kingdoms = cv.kingdoms; AG.Civ.cities = cv.cities; for (const c of cv.cities) if (c && c.tech && c.tech.length < AG.Tech.NT) { const t = new Uint8Array(AG.Tech.NT); t.set(c.tech); c.tech = t; } /* (saves from before newer inventions) */ AG.Civ.buildings = cv.buildings; AG.Civ.resetFree(); AG.Civ.religions = cv.religions; AG.Civ.squads = cv.squads; AG.Civ.routes = cv.routes; AG.Civ.expeditions = cv.expeditions; AG.Civ.contact.set(cv.contact); AG.Civ.embodied = cv.embodied;
     const wa = clone(s.war); AG.War.campaigns = wa.campaigns; AG.War.battles = wa.battles;
     for (const k of Object.keys(U)) if (ArrayBuffer.isView(U[k])) { U[k].fill(0); if (s.ent[k]) U[k].set(s.ent[k]); }
     U.hi = s.entMeta.hi; U.count = s.entMeta.count; AG.Ent.setState(s.entMeta);

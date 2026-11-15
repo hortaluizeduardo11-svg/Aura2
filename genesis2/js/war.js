@@ -92,6 +92,7 @@
     AG.History.event('war', `${kind === 'raids' ? 'Raiding begins between' : 'War breaks out between'} the ${A.name} and the ${B.name}${reason ? ' ' + reason : ''}`, { x: capX(A), y: capY(A), polity: A.id, cause: reason || 'old grievances' });
     // allies join
     for (const C of Civ.kingdoms) if (C.alive && C !== A && C !== B && C.ally[B.id] && !C.war[A.id]) { C.war[A.id] = A.war[C.id] = 1; C.warSince[A.id] = A.warSince[C.id] = year(); }
+    AG.Warfare.onDeclare(A, B); AG.Warfare.joinWars(A, B);
   };
   Civ.declareWar = War.declare;
   War.peace = function (A, B, reason, tribute) {
@@ -125,7 +126,8 @@
         if (ddx > 260 || ddx < -260 || ddy > 260 || ddy < -260) continue;
         const dist = Math.sqrt(ddx * ddx + ddy * ddy);
         if (dist > 260) continue;
-        let base = A.lang === B.lang ? 18 : AG.Lang.similarity(A.lang, B.lang) > 0.4 ? 8 : -4;
+        let base = A.lang === B.lang ? 9 : AG.Lang.similarity(A.lang, B.lang) > 0.4 ? 3 : -6;
+        if ((ca.crowded || cb.crowded) && dist < 120) base -= 8; // land hunger
         const ra = A.religion >= 0 ? Civ.religions[A.religion] : null, rb = B.religion >= 0 ? Civ.religions[B.religion] : null;
         if (ra && rb) { if (ra === rb) base += 22; else base -= (ra.tenet === 'zealous' || rb.tenet === 'zealous') ? 28 : 10; if (ra.tenet === 'pacifist' || rb.tenet === 'pacifist') base += 8; }
         base += Math.min(30, (A.trade[b] + B.trade[a]) * 0.5);
@@ -144,13 +146,20 @@
         A.mods[b] *= d9; B.mods[a] *= d9;
         if (A.war[b]) base -= 25;
         if (AG.Races) { if ((A.race || 0) !== (B.race || 0)) base -= 16 * Math.max(AG.Races.get(A.race).xeno, AG.Races.get(B.race).xeno); else base += 5; } // kin and strangers
+        // rivalry of states: neighbouring states compete for land; the strong covet the weak; a
+        // realm far ahead in the ages looks on its neighbours as lands to take
+        if (A.gov >= 2 && B.gov >= 2 && dist < 150) base -= 12;
+        const ratio = (A.pop + 5) / (B.pop + 5);
+        if ((ratio > 1.8 && A.gov >= 2) || (ratio < 1 / 1.8 && B.gov >= 2)) base -= 10;
+        const gap = Math.abs((ca.era || 0) - (cb.era || 0));
+        if (gap >= 2) base -= 6 * Math.min(3, gap - 1);
         let op = A.opinion[b];
         op += (base - op) * Math.min(1, 0.25 * dy) + (rnd() - 0.5) * 5;
         op = AG.clamp(op, -100, 100);
         A.opinion[b] = B.opinion[a] = op;
         if (!A.war[b]) {
           const hungry = (ca.famine || cb.famine) ? 1.6 : 1;
-          if (op < -35 && (cont > 0 || dist < 90) && A.pop > 15 && B.pop > 15 && rnd() < dy * 0.12 * hungry) {
+          if (op < -32 && (cont > 0 || dist < (A.gov >= 2 || B.gov >= 2 ? 130 : 90)) && A.pop > 15 && B.pop > 15 && rnd() < dy * 0.12 * hungry) {
             const holy = ra && rb && ra !== rb && (ra.tenet === 'zealous' || rb.tenet === 'zealous');
             const reason = A.mods[b] < -20 ? 'as divine discord takes hold' : grudge > 4 ? 'to avenge old wrongs' : holy ? 'in a holy war' : ca.famine || cb.famine ? 'over food in a hungry year' : cont > 30 ? 'over disputed land' : rulerHas(A, 'cruel') ? 'at the whim of a cruel ruler' : 'over old grievances';
             const [x, y] = rnd() < 0.5 ? [A, B] : [B, A];
@@ -161,9 +170,9 @@
           }
         } else {
           const long = year() - A.warSince[b] > 4;
-          if (long && (op > -5 || A.exhaustion + B.exhaustion > 70 || A.mods[b] > 30) && rnd() < dy * 0.3) {
-            const loser = A.losses - A.kills > B.losses - B.kills ? A : B, winner = loser === A ? B : A;
-            War.peace(A, B, A.mods[b] > 30 ? 'by divine will' : 'after a weary war', winner.gov >= 2 && Math.abs(A.kills - B.kills) > 10 ? { payer: loser, to: winner } : null);
+          const sue = AG.Warfare.peaceWish(A, B); // (a beaten side sues for peace)
+          if (long && (op > -5 || A.exhaustion + B.exhaustion > 70 - sue * 40 || A.mods[b] > 30 || sue > 0.55) && rnd() < dy * (0.3 + sue * 0.4)) {
+            AG.Warfare.makePeace(A, B, A.mods[b] > 30 ? 'by divine will' : sue > 0.55 ? 'as the beaten side sues for peace' : 'after a weary war');
           }
         }
       }
@@ -177,9 +186,8 @@
   function strength(c) {
     let n = 0, f = 0;
     for (const P of Civ.persons(c)) { if (P.job === J.SOLDIER) { n += 1; f += 1 + P.skills[SK.FIGHT] / 60; } else if (P.job !== J.CHILD && P.job !== J.ELDER && P.sex === 1 && c.nomadic) { n += 0.4; f += 0.4; } }
-    const k = (t) => Tech.knows(c, t);
-    const mul = (k('bow') ? 1.25 : 1) * (k('bronze') ? 1.3 : 1) * (k('iron') ? 1.2 : 1) * (k('chariots') ? 1.2 : 1) * (k('riding') ? 1.1 : 1);
-    return { n, power: f * mul * (AG.Races ? AG.Races.of(c).war : 1) };
+    const kd = Civ.kingdoms[c.kd];
+    return { n, power: f * AG.Warfare.arms(c) * (AG.Races ? AG.Races.of(c).war : 1) * (kd ? AG.Warfare.generalMul(kd) : 1) };
   }
   function warTick(dy) {
     for (const k of Civ.kingdoms) {
@@ -214,7 +222,8 @@
   function battle(cp, A, B, src, tgt) {
     War.battles++;
     const sa = strength(src), sb = strength(tgt);
-    let pa = sa.power * (0.8 + rnd() * 0.4) * (cp.raid ? 0.8 : 1), pb = Math.max(0.5, sb.power) * (0.8 + rnd() * 0.4);
+    const field = AG.Warfare.field(src, tgt, A, B);
+    let pa = sa.power * (0.8 + rnd() * 0.4) * (cp.raid ? 0.8 : 1) * field.att * (cp.blitz ? 1.5 : 1), pb = Math.max(0.5, sb.power) * (0.8 + rnd() * 0.4) * field.def;
     if (tgt.walled) pb *= 1.8; else if (Tech.knows(tgt, 'fortification')) pb *= 1.2;
     if (Tech.knows(src, 'engineering') && tgt.walled) pb /= 1.4;
     const aWins = pa * pa > pb * pb;
@@ -226,11 +235,13 @@
     for (const P of Civ.persons(src)) if (P.job === J.SOLDIER) People.remember(P, aWins ? MK.VICTORY : MK.DEFEAT, { v: aWins ? 0.5 : -0.6, s: 0.6, d: tgt.name });
     for (const P of Civ.persons(tgt)) People.remember(P, MK.WAR, { v: -0.6, s: 0.7, d: `against the ${A.name} at ${tgt.name}` });
     tgt.grievance.set(src.id, (tgt.grievance.get(src.id) || 0) + 1 + lossB * 0.3);
+    const capBefore = tgt.kd;
     if (aWins) {
       if (cp.raid) { const loot = Math.min(tgt.food * 0.4, 20); tgt.food -= loot; src.food += loot; if (rnd() < 0.3) captives(tgt, src); AG.History.event('raid', `Raiders of the ${A.name} strike ${tgt.name}`, { x: tgt.x, y: tgt.y, polity: A.id, comm: tgt.id, cause: 'war' }); }
       else if (A.gov >= 2 && lossB >= sb.n * 0.5 && rnd() < 0.6) War.captureCity(tgt, A.id);
-      else AG.History.event('battle', `The ${A.name} defeat the ${B.name} at ${tgt.name}`, { x: tgt.x, y: tgt.y, polity: A.id, comm: tgt.id, cause: 'war' });
-    } else if (lossA > 2) AG.History.event('battle', `The ${B.name} hold ${tgt.name} against the ${A.name}`, { x: tgt.x, y: tgt.y, polity: B.id, comm: tgt.id, cause: 'war' });
+      else AG.History.event('battle', `The ${A.name}${/s$/.test(A.name) ? "'" : "'s"} ${AG.Warfare.armsOf(src)} defeat the ${B.name} at ${tgt.name}${field.notes.length ? ' ' + field.notes[0] : ''}`, { x: tgt.x, y: tgt.y, polity: A.id, comm: tgt.id, cause: 'war' });
+    } else if (lossA > 2) AG.History.event('battle', `The ${B.name} hold ${tgt.name} against the ${A.name}${field.notes.length ? ' ' + field.notes[0] : ''}`, { x: tgt.x, y: tgt.y, polity: B.id, comm: tgt.id, cause: 'war' });
+    AG.Warfare.afterBattle(A, B, src, tgt, aWins, lossA, lossB, tgt.kd !== capBefore, field);
   }
   function kill(c, n, cause, foe) {
     const ps = Civ.persons(c).filter((P) => P.job === J.SOLDIER || (c.nomadic && P.sex === 1 && P.job !== J.CHILD));
@@ -523,6 +534,7 @@
 
   // ============================================================ clocks
   War.yearStep = function (dy) {
+    AG.Warfare.yearStep(dy);
     diplomacy(dy); warTick(dy); religionYear(dy); tradeYear(dy); outbreaks(dy);
     if (AG.Races) AG.Races.yearStep(dy);
   };

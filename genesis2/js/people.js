@@ -314,7 +314,7 @@
     const pr = M.preg; M.preg = null;
     if (!pr) return null;
     const c = AG.Civ.cities[M.comm];
-    const med = c && AG.Tech.knows(c, 'medicine') ? 0.4 : c && AG.Tech.knows(c, 'herbal') ? 0.75 : 1;
+    const med = !c ? 1 : AG.Tech.knows(c, 'genetics') ? 0.05 : AG.Tech.knows(c, 'antibiotics') ? 0.1 : AG.Tech.knows(c, 'vaccines') ? 0.2 : AG.Tech.knows(c, 'medicine') ? 0.4 : AG.Tech.knows(c, 'herbal') ? 0.75 : 1;
     // childbirth was dangerous for mothers and infants alike
     if (rnd() < 0.012 * med * (1.4 - M.nutr * 0.5)) { People.die(M, 'childbirth'); if (rnd() < 0.5) return null; }
     const K = People.create({ gen: pr.gen, comm: M.comm, mom: M.id, dad: pr.father, x: M.x, y: M.y, race: M.race || 0 });
@@ -336,7 +336,7 @@
   // dy years pass for everyone in community c. nutr = how well the community ate (0..1).
   People.yearStep = function (c, dy, nutr) {
     const y = year(), mem = c.members;
-    const medicine = AG.Tech.knows(c, 'medicine') ? 0.6 : AG.Tech.knows(c, 'herbal') ? 0.8 : 1;
+    const medicine = AG.Tech.knows(c, 'genetics') ? 0.15 : AG.Tech.knows(c, 'antibiotics') ? 0.22 : AG.Tech.knows(c, 'vaccines') ? 0.35 : AG.Tech.knows(c, 'medicine') ? 0.6 : AG.Tech.knows(c, 'herbal') ? 0.8 : 1;
     // factors that depend only on dy, computed once per community
     const heal = Math.pow(0.25, dy * (AG.Tech.knows(c, 'herbal') ? 1.4 : 1)), f = Math.pow(0.45, dy), fl = Math.pow(0.8, dy), ft = Math.pow(0.9, dy);
     const dec = [], DEC = 11; for (let k = 0; k < DEC; k++) dec.push(Math.pow(0.9, dy * (1 - (k / (DEC - 1)) * 0.6)));

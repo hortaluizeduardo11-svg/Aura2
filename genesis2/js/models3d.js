@@ -281,7 +281,7 @@
     const fashion = hash(kd + 7, c ? c.lang : 0), h = hash(uid, 91);
     let style;
     if (job === AG.J.PRIEST) style = 'robe';
-    else if (clim === 'snow' || clim === 'cold') style = 'fur';
+    else if ((clim === 'snow' || clim === 'cold') && era < 9) style = 'fur'; // (woven coats from the Industrial age)
     else if (clim === 'tropic') style = male || child ? 'wrap' : 'wrapf';
     else if (era <= 1) style = 'hide';
     else if (clim === 'dry') style = 'robe';
@@ -296,6 +296,12 @@
       cloth = pick === 0 ? mix(LINEN, kc, Math.min(1, dye + (king ? 0.3 : 0))) : pick === 1 ? mix(LINEN, kc2, dye * 0.8) : pick === 2 ? LINEN : pick === 3 ? WOOL : mix(OCHRE, kc, dye * 0.4);
       if (style === 'robe' && clim === 'dry') cloth = mix(cloth, [236, 226, 204], 0.45); // pale cloth in the sun
       if (job === AG.J.SOLDIER) cloth = mix(kc, [70, 60, 50], 0.35);
+      // the later ages dress by their own fashions: dark coats, then bright modern colours, then
+      // casual wear, then pale suits of the Space Age
+      if (era >= 9) {
+        const FASH = era >= 13 ? [[232, 236, 242], [208, 214, 224], [180, 220, 236]] : era >= 12 ? [[60, 90, 140], [200, 200, 196], [40, 40, 44], [176, 70, 60], [90, 140, 110]] : era >= 10 ? [[70, 80, 110], [150, 60, 50], [200, 180, 140], [60, 110, 90], [90, 90, 96]] : [[48, 46, 52], [70, 60, 54], [90, 96, 104], [110, 80, 60]];
+        cloth = job === AG.J.SOLDIER ? (era >= 13 ? [226, 232, 238] : era >= 10 ? [92, 104, 62] : mix(kc, [40, 40, 50], 0.5)) : job === AG.J.PRIEST ? cloth : mix(FASH[h % FASH.length], kc, king ? 0.4 : 0.12);
+      }
     }
     // hair: a fashion of the people, with some going their own way
     let hair;
@@ -308,7 +314,7 @@
     }
     let hat = null, hatC = [255, 255, 255];
     if (king) { hat = 'crown'; hatC = [236, 190, 72]; }
-    else if (job === AG.J.SOLDIER) { hat = 'helmet'; hatC = era >= 5 ? [150, 154, 164] : era >= 4 ? [200, 152, 80] : [128, 92, 58]; }
+    else if (job === AG.J.SOLDIER) { if (era < 10) { hat = 'helmet'; hatC = era >= 5 ? [150, 154, 164] : era >= 4 ? [200, 152, 80] : [128, 92, 58]; } } // (modern helmets come with the gear)
     else if (job === AG.J.PRIEST) { hat = 'cowl'; hatC = cloth; }
     else if (!child && style === 'robe' && clim === 'dry') { hat = 'turban'; hatC = (h >>> 3) % 3 ? [240, 234, 220] : mix(kc, LINEN, 0.4); }
     else if (!child && (style === 'wrap' || style === 'wrapf') && (h >>> 5) % 3 === 0) { hat = 'feathers'; hatC = mix(kc, [255, 255, 255], 0.2); }
@@ -593,7 +599,7 @@
     const BT = AG.BT, smokes = [], flag = (kc[0] << 16) | (kc[1] << 8) | kc[2];
     const kind = type === BT.HALL ? 'hall' : type === BT.TEMPLE || type === BT.SHRINE ? 'temple' : type === BT.HOUSE || type === BT.HUT || type === BT.TENT ? 'home' : null;
     if (!kind) return null;
-    const s = type === BT.TENT || type === BT.SHRINE ? 0.6 : 1, g = 1 + Math.min(0.6, Math.max(0, era - 4) * 0.07); // later eras build higher
+    const s = type === BT.TENT || type === BT.SHRINE ? 0.6 : 1, g = 1 + Math.min(1.4, Math.max(0, era - 4) * 0.1); // later eras build higher
     const S = (n) => n * s;
     switch (style) {
       case 'sylvan': { // homes among (and in) great trees, leaf roofs, lanterns
@@ -653,8 +659,424 @@
         break;
       }
     }
+    // the later ages reach every people: lamps, then masts and lit rings around their own forms
+    if (era >= 9) k.glow(0xffe2a0, S(0.3), S(0.35), S(0.62), S(0.18), S(0.16), S(0.02));
+    if (era >= 10) { k.box({ c: 0x8c939c, t: 'metal' }, S(-0.35), S(1.2) * g, S(-0.2), S(0.03), S(0.8), S(0.03)); k.glow(0xff4a4a, S(-0.35), S(2.0) * g, S(-0.2), S(0.05), S(0.05), S(0.05)); }
+    if (era >= 13) k.glowc(0x7affd0, 0, S(0.1), 0, S(kind === 'home' ? 1.8 : 3.0), S(0.04), S(kind === 'home' ? 1.8 : 2.4));
     return smokes;
   }
+
+  // ============================================================ the later ages
+  // From the Medieval age on, towns rebuild in the look of their age: half-timbered townhouses,
+  // castles, cathedrals and windmills; brick terraces, factories, railway halls and domed capitols;
+  // apartment blocks, skyscrapers, malls and cooling towers; glass towers, data centres and wind
+  // farms; arcologies, fusion rings and launch towers. Regional flavour stays in walls and roofs
+  // (whitewash and domes in dry lands, steep roofs in the north). Bands: 0 Medieval-Renaissance,
+  // 1 Industrial, 2 Modern-Atomic, 3 Information, 4 Space Age and beyond.
+  const BRICK = { c: 0xa65a42, t: 'brick' }, BRICK2 = { c: 0x8a4a3a, t: 'brick' }, YBRICK = { c: 0xc8a070, t: 'brick' };
+  const CONC = { c: 0xbab6ae, t: 'concrete' }, CONC2 = { c: 0x98948c, t: 'concrete' };
+  const GLASS = { c: 0x86acd0, t: 'glass' }, GLASS2 = { c: 0x5e88b0, t: 'glass' }, GGREEN = { c: 0x7ab8a0, t: 'glass' };
+  const STEEL = { c: 0x8c939c, t: 'metal' }, STEEL2 = { c: 0x5c636c, t: 'metal' }, WHITE = { c: 0xeef1f4, t: 'plaster' }, WMETAL = { c: 0xe4e8ee, t: 'metal' };
+  const SLATE_T = { c: 0x4f5864, t: 'tiles' }, LAMP = 0xffe2a0, COOL = 0xbfe6ff, NEON = 0x7affd0, NEON2 = 0x7ab8ff, REDL = 0xff4a4a;
+  const eraBand = (era) => (era >= 13 ? 4 : era >= 12 ? 3 : era >= 10 ? 2 : era >= 9 ? 1 : era >= 7 ? 0 : -1);
+  M.eraBand = eraBand;
+  // lit windows on the four faces of a w x d block, n per row, at the given heights
+  function winGrid(k, w, d, ys, n, hex, ww, wh) {
+    ww = ww || 0.14; wh = wh || 0.16;
+    for (const y of ys) for (let q = 0; q < n; q++) {
+      const fx = -w / 2 + (w / n) * (q + 0.5), fz = -d / 2 + (d / n) * (q + 0.5);
+      k.glow(hex, fx, y, d / 2 + 0.012, ww, wh, 0.02); k.glow(hex, fx, y, -d / 2 - 0.012, ww, wh, 0.02);
+      k.glow(hex, w / 2 + 0.012, y, fz, 0.02, wh, ww); k.glow(hex, -w / 2 - 0.012, y, fz, 0.02, wh, ww);
+    }
+  }
+  const floors = (y0, n, h) => Array.from({ length: n }, (_, q) => y0 + q * h);
+  // a lattice mast: four legs and cross bars
+  function lattice(k, mat, y0, h, r0, r1) {
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const lean = (r0 - r1) / h; k.box(mat, sx * r0, y0, sz * r0, 0.05, h, 0.05, 0, -sz * lean, sx * lean); }
+    for (let y = y0 + 0.4; y < y0 + h; y += 0.55) { const r = r0 + (r1 - r0) * ((y - y0) / h); k.box(mat, 0, y, r, r * 2, 0.03, 0.03); k.box(mat, 0, y, -r, r * 2, 0.03, 0.03); k.box(mat, r, y, 0, 0.03, 0.03, r * 2); k.box(mat, -r, y, 0, 0.03, 0.03, r * 2); }
+  }
+  // a rocket on its pad (the Space Age launch complex)
+  function rocket(k, x, z, h, kc) {
+    k.cyl(WMETAL, x, 0.3, z, 0.42, h, 0.42); k.cone(WMETAL, x, 0.3 + h, z, 0.42, 0.7, 0.42);
+    k.cyl(kc, x, 0.3 + h * 0.62, z, 0.43, 0.25, 0.43);
+    for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2; k.box(STEEL2, x + Math.cos(a) * 0.28, 0.3, z + Math.sin(a) * 0.28, 0.04, 0.6, 0.3, -a); }
+    for (const a of [0.8, 2.4, 3.9, 5.5]) k.cyl(WMETAL, x + Math.cos(a) * 0.32, 0.3, z + Math.sin(a) * 0.32, 0.2, h * 0.45, 0.2);
+  }
+  function eraKit(k, type, style, kc, v, era, roof) {
+    const BT = AG.BT, band = eraBand(era), smokes = [], flag = (kc[0] << 16) | (kc[1] << 8) | kc[2];
+    const dry = style === 'dry' || style === 'tropic', north = style === 'snow' || style === 'cold';
+    const tile = { c: roof, t: 'tiles' }, home = type === BT.HOUSE || type === BT.HUT;
+    const s = type === BT.HUT ? 0.86 : 1, S = (n) => n * s;
+    if (band === 0) {
+      if (home) {
+        if (dry) { // whitewashed courtyard house: flat roof, parapet, a little dome or a wind tower, a wooden balcony
+          const wall = { c: [0xf0e8d8, 0xe8dcc4, 0xf4ece0][v], t: 'plaster' };
+          k.box(wall, 0, 0, 0, S(1.5), S(1.25), S(1.4)); k.box(wall, 0, S(1.25), 0, S(1.56), S(0.12), S(1.46));
+          if (v === 1) { k.cyl(wall, S(0.3), S(1.25), S(-0.2), S(0.6), S(0.18), S(0.6)); k.ico(wall, S(0.3), S(1.48), S(-0.2), S(0.62), S(0.5), S(0.62)); }
+          else { k.box(wall, S(-0.45), S(1.25), S(-0.4), S(0.4), S(0.6), S(0.4)); k.glow(0x2a2018, S(-0.45), S(1.55), S(-0.19), S(0.22), S(0.2), S(0.02)); }
+          k.box({ c: 0x6a4a2e, t: 'planks' }, S(0.35), S(0.6), S(0.74), S(0.5), S(0.42), S(0.14));
+          k.box(DOOR, S(-0.3), 0, S(0.705), S(0.3), S(0.55), S(0.02)); k.cone(DOOR, S(-0.3), S(0.55), S(0.705), S(0.3), S(0.14), S(0.02));
+          winGrid(k, S(1.5), S(1.4), [S(0.85)], 2, LAMP, S(0.1), S(0.16));
+          return smokes;
+        }
+        // a half-timbered townhouse: stone ground floor, jettied upper floor, steep roof, chimney
+        const plaster = { c: [0xeee4cc, 0xe6d6b6, 0xf0e2c8][v], t: 'plaster' }, st = { c: 0x9a948a, t: 'masonry' };
+        k.box(st, 0, 0, 0, S(1.4), S(0.62), S(1.3));
+        k.box(plaster, 0, S(0.62), 0, S(1.52), S(0.6), S(1.42)); k.box(BEAM, 0, S(0.62), 0, S(1.56), S(0.05), S(1.46));
+        if (era >= 8) k.box(plaster, 0, S(1.22), 0, S(1.52), S(0.5), S(1.42)); // the Renaissance adds a storey
+        const top = era >= 8 ? S(1.72) : S(1.22);
+        for (const x of [-0.74, -0.25, 0.25, 0.74]) { k.box(BEAM, S(x), S(0.62), S(0.715), S(0.06), top - S(0.62), S(0.02)); k.box(BEAM, S(x), S(0.62), S(-0.715), S(0.06), top - S(0.62), S(0.02)); }
+        k.box(BEAM, 0, S(0.9), S(0.715), S(1.52), S(0.04), S(0.02), 0, 0, 0.0); k.box(BEAM, S(-0.5), S(0.75), S(0.716), S(0.04), S(0.5), S(0.02), 0, 0, 0.7);
+        k.prism(north ? { c: 0x3a3a3a, t: 'tiles' } : tile, 0, top, 0, S(1.7), north ? S(1.3) : S(1.0), S(1.56));
+        if (v === 2 && era >= 8) { for (let q = 0; q < 3; q++) k.box(st, 0, top + S(q * 0.28), S(0.72), S(1.4 - q * 0.42), S(0.28), S(0.1)); } // a stepped gable
+        k.box(DOOR, S(0.3), 0, S(0.655), S(0.3), S(0.52), S(0.02)); k.box(st, S(-0.45), top - S(0.3), S(-0.35), S(0.22), S(1.1), S(0.22)); smokes.push([S(-0.45), top + S(0.85), S(-0.35)]);
+        winGrid(k, S(1.52), S(1.42), era >= 8 ? [S(0.8), S(1.35)] : [S(0.82)], 2, LAMP, S(0.16), S(0.18));
+        return smokes;
+      }
+      switch (type) {
+        case BT.HALL: { // a guildhall: an open arcade below, a council room above, a belfry
+          const st = { c: 0xb0a898, t: 'masonry' };
+          k.box(st, 0, 0, 0, 2.6, 0.12, 1.7);
+          for (let q = 0; q < 5; q++) { k.cyl(st, -1.0 + q * 0.5, 0.12, 0.62, 0.14, 0.62, 0.14); }
+          k.box(st, 0, 0.12, -0.15, 2.4, 0.62, 1.1); k.box(st, 0, 0.74, 0, 2.5, 0.75, 1.5); k.prism(tile, 0, 1.49, 0, 2.6, 0.75, 1.6, Math.PI / 2);
+          k.box(st, 0.85, 1.49, 0, 0.5, 1.2, 0.5); k.cone(tile, 0.85, 2.69, 0, 0.62, 0.9, 0.62); k.box(GOLD, 0.85, 3.59, 0, 0.04, 0.3, 0.04);
+          k.box(flag, -0.6, 1.0, 0.76, 0.35, 0.5, 0.02); winGrid(k, 2.5, 1.5, [1.05], 4, LAMP, 0.14, 0.24);
+          return smokes;
+        }
+        case BT.TEMPLE: {
+          if (dry || era >= 8) { // a great domed temple on a drum, slender towers at the corners
+            const wall = { c: dry ? 0xece2cc : 0xd8d0c0, t: 'plaster' };
+            k.box(wall, 0, 0, 0, 2.6, 1.3, 2.6); k.cyl(wall, 0, 1.3, 0, 1.6, 0.5, 1.6); k.ico(dry ? { c: 0x4a8ab0, t: 'tiles' } : tile, 0, 2.05, 0, 1.75, 1.5, 1.75);
+            k.cyl(wall, 0, 2.7, 0, 0.3, 0.3, 0.3); k.cone(GOLD, 0, 3.0, 0, 0.2, 0.4, 0.2);
+            for (const [x, z] of [[-1.25, -1.25], [1.25, -1.25], [-1.25, 1.25], [1.25, 1.25]]) { k.cyl(wall, x, 0, z, 0.28, 2.6, 0.28); k.cone(dry ? GOLD : tile, x, 2.6, z, 0.32, 0.6, 0.32); }
+            k.box(DOOR, 0, 0, 1.31, 0.5, 0.8, 0.02); k.glow(0xffc46b, 0, 0.9, 1.31, 0.3, 0.3, 0.02);
+            return smokes;
+          }
+          // a cathedral: long nave, transept, twin west towers with spires, a rose window
+          const st = { c: 0xb8b0a0, t: 'masonry' }, dark = { c: 0x3a4048, t: 'tiles' };
+          k.box(st, 0, 0, 0.1, 1.2, 1.3, 2.4); k.prism(dark, 0, 1.3, 0.1, 1.3, 0.7, 2.44);
+          k.box(st, 0, 0, -0.2, 2.6, 1.1, 0.8); k.prism(dark, 0, 1.1, -0.2, 0.84, 0.6, 2.64, Math.PI / 2);
+          for (const x of [-0.45, 0.45]) { k.box(st, x, 0, 1.1, 0.5, 2.3, 0.5); k.cone(dark, x, 2.3, 1.1, 0.5, 1.2, 0.5); }
+          k.cone(dark, 0, 1.6, -0.2, 0.3, 1.4, 0.3);
+          k.glowc(0xffc46b, 0, 1.0, 1.36, 0.42, 0.02, 0.42, 0, Math.PI / 2); k.box(DOOR, 0, 0, 1.36, 0.36, 0.6, 0.02);
+          for (let q = 0; q < 4; q++) { k.glow(0xffb85a, 0.61, 0.5, -0.8 + q * 0.55, 0.02, 0.5, 0.14); k.glow(0xffb85a, -0.61, 0.5, -0.8 + q * 0.55, 0.02, 0.5, 0.14); }
+          return smokes;
+        }
+        case BT.SHRINE: { // a wayside chapel with a bell gable
+          const st = { c: 0xc8c0b0, t: 'masonry' };
+          k.box(st, 0, 0, 0, 0.6, 0.5, 0.75); k.prism(tile, 0, 0.5, 0, 0.66, 0.3, 0.8); k.box(st, 0, 0.5, 0.36, 0.3, 0.45, 0.06); k.glow(0xffc46b, 0, 0.12, 0.38, 0.16, 0.24, 0.02);
+          return smokes;
+        }
+        case BT.MARKET: { // a market hall on columns, the town's goods beneath, stalls around
+          const st = { c: 0xb0a898, t: 'masonry' };
+          k.box({ c: 0x9c968c, t: 'cobble' }, 0, 0, 0, 2.9, 0.05, 2.9);
+          for (const x of [-0.9, -0.3, 0.3, 0.9]) for (const z of [-0.6, 0.6]) k.box(BEAM, x, 0.05, z, 0.12, 0.7, 0.12);
+          k.box({ c: 0xe6d6b6, t: 'plaster' }, 0, 0.75, 0, 2.1, 0.6, 1.5); for (const x of [-1.0, -0.5, 0, 0.5, 1.0]) k.box(BEAM, x, 0.75, 0.76, 0.05, 0.6, 0.02);
+          k.prism(tile, 0, 1.35, 0, 2.2, 0.8, 1.6, Math.PI / 2);
+          for (let q = 0; q < 4; q++) { const x = -1.1 + q * 0.73; k.box(q % 2 ? 0xf6efe2 : flag, x, 0.5, 1.15, 0.5, 0.04, 0.5, 0, 0.2); k.box({ c: 0x8a6440, t: 'planks' }, x, 0.05, 1.15, 0.45, 0.32, 0.3); }
+          winGrid(k, 2.1, 1.5, [0.95], 4, LAMP, 0.14, 0.18);
+          return smokes;
+        }
+        case BT.WORKSHOP: { // a mill house with a water wheel and a forge chimney
+          const st = { c: 0x9a948a, t: 'masonry' };
+          k.box(st, 0, 0, -0.1, 2.2, 1.1, 1.5); k.prism(tile, 0, 1.1, -0.1, 2.3, 0.8, 1.6, Math.PI / 2);
+          k.cyl({ c: 0x6a4a2e, t: 'planks' }, 1.34, 0.55, 0.2, 1.1, 0.18, 1.1, 0, 0, Math.PI / 2); for (let q = 0; q < 6; q++) k.cbox(BEAM, 1.25, 0.55, 0.2, 0.22, 1.2, 0.05, 0, q * 0.52);
+          k.box(st, -0.7, 0.8, -0.5, 0.32, 1.4, 0.32); smokes.push([-0.7, 2.3, -0.5]);
+          k.box(DOOR, -0.2, 0, 0.66, 0.5, 0.6, 0.02); k.glow(0xff9a3c, -0.2, 0.05, 0.665, 0.4, 0.3, 0.02);
+          return smokes;
+        }
+        case BT.GRANARY: { // a tower windmill, its sails turned to the wind
+          const st = { c: 0xd8d0c0, t: 'plaster' };
+          k.taper(st, 0, 0, 0, 1.3, 1.9, 1.3); k.cone({ c: 0x5a4a3a, t: 'planks' }, 0, 1.9, 0, 1.0, 0.6, 1.0);
+          k.box(BEAM, 0, 1.75, 0.55, 0.12, 0.12, 0.3);
+          for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2 + 0.4; k.box({ c: 0x8a6a4a, t: 'planks' }, 0, 1.75, 0.7, 0.05, 1.25, 0.04, 0, 0, a - Math.PI / 2); k.box({ c: 0xe8e0cc, t: 'cloth' }, Math.cos(a) * 0.05 - Math.sin(a) * 0.12, 1.75 + Math.sin(a) * 0.05 + Math.cos(a) * 0.12, 0.72, 0.24, 1.1, 0.02, 0, 0, a - Math.PI / 2); }
+          k.box(DOOR, 0, 0, 0.62, 0.28, 0.5, 0.04); k.glow(LAMP, 0, 1.0, 0.56, 0.12, 0.16, 0.02);
+          return smokes;
+        }
+        case BT.DOCK: { // a stone quay with a treadwheel crane
+          const st = { c: 0x9a948a, t: 'masonry' };
+          k.box(st, 0, -1.0, 0, 2.0, 1.15, 2.0); k.box({ c: 0x8a6440, t: 'planks' }, 0, 0.15, 0.2, 1.9, 0.05, 1.4);
+          k.cyl({ c: 0x6a4a2e, t: 'planks' }, -0.5, 0.2, -0.4, 0.8, 0.4, 0.8, 0, 0, Math.PI / 2); k.box(BEAM, -0.5, 0.6, -0.4, 0.1, 1.2, 0.1); k.box(BEAM, -0.1, 1.7, -0.4, 1.0, 0.08, 0.08, 0, 0, -0.3);
+          k.box({ c: 0x9c7448, t: 'planks' }, 0.5, 0.2, 0.5, 0.35, 0.3, 0.35); k.cyl({ c: 0x7a4f2a, t: 'planks' }, 0.1, 0.2, 0.6, 0.26, 0.34, 0.26);
+          return smokes;
+        }
+      }
+      return null; // (castles, towers, walls, mines, farms keep their designs)
+    }
+    if (band === 1) { // ---------------------------------------------------- Industrial
+      if (home) {
+        if (dry) { // a stuccoed colonial house: tall shuttered windows, a veranda, a low tile roof
+          const wall = { c: [0xf2e2c0, 0xe8cfa8, 0xd8e2d0][v], t: 'plaster' };
+          k.box(wall, 0, 0, 0, S(1.5), S(1.5), S(1.3)); k.box({ c: roof, t: 'tiles' }, 0, S(1.5), 0, S(1.62), S(0.1), S(1.42));
+          k.box(wall, 0, S(0.72), S(0.78), S(1.5), S(0.06), S(0.3)); for (const x of [-0.7, 0, 0.7]) k.box(WHITE, S(x), 0, S(0.9), S(0.06), S(0.72), S(0.06));
+          for (const x of [-0.4, 0.4]) { k.box(0x4a7a5a, S(x - 0.13), S(0.9), S(0.66), S(0.08), S(0.4), S(0.02)); k.box(0x4a7a5a, S(x + 0.13), S(0.9), S(0.66), S(0.08), S(0.4), S(0.02)); }
+          winGrid(k, S(1.5), S(1.3), [S(0.35), S(1.1)], 2, LAMP, S(0.14), S(0.3));
+          return smokes;
+        }
+        const br = v === 1 ? YBRICK : BRICK, storeys = v === 2 ? 4 : v === 1 ? 3 : 2, H = storeys * 0.5;
+        k.box(br, 0, 0, 0, S(1.5), S(H), S(1.36)); k.box(CONC, 0, S(H), 0, S(1.56), S(0.06), S(1.42));
+        if (v === 1) { k.box(SLATE_T, 0, S(H + 0.06), 0, S(1.3), S(0.5), S(1.16)); for (const x of [-0.35, 0.35]) k.box(WHITE, S(x), S(H + 0.15), S(0.6), S(0.22), S(0.25), S(0.08)); }
+        else k.prism(SLATE_T, 0, S(H + 0.06), 0, S(1.6), S(0.55), S(1.46));
+        for (const x of [-0.5, 0.5]) { k.box(br, S(x), S(H), S(-0.5), S(0.2), S(0.9), S(0.3)); for (const dx of [-0.05, 0.05]) k.cyl({ c: 0xb06a4a, t: 'plain' }, S(x + dx), S(H + 0.9), S(-0.5), S(0.07), S(0.12), S(0.07)); smokes.push([S(x), S(H + 1.1), S(-0.5)]); }
+        k.box(0x2a3a4a, S(-0.35), 0, S(0.685), S(0.26), S(0.44), S(0.02)); k.box(0x4a2a2a, S(0.35), 0, S(0.685), S(0.26), S(0.44), S(0.02)); k.box(CONC2, 0, 0, S(0.74), S(1.4), S(0.06), S(0.1));
+        winGrid(k, S(1.5), S(1.36), floors(S(0.6), storeys - 1, S(0.5)).concat([S(0.1 + 0.15)]).slice(0, storeys), 3, LAMP, S(0.16), S(0.24));
+        return smokes;
+      }
+      switch (type) {
+        case BT.HALL: { // a town hall: columns, a pediment and a clock tower
+          k.box(CONC, 0, 0, 0, 2.7, 0.2, 1.8); k.box(YBRICK, 0, 0.2, -0.15, 2.5, 1.2, 1.3);
+          for (let q = 0; q < 6; q++) k.cyl(WHITE, -1.0 + q * 0.4, 0.2, 0.62, 0.14, 1.1, 0.14);
+          k.box(WHITE, 0, 1.3, 0.55, 2.4, 0.12, 0.4); k.prism(WHITE, 0, 1.42, 0.55, 2.4, 0.4, 0.4, Math.PI / 2); k.box(SLATE_T, 0, 1.4, -0.2, 2.5, 0.3, 1.2);
+          k.box(YBRICK, 0, 1.4, -0.3, 0.6, 1.4, 0.6); k.glowc(0xfff4d0, 0, 2.3, 0.01, 0.4, 0.02, 0.4, 0, Math.PI / 2); k.cone(SLATE_T, 0, 2.8, -0.3, 0.7, 0.8, 0.7); k.box(flag, 0.1, 3.7, -0.3, 0.4, 0.26, 0.03); k.box(STEEL2, 0, 3.6, -0.3, 0.04, 0.5, 0.04);
+          winGrid(k, 2.5, 1.3, [0.5, 1.0], 5, LAMP, 0.16, 0.28);
+          return smokes;
+        }
+        case BT.TEMPLE: {
+          if (dry) return eraKit(k, type, style, kc, v, 8, roof);
+          // a brick church with a tall spire
+          k.box(BRICK2, 0, 0, -0.2, 1.4, 1.4, 2.2); k.prism(SLATE_T, 0, 1.4, -0.2, 1.5, 0.8, 2.26);
+          k.box(BRICK2, 0, 0, 1.05, 0.7, 2.4, 0.7); k.cone6(SLATE_T, 0, 2.4, 1.05, 0.72, 2.2, 0.72); k.box(GOLD, 0, 4.6, 1.05, 0.04, 0.3, 0.04);
+          k.glowc(0xfff4d0, 0, 2.0, 1.41, 0.32, 0.02, 0.32, 0, Math.PI / 2); k.box(DOOR, 0, 0, 1.41, 0.3, 0.6, 0.02);
+          for (let q = 0; q < 4; q++) { k.glow(0xffb85a, 0.71, 0.5, -1.1 + q * 0.55, 0.02, 0.6, 0.16); k.glow(0xffb85a, -0.71, 0.5, -1.1 + q * 0.55, 0.02, 0.6, 0.16); }
+          return smokes;
+        }
+        case BT.SHRINE: { k.box(BRICK2, 0, 0, 0, 0.6, 0.55, 0.75); k.prism(SLATE_T, 0, 0.55, 0, 0.66, 0.35, 0.8); k.cone6(SLATE_T, 0, 0.9, 0.3, 0.2, 0.5, 0.2); k.glow(0xffc46b, 0, 0.12, 0.38, 0.16, 0.26, 0.02); return smokes; }
+        case BT.KEEP: { // a domed capitol with wings, columns and the realm's flag
+          k.box(CONC, 0, 0, 0, 3.8, 0.3, 3.0); for (let q = 0; q < 3; q++) k.box(WHITE, 0, 0.3 + q * 0.08, 1.35 - q * 0.12, 1.6, 0.08, 0.3);
+          k.box(WHITE, 0, 0.3, -0.2, 3.6, 1.3, 1.8); k.box(WHITE, 0, 1.6, -0.2, 3.7, 0.12, 1.9);
+          for (let q = 0; q < 8; q++) k.cyl(WHITE, -1.4 + q * 0.4, 0.55, 0.85, 0.16, 1.05, 0.16);
+          k.prism(WHITE, 0, 1.6, 0.85, 1.8, 0.45, 0.3, Math.PI / 2);
+          k.cyl(WHITE, 0, 1.72, -0.2, 1.4, 0.7, 1.4); for (let q = 0; q < 12; q++) { const a = q / 12 * Math.PI * 2; k.cyl(WHITE, Math.cos(a) * 0.72, 1.72, -0.2 + Math.sin(a) * 0.72, 0.08, 0.7, 0.08); }
+          k.ico({ c: 0x9ab0b8, t: 'metal' }, 0, 2.5, -0.2, 1.45, 1.2, 1.45); k.cyl(WHITE, 0, 3.0, -0.2, 0.3, 0.4, 0.3); k.box(STEEL2, 0, 3.4, -0.2, 0.04, 0.8, 0.04); k.box(flag, 0.25, 3.95, -0.2, 0.46, 0.3, 0.03);
+          winGrid(k, 3.6, 1.8, [0.7, 1.2], 7, LAMP, 0.14, 0.26);
+          return smokes;
+        }
+        case BT.MARKET: { // a railway hall: a brick front with a clock and an arched glass roof
+          k.box(CONC2, 0, 0, 0, 2.9, 0.06, 2.9);
+          k.cyl(GLASS, 0, 0.3, -1.4, 2.4, 2.4, 1.8, 0, Math.PI / 2); k.box(STEEL2, 0, 0.06, -0.2, 2.5, 0.26, 2.4);
+          for (let q = 0; q < 5; q++) k.cyl(STEEL2, 0, 0.3, -1.38 + q * 0.58, 2.46, 0.05, 1.86, 0, Math.PI / 2);
+          k.box(BRICK, 0, 0, 1.15, 2.8, 1.5, 0.5); k.prism(SLATE_T, 0, 1.5, 1.15, 2.85, 0.5, 0.55, Math.PI / 2); k.box(BRICK, 0, 1.5, 1.15, 0.6, 0.9, 0.5); k.glowc(0xfff4d0, 0, 1.95, 1.41, 0.36, 0.02, 0.36, 0, Math.PI / 2);
+          winGrid(k, 2.8, 0.5, [0.3, 0.9], 6, LAMP, 0.18, 0.36);
+          k.box(STEEL, 0, 0.06, -1.4, 0.06, 0.04, 1.0); k.box(STEEL, 0.4, 0.06, -1.4, 0.06, 0.04, 1.0);
+          return smokes;
+        }
+        case BT.WORKSHOP: { // a factory: saw-tooth roofs and tall smokestacks
+          k.box(CONC2, 0, 0, 0, 2.9, 0.08, 2.6); k.box(BRICK2, 0, 0.08, 0, 2.6, 1.0, 2.2);
+          for (let q = 0; q < 4; q++) { k.box(SLATE_T, -0.98 + q * 0.65, 1.08, 0, 0.62, 0.42, 2.2, 0, 0, 0.6); k.glow(COOL, -1.1 + q * 0.65, 1.12, 0, 0.02, 0.32, 2.0, 0); }
+          for (const [x, z, h] of [[1.0, -0.8, 3.2], [0.4, -0.85, 2.6]]) { k.taper(BRICK, x, 0.08, z, 0.42, h, 0.42); k.cyl(BRICK2, x, 0.08 + h, z, 0.34, 0.12, 0.34); smokes.push([x, h + 0.3, z]); }
+          winGrid(k, 2.6, 2.2, [0.45], 6, 0xffc070, 0.2, 0.36);
+          return smokes;
+        }
+        case BT.GRANARY: { // grain silos, an elevator and a water tower
+          for (let q = 0; q < 3; q++) { k.cyl(CONC, -0.55 + q * 0.42, 0, -0.2, 0.44, 2.0, 0.44); k.cone(CONC2, -0.55 + q * 0.42, 2.0, -0.2, 0.44, 0.2, 0.44); }
+          k.box(CONC2, 0.55, 0, 0.1, 0.4, 2.6, 0.4); k.box(STEEL2, 0.2, 2.2, -0.2, 0.8, 0.08, 0.1);
+          for (const [x, z] of [[0.35, 0.55], [0.75, 0.55], [0.35, 0.85], [0.75, 0.85]]) k.box(STEEL2, x, 0, z, 0.04, 1.3, 0.04);
+          k.cyl({ c: 0x8a6a4a, t: 'planks' }, 0.55, 1.3, 0.7, 0.55, 0.45, 0.55); k.cone(STEEL2, 0.55, 1.75, 0.7, 0.6, 0.25, 0.6);
+          return smokes;
+        }
+        case BT.TOWER: { // an artillery bastion: thick sloped brick, cannon in the embrasures
+          k.taper(BRICK2, 0, 0, 0, 1.7, 1.5, 1.7); k.cyl(CONC, 0, 1.5, 0, 1.2, 0.14, 1.2);
+          for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2 + 0.4; k.cyl(0x2a2a2a, Math.cos(a) * 0.5, 1.32, Math.sin(a) * 0.5, 0.12, 0.6, 0.12, Math.PI - a, 0, Math.PI / 2); }
+          k.box(STEEL2, 0, 1.64, 0, 0.04, 0.9, 0.04); k.box(flag, 0.2, 2.25, 0, 0.36, 0.24, 0.03);
+          return smokes;
+        }
+        case BT.DOCK: { // an iron harbour crane and a brick warehouse
+          k.box(CONC2, 0, -1.0, 0, 2.0, 1.12, 2.0);
+          k.box(BRICK, -0.4, 0.12, -0.3, 1.0, 0.9, 1.2); k.prism(SLATE_T, -0.4, 1.02, -0.3, 1.05, 0.35, 1.25);
+          lattice(k, STEEL2, 0.12, 1.8, 0.22, 0.12); k.box(STEEL2, 0.6, 1.9, 0.4, 1.4, 0.1, 0.1, -0.7); k.box(STEEL, 0.55, 0.12, 0.55, 0.06, 1.8, 0.06);
+          return smokes;
+        }
+        case BT.MINE: { // a pithead: a steel headframe with its wheel and the brick engine house
+          k.mound(0x5a5550, -0.4, 0.2, -0.4, 1.2, 0.9, 1.0);
+          lattice(k, STEEL2, 0, 2.0, 0.35, 0.15); k.cyl(STEEL2, 0, 2.0, 0, 0.6, 0.06, 0.6, 0, Math.PI / 2);
+          k.box(BRICK, 0.5, 0, 0.4, 0.7, 0.8, 0.6); k.prism(SLATE_T, 0.5, 0.8, 0.4, 0.75, 0.3, 0.65); k.taper(BRICK, 0.75, 0, 0.6, 0.2, 1.8, 0.2); smokes.push([0.75, 1.9, 0.6]);
+          return smokes;
+        }
+        case BT.WALL: { k.box(BRICK2, 0, 0, 0, 1.0, 0.8, 0.7); k.box(CONC, 0, 0.8, 0, 1.04, 0.08, 0.74); return smokes; }
+      }
+      return null;
+    }
+    if (band === 2) { // ---------------------------------------------------- Modern and Atomic
+      if (home) {
+        if (v === 0) { // a concrete apartment block, balconies on every floor
+          const fl = 5 + (era >= 11 ? 2 : 0), H = fl * 0.42;
+          k.box(CONC, 0, 0, 0, S(1.5), S(H), S(1.3)); k.box(CONC2, 0, S(H), 0, S(1.54), S(0.08), S(1.34));
+          for (let q = 1; q < fl; q++) k.box(CONC2, 0, S(q * 0.42), S(0.7), S(1.4), S(0.04), S(0.14));
+          k.box(STEEL2, S(0.4), S(H + 0.08), S(-0.3), S(0.4), S(0.3), S(0.4));
+          winGrid(k, S(1.5), S(1.3), floors(S(0.14), fl, S(0.42)), 4, LAMP, S(0.18), S(0.2));
+          return smokes;
+        }
+        if (v === 1) { // a suburban house: low pitched roof, picture window, garage and a car
+          const wall = { c: [0xe8e0d0, 0xd8e0e8, 0xf0e0c8][(era + 1) % 3], t: 'plaster' };
+          k.box(wall, S(-0.15), 0, 0, S(1.1), S(0.6), S(1.1)); k.prism({ c: 0x5a5a60, t: 'tiles' }, S(-0.15), S(0.6), 0, S(1.3), S(0.35), S(1.2));
+          k.box(wall, S(0.6), 0, S(-0.1), S(0.6), S(0.45), S(0.8)); k.box(CONC2, S(0.6), S(0.45), S(-0.1), S(0.64), S(0.05), S(0.84)); k.box(WHITE, S(0.6), 0, S(0.305), S(0.5), S(0.38), S(0.02));
+          k.box(flag, S(0.6), 0, S(0.6), S(0.26), S(0.14), S(0.42)); k.box(GLASS2, S(0.6), S(0.14), S(0.58), S(0.22), S(0.1), S(0.24));
+          k.glow(LAMP, S(-0.15), S(0.2), S(0.555), S(0.5), S(0.26), S(0.02)); k.box(0x4a6a3a, S(-0.6), 0, S(0.65), S(0.2), S(0.2), S(0.2));
+          return smokes;
+        }
+        // a brick mid-rise with a water tank on the roof
+        const fl = 7, H = fl * 0.4;
+        k.box(BRICK, 0, 0, 0, S(1.5), S(H), S(1.4)); k.box(CONC, 0, S(H), 0, S(1.54), S(0.08), S(1.44));
+        for (const [x, z] of [[0.2, 0.2], [0.5, 0.2], [0.2, 0.5], [0.5, 0.5]]) k.box(STEEL2, S(x), S(H + 0.08), S(z), S(0.03), S(0.3), S(0.03));
+        k.cyl({ c: 0x7a5a3a, t: 'planks' }, S(0.35), S(H + 0.38), S(0.35), S(0.4), S(0.35), S(0.4)); k.cone(STEEL2, S(0.35), S(H + 0.73), S(0.35), S(0.44), S(0.18), S(0.44));
+        winGrid(k, S(1.5), S(1.4), floors(S(0.14), fl, S(0.4)), 4, LAMP, S(0.16), S(0.2));
+        return smokes;
+      }
+      switch (type) {
+        case BT.HALL: { // a civic centre: a long concrete slab on pilotis, a glass lobby, a flag
+          k.box(CONC2, 0, 0, 0, 2.8, 0.06, 1.8); for (let q = 0; q < 6; q++) k.box(CONC, -1.1 + q * 0.44, 0.06, 0.5, 0.1, 0.6, 0.1);
+          k.box(GLASS2, 0, 0.06, -0.1, 2.0, 0.6, 0.9); k.box(CONC, 0, 0.66, 0, 2.7, 0.9, 1.4); k.box(STEEL2, 1.2, 0.06, 0.8, 0.04, 2.0, 0.04); k.box(flag, 1.42, 1.75, 0.8, 0.42, 0.28, 0.03);
+          winGrid(k, 2.7, 1.4, [0.85, 1.25], 8, LAMP, 0.22, 0.2);
+          return smokes;
+        }
+        case BT.TEMPLE: { // a modern temple: a soaring concrete A-frame, a free-standing bell tower
+          k.box(CONC2, 0, 0, 0, 2.8, 0.1, 2.8); k.prism(CONC, 0, 0.1, -0.2, 2.0, 2.4, 2.2); k.glow(0xffd28a, 0, 0.1, 0.91, 0.5, 1.4, 0.02);
+          k.box(CONC, 1.1, 0.1, 1.0, 0.36, 3.0, 0.36); k.box(GOLD, 1.1, 3.1, 1.0, 0.04, 0.5, 0.04); k.glow(0xffd28a, 1.1, 2.4, 1.19, 0.18, 0.4, 0.02);
+          return smokes;
+        }
+        case BT.SHRINE: { k.box(CONC, 0, 0, 0, 0.6, 0.06, 0.6); k.box(CONC, 0, 0.06, -0.15, 0.4, 0.7, 0.2); k.glow(0xffd28a, 0, 0.3, -0.04, 0.1, 0.3, 0.02); return smokes; }
+        case BT.KEEP: { // a stepped skyscraper of the machine age, a spire and beacon on top
+          const H = era >= 11 ? 7 : 5.5;
+          k.box(CONC2, 0, 0, 0, 3.8, 0.2, 3.8); k.box(YBRICK, 0, 0.2, 0, 2.8, H * 0.5, 2.8); k.box(YBRICK, 0, 0.2 + H * 0.5, 0, 2.2, H * 0.3, 2.2); k.box(YBRICK, 0, 0.2 + H * 0.8, 0, 1.5, H * 0.2, 1.5);
+          k.cone6({ c: 0xc8ccd0, t: 'metal' }, 0, 0.2 + H, 0, 1.0, 1.4, 1.0); k.box(STEEL, 0, 1.6 + H, 0, 0.05, 1.2, 0.05); k.glow(REDL, 0, 2.8 + H, 0, 0.1, 0.1, 0.1);
+          winGrid(k, 2.8, 2.8, floors(0.5, Math.floor(H * 0.5 / 0.4), 0.4), 6, LAMP, 0.16, 0.2); winGrid(k, 2.2, 2.2, floors(0.4 + H * 0.5, Math.floor(H * 0.3 / 0.4), 0.4), 5, LAMP, 0.16, 0.2);
+          k.box(flag, 0, 0.2, 1.42, 0.8, 0.5, 0.02);
+          return smokes;
+        }
+        case BT.MARKET: { // a shopping mall: a low box, a glass entrance, signs and a car park
+          k.box({ c: 0x3a3c40, t: 'plain' }, 0, 0, 0, 2.9, 0.04, 2.9); for (let q = 0; q < 5; q++) k.box(WHITE, -1.1 + q * 0.55, 0.04, 1.0, 0.03, 0.005, 0.6);
+          k.box(CONC, 0, 0.04, -0.45, 2.6, 0.9, 1.7); k.box(GLASS, 0, 0.04, 0.42, 0.9, 0.7, 0.06); k.glow(flag, 0, 0.75, 0.43, 1.4, 0.16, 0.02);
+          for (let q = 0; q < 4; q++) k.box([0xd04040, 0x4060c0, 0xe0e0e0, 0x40a060][q], -1.0 + q * 0.6, 0.04, 1.05 + (q % 2) * 0.2, 0.16, 0.12, 0.3);
+          return smokes;
+        }
+        case BT.WORKSHOP: {
+          if (era >= 11 && v === 0) { // a power station: cooling towers steaming
+            for (const [x, z] of [[-0.6, -0.4], [0.6, -0.4]]) { k.taper(CONC, x, 0, z, 1.15, 1.7, 1.15); k.taper(CONC, x, 1.7, z, 0.82, 0.5, 0.82, 0, Math.PI); k.cyl(0x2a2a2a, x, 2.19, z, 0.62, 0.02, 0.62); smokes.push([x, 2.4, z], [x + 0.15, 2.4, z]); }
+            k.box(CONC2, 0, 0, 0.75, 1.6, 0.7, 0.8); k.cyl(CONC, 0.9, 0, 0.8, 0.6, 0.9, 0.6); k.ico(CONC, 0.9, 0.9, 0.8, 0.6, 0.5, 0.6);
+            return smokes;
+          }
+          // a factory of metal sheds with a tall banded stack
+          k.box(CONC2, 0, 0, 0, 2.9, 0.06, 2.6); k.box(STEEL, 0, 0.06, 0, 2.6, 0.9, 2.2); k.cyl(STEEL2, 1.3, 0.96, 0, 0.8, 2.6, 2.2, 0, 0, Math.PI / 2);
+          k.cyl(CONC, 1.0, 0.06, -0.8, 0.36, 3.6, 0.36); for (const y of [2.8, 3.3]) k.cyl({ c: 0xd04030, t: 'plain' }, 1.0, y, -0.8, 0.37, 0.2, 0.37); smokes.push([1.0, 3.8, -0.8]);
+          winGrid(k, 2.6, 2.2, [0.5], 5, 0xffc070, 0.24, 0.2);
+          return smokes;
+        }
+        case BT.GRANARY: { for (let q = 0; q < 4; q++) { k.cyl(CONC, -0.5 + (q % 2) * 0.6, 0, -0.3 + (q >> 1) * 0.6, 0.56, 2.6, 0.56); } k.box(CONC2, 0, 2.6, 0, 1.2, 0.3, 1.2); return smokes; }
+        case BT.TOWER: { // a concrete bunker under a radio mast with a warning light
+          k.box(CONC, 0, 0, 0, 1.6, 0.6, 1.6); k.box(0x1a1a1a, 0, 0.3, 0.81, 1.0, 0.1, 0.02);
+          lattice(k, STEEL, 0.6, 4.0, 0.3, 0.06); k.glow(REDL, 0, 4.6, 0, 0.1, 0.1, 0.1); k.cyl(WMETAL, 0.4, 0.6, 0.3, 0.5, 0.05, 0.5, 0.5, 0.8);
+          return smokes;
+        }
+        case BT.DOCK: { // a container gantry crane and stacks of boxes
+          k.box(CONC2, 0, -1.0, 0, 2.0, 1.1, 2.0);
+          for (const x of [-0.6, 0.6]) { k.box(flag, x, 0.1, -0.3, 0.1, 2.0, 0.1); k.box(flag, x, 0.1, 0.4, 0.1, 2.0, 0.1); }
+          k.box(flag, 0, 2.1, 0.05, 1.4, 0.14, 2.6); k.box(STEEL2, 0, 1.8, 0.3, 0.3, 0.3, 0.3);
+          for (let q = 0; q < 6; q++) k.box([0xc04030, 0x3060a0, 0x40a060, 0xe0a030][q % 4], -0.5 + (q % 3) * 0.5, 0.1 + (q >> 1 & 1) * 0.22, -0.7, 0.45, 0.22, 0.24);
+          return smokes;
+        }
+        case BT.MINE: { k.mound(0x7a6a5a, 0, -0.2, 0, 2.0, 0.8, 2.0); lattice(k, STEEL2, 0, 2.4, 0.4, 0.2); k.box(STEEL2, 0.6, 0.3, 0.3, 0.12, 0.12, 1.6, 0, -0.5); k.box(CONC, -0.6, 0, 0.5, 0.6, 0.6, 0.6); return smokes; }
+        case BT.WALL: { k.box(CONC, 0, 0, 0, 1.0, 1.0, 0.3); for (let q = 0; q < 3; q++) k.box(STEEL2, -0.3 + q * 0.3, 1.0, 0, 0.03, 0.25, 0.03); k.box(STEEL2, 0, 1.18, 0, 1.0, 0.02, 0.02); return smokes; }
+      }
+      return null;
+    }
+    if (band === 3) { // ---------------------------------------------------- Information
+      if (home) {
+        if (v === 0) { // a glass residential tower with a lit crown
+          const fl = 10 + (era % 3), H = fl * 0.4;
+          k.box(CONC2, 0, 0, 0, S(1.6), S(0.4), S(1.5)); k.box(GLASS, 0, S(0.4), 0, S(1.3), S(H), S(1.2));
+          for (let q = 1; q < fl; q += 2) k.box(WMETAL, 0, S(0.4 + q * 0.4), 0, S(1.34), S(0.04), S(1.24));
+          k.glow(COOL, 0, S(0.4 + H), 0, S(1.32), S(0.12), S(1.22));
+          return smokes;
+        }
+        if (v === 1) { // a modern townhouse: white cubes, timber cladding, solar panels
+          k.box(WHITE, S(-0.2), 0, 0, S(1.0), S(0.9), S(1.3)); k.box({ c: 0x9a6a40, t: 'planks' }, S(0.45), 0, S(0.1), S(0.6), S(0.6), S(1.0));
+          for (let q = 0; q < 3; q++) k.box({ c: 0x283850, t: 'glass' }, S(-0.2), S(0.95), S(-0.4 + q * 0.4), S(0.8), S(0.03), S(0.34), 0, 0.3);
+          k.glow(LAMP, S(-0.2), S(0.15), S(0.66), S(0.7), S(0.6), S(0.02));
+          return smokes;
+        }
+        // a mid-rise with trees on its terraces
+        const fl = 6;
+        for (let q = 0; q < fl; q++) { const w = 1.5 - q * 0.08; k.box(WHITE, 0, S(q * 0.42), 0, S(w), S(0.42), S(w - 0.1)); k.ico({ c: [80, 140, 70], t: 'leaves' }, S(w / 2 - 0.1), S(q * 0.42 + 0.5), S(w / 2 - 0.15), S(0.24), S(0.22), S(0.24)); }
+        winGrid(k, S(1.4), S(1.3), floors(S(0.14), fl, S(0.42)), 3, LAMP, S(0.2), S(0.18));
+        return smokes;
+      }
+      switch (type) {
+        case BT.HALL: { k.box(CONC2, 0, 0, 0, 2.8, 0.06, 1.8); k.box(GLASS, 0, 0.06, 0, 2.5, 1.1, 1.4); k.cyl(WMETAL, 1.35, 1.16, 0, 0.5, 2.7, 1.6, 0, 0, Math.PI / 2); k.box(STEEL2, 1.25, 0.06, 0.8, 0.04, 2.0, 0.04); k.box(flag, 1.47, 1.75, 0.8, 0.42, 0.28, 0.03); k.glow(COOL, 0, 0.1, 0.71, 2.2, 0.9, 0.02); return smokes; }
+        case BT.TEMPLE: { k.box(WHITE, 0, 0, 0, 2.6, 0.2, 2.6); k.cone({ c: 0xd8e8f0, t: 'glass' }, 0, 0.2, 0, 2.2, 2.4, 2.2); k.glowi(0xfff0c0, 0, 1.2, 0, 0.5, 0.5, 0.5); k.box(WHITE, 0, 0.2, 1.3, 0.6, 0.5, 0.02); return smokes; }
+        case BT.SHRINE: { k.box(WHITE, 0, 0, 0, 0.6, 0.06, 0.6); k.box(GLASS, 0, 0.06, 0, 0.3, 0.8, 0.3); k.glow(0xfff0c0, 0, 0.2, 0, 0.1, 0.5, 0.1); return smokes; }
+        case BT.KEEP: { // a supertall glass headquarters with a spire
+          const H = 10 + (era - 12) * 1.5;
+          k.box(CONC2, 0, 0, 0, 3.8, 0.3, 3.8); k.box(GLASS2, 0, 0.3, 0, 2.6, H * 0.55, 2.6); k.box(GLASS, 0, 0.3 + H * 0.55, 0, 2.0, H * 0.3, 2.0); k.box(GLASS2, 0, 0.3 + H * 0.85, 0, 1.4, H * 0.15, 1.4);
+          for (let q = 1; q < 8; q++) k.box(WMETAL, 0, 0.3 + q * H * 0.12, 0, q < 5 ? 2.64 : 2.04, 0.05, q < 5 ? 2.64 : 2.04);
+          k.box(WMETAL, 0, 0.3 + H, 0, 0.1, 2.5, 0.1); k.glow(REDL, 0, 2.85 + H, 0, 0.12, 0.12, 0.12); k.glow(COOL, 0, 0.3 + H - 0.1, 0, 1.44, 0.1, 1.44);
+          k.glow(flag, 0, 0.35, 1.31, 1.4, 0.4, 0.02);
+          return smokes;
+        }
+        case BT.MARKET: { // a glass mall with a great screen
+          k.box({ c: 0x3a3c40, t: 'plain' }, 0, 0, 0, 2.9, 0.04, 2.9); k.box(GLASS, 0, 0.04, -0.2, 2.6, 1.0, 2.0); k.cyl(WMETAL, 1.31, 1.04, -0.2, 0.7, 2.62, 2.0, 0, 0, Math.PI / 2);
+          k.glow(flag, 0.6, 0.3, 0.81, 1.0, 0.6, 0.02); k.glow(NEON2, -0.7, 0.6, 0.81, 0.6, 0.2, 0.02);
+          return smokes;
+        }
+        case BT.WORKSHOP: { // a data centre with cooling units, and a wind turbine
+          k.box(WHITE, -0.3, 0, 0, 2.0, 0.7, 2.2); for (let q = 0; q < 6; q++) k.cyl(STEEL, -1.0 + (q % 3) * 0.6, 0.7, -0.5 + (q >> 1 & 1) * 0.8, 0.36, 0.12, 0.36);
+          k.glow(NEON2, -0.3, 0.3, 1.11, 1.8, 0.04, 0.02);
+          k.taper(WMETAL, 1.1, 0, 0.9, 0.18, 3.6, 0.18); k.box(WMETAL, 1.1, 3.55, 0.95, 0.16, 0.16, 0.36);
+          for (let q = 0; q < 3; q++) { const a = q * 2.094 + 0.3; k.box(WMETAL, 1.1, 3.63, 1.15, 0.1, 1.4, 0.03, 0, 0, a - Math.PI / 2); }
+          return smokes;
+        }
+        case BT.GRANARY: { k.box(GGREEN, 0, 0, 0, 1.5, 2.6, 1.5); for (let q = 0; q < 6; q++) k.glow(0xa0ff90, 0, 0.2 + q * 0.42, 0, 1.52, 0.06, 1.52); k.box(WMETAL, 0, 2.6, 0, 1.56, 0.1, 1.56); return smokes; }
+        case BT.TOWER: { k.cyl(CONC, 0, 0, 0, 0.8, 2.6, 0.8); k.ico(WMETAL, 0, 3.1, 0, 1.3, 1.2, 1.3); k.glow(REDL, 0, 3.8, 0, 0.1, 0.1, 0.1); return smokes; }
+        case BT.DOCK: { k.box(CONC2, 0, -1.0, 0, 2.0, 1.1, 2.0); for (const x of [-0.6, 0.6]) for (const z of [-0.3, 0.4]) k.box(WMETAL, x, 0.1, z, 0.1, 2.2, 0.1); k.box(WMETAL, 0, 2.3, 0.05, 1.4, 0.14, 2.8); for (let q = 0; q < 6; q++) k.box([0xc04030, 0x3060a0, 0x40a060, 0xe0a030][q % 4], -0.5 + (q % 3) * 0.5, 0.1 + (q >> 1 & 1) * 0.22, -0.7, 0.45, 0.22, 0.24); return smokes; }
+        case BT.MINE: case BT.WALL: return eraKit(k, type, style, kc, v, 10, roof);
+      }
+      return null;
+    }
+    // ------------------------------------------------------------------------ Space Age and beyond
+    if (home) {
+      if (v === 0) { // an arcology tower: a white column, sky gardens and glowing rings
+        const H = 5 + (era >= 14 ? 2.5 : 0) + (era % 2);
+        k.cyl(WMETAL, 0, 0, 0, S(1.2), S(H), S(1.2)); k.cone(WMETAL, 0, S(H), 0, S(1.2), S(1.0), S(1.2));
+        for (let q = 1; q < 4; q++) { k.glowc(NEON, 0, S(H * q / 4), 0, S(1.32), S(0.05), S(1.32)); k.ico({ c: [86, 160, 80], t: 'leaves' }, S(0.45), S(H * q / 4 + 0.15), S(0.2), S(0.32), S(0.24), S(0.32)); }
+        k.glowi(NEON2, 0, S(H + 1.0), 0, S(0.14), S(0.14), S(0.14));
+        return smokes;
+      }
+      if (v === 1) { // a dome habitat on a ring
+        k.cyl(WMETAL, 0, 0, 0, S(1.6), S(0.15), S(1.6)); k.glowc(NEON, 0, S(0.15), 0, S(1.62), S(0.04), S(1.62)); k.ico({ c: 0xd8eef8, t: 'glass' }, 0, S(0.55), 0, S(1.4), S(1.2), S(1.4)); k.glowi(LAMP, 0, S(0.5), 0, S(0.4), S(0.4), S(0.4));
+        return smokes;
+      }
+      const H = 7 + (era >= 14 ? 3 : 0); // a needle tower that narrows to a point
+      k.taper(WMETAL, 0, 0, 0, S(1.3), S(H), S(1.3)); k.cone(WMETAL, 0, S(H), 0, S(0.9), S(2.0), S(0.9));
+      for (let q = 1; q < 6; q++) k.glowc(NEON2, 0, S(H * q / 6), 0, S(1.3 - q * 0.07), S(0.04), S(1.3 - q * 0.07));
+      return smokes;
+    }
+    switch (type) {
+      case BT.HALL: { k.cyl(WMETAL, 0, 0, 0, 0.5, 1.2, 0.5); k.cyl(WMETAL, 0, 1.2, 0, 2.8, 0.3, 1.9); k.glowc(NEON, 0, 1.18, 0, 2.84, 0.05, 1.94); k.ico({ c: 0xd8eef8, t: 'glass' }, 0, 1.6, 0, 1.4, 0.7, 1.0); return smokes; }
+      case BT.TEMPLE: { k.cyl(WMETAL, 0, 0, 0, 2.6, 0.2, 2.6); k.cone6({ c: 0xe0f0ff, t: 'glass' }, 0, 0.2, 0, 1.0, 5.0, 1.0); for (let q = 0; q < 3; q++) k.glowc(0xfff0c0, 0, 1.0 + q * 1.1, 0, 1.6 - q * 0.4, 0.04, 1.6 - q * 0.4); k.glowi(0xfff0c0, 0, 5.4, 0, 0.3, 0.3, 0.3); return smokes; }
+      case BT.SHRINE: { k.cyl(WMETAL, 0, 0, 0, 0.5, 0.1, 0.5); k.glowi(NEON, 0, 0.6, 0, 0.3, 0.3, 0.3); return smokes; }
+      case BT.KEEP: { // the launch complex: tower, rocket and pad (a sky tether in the Stellar age)
+        k.cyl(CONC, 0, 0, 0, 3.8, 0.3, 3.8); k.glowc(NEON, 0, 0.3, 0, 3.6, 0.03, 3.6);
+        lattice(k, { c: 0xc04030, t: 'metal' }, 0.3, 6.0, 0.35, 0.3); k.box(STEEL2, 0.0, 4.0, 0.6, 0.1, 0.1, 0.9);
+        rocket(k, 0, 1.15, 5.0, flag);
+        k.box(WMETAL, -1.3, 0.3, -1.3, 0.9, 0.6, 0.9); k.glow(COOL, -1.3, 0.5, -0.84, 0.7, 0.2, 0.02);
+        if (era >= 14) { k.glow(NEON2, 1.4, 0.3, -1.4, 0.08, 60, 0.08); k.cyl(WMETAL, 1.4, 0.3, -1.4, 0.8, 0.4, 0.8); k.glowc(NEON, 1.4, 0.7, -1.4, 0.9, 0.04, 0.9); }
+        return smokes;
+      }
+      case BT.MARKET: { k.cyl(WMETAL, 0, 0, 0, 2.8, 0.1, 2.8); k.ico({ c: 0xd8eef8, t: 'glass' }, 0, 0.4, 0, 2.6, 1.8, 2.6); for (let q = 0; q < 5; q++) { const a = q * 1.256; k.glow([NEON, NEON2, 0xffa0e0, LAMP, NEON][q], Math.cos(a) * 0.7, 0.1, Math.sin(a) * 0.7, 0.2, 0.4, 0.2); } return smokes; }
+      case BT.WORKSHOP: { // a fusion ring and its glowing core
+        k.box(WMETAL, 0, 0, 0, 2.6, 0.3, 2.6);
+        for (let q = 0; q < 14; q++) { const a = q / 14 * Math.PI * 2; k.cyl(STEEL, Math.cos(a) * 0.95, 0.3, Math.sin(a) * 0.95, 0.42, 0.6, 0.42); }
+        k.glowc(0xb0d8ff, 0, 0.5, 0, 1.6, 0.18, 1.6); k.glowi(0xe8f4ff, 0, 0.8, 0, 0.5, 0.5, 0.5);
+        return smokes;
+      }
+      case BT.GRANARY: { for (let q = 0; q < 3; q++) { const x = -0.5 + q * 0.5; k.ico({ c: 0xc8f0d8, t: 'glass' }, x, 0.35, (q % 2) * 0.4 - 0.2, 0.9, 0.8, 0.9); k.glowi(0xa0ff90, x, 0.3, (q % 2) * 0.4 - 0.2, 0.4, 0.3, 0.4); } return smokes; }
+      case BT.TOWER: { k.taper(WMETAL, 0, 0, 0, 0.9, 3.0, 0.9); k.glowi(0xff6080, 0, 3.4, 0, 0.5, 0.5, 0.5); k.glowc(NEON, 0, 1.5, 0, 1.0, 0.04, 1.0); return smokes; }
+      case BT.DOCK: { k.cyl(WMETAL, 0, 0, 0, 1.9, 0.15, 1.9); k.glowc(NEON, 0, 0.15, 0, 1.6, 0.03, 1.6); k.mound(WMETAL, 0, 0.45, 0, 1.0, 0.3, 0.6); k.glow(NEON2, 0, 0.3, 0, 0.8, 0.03, 0.4); return smokes; }
+      case BT.MINE: { for (let q = 0; q < 3; q++) { const a = q * 2.094; k.box(WMETAL, Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5, 0.08, 2.6, 0.08, 0, -Math.sin(a) * 0.19, Math.cos(a) * 0.19); } k.cyl(WMETAL, 0, 2.4, 0, 0.5, 0.3, 0.5); k.glow(0xff8a40, 0, 0, 0, 0.12, 2.4, 0.12); return smokes; }
+      case BT.WALL: { k.box(WMETAL, 0, 0, 0, 1.0, 0.3, 0.4); k.glow(NEON2, 0, 0.3, 0, 1.0, 0.9, 0.04); return smokes; }
+    }
+    return null;
+  }
+  M.eraKit = eraKit;
 
   // ============================================================ houses
   // a building's style comes from where its community lives, and its era
@@ -671,7 +1093,8 @@
   // Fills kit k for the regional variants; returns the chimney smoke points, or null when the
   // building keeps its common design (castles, towers, walls, farms, markets, mines, docks...).
   M.houseKit = function (k, type, style, kc, v, era, roof) {
-    if (RACE_STYLES.has(style)) return raceKit(k, type, style, kc, v, era);
+    if (RACE_STYLES.has(style)) { const r = raceKit(k, type, style, kc, v, era); return r || era < 7 ? r : eraKit(k, type, 'temperate', kc, v, era, roof); }
+    if (era >= 7) { const sm = eraKit(k, type, style, kc, v, era, roof); if (sm) return sm; if (k.lit.length) k.lit.length = 0, k.lamp.length = 0; }
     const BT = AG.BT, smokes = [], flag = (kc[0] << 16) | (kc[1] << 8) | kc[2];
     const tiled = era >= 4, roofC = tiled ? roof : THATCH;
     switch (type) {
