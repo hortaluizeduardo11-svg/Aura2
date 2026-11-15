@@ -343,7 +343,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
       transparent: true, depthWrite: true, fog: true,
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         uTime: { value: 0 }, uDepth: { value: null }, uSize: { value: new THREE.Vector2(W, H) },
-        uSun: { value: new THREE.Vector3(0.3, 0.8, 0.4) }, uLight: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
+        uSun: { value: new THREE.Vector3(0.3, 0.8, 0.4) }, uLight: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) }, uClear: { value: 0 },
       }]),
       vertexShader: `
         uniform float uTime; varying vec2 vXZ; varying vec3 vView;
@@ -359,7 +359,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
           #include <fog_vertex>
         }`,
       fragmentShader: `
-        uniform float uTime; uniform sampler2D uDepth; uniform vec2 uSize; uniform vec3 uSun; uniform float uLight; uniform vec3 uTint;
+        uniform float uTime; uniform sampler2D uDepth; uniform vec2 uSize; uniform vec3 uSun; uniform float uLight; uniform vec3 uTint; uniform float uClear;
         varying vec2 vXZ; varying vec3 vView;
         #include <fog_pars_fragment>
         void main() {
@@ -389,6 +389,10 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
           col = mix(col, vec3(0.97, 0.99, 1.0) * max(uLight, 0.35), foam * 0.85);
           float alpha = mix(0.55, 0.95, smoothstep(0.0, 0.45, dd));  // shallows let the sand show through
           alpha = max(alpha, foam * 0.9);
+          // close up (or diving) the water clears so the life below shows, and light ripples over it
+          float caus = 0.5 + 0.5 * sin(vXZ.x * 4.1 + uTime * 1.7 + sin(vXZ.y * 3.3 + uTime * 1.1) * 1.5) * sin(vXZ.y * 3.7 - uTime * 1.4);
+          alpha = mix(alpha, 0.16 + foam * 0.6 + dd * 0.22, uClear);
+          col = mix(col, col * 0.75 + vec3(0.05, 0.22, 0.3) + caus * 0.08 * uLight, uClear * 0.6);
           gl_FragColor = vec4(col, alpha);
           #include <fog_fragment>
         }`,
@@ -496,6 +500,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     if (!sea) return;
     const u = sea.material.uniforms, sd = Sky.sunDir(), day = Sky.daylight();
     u.uTime.value = t;
+    { const want = AG.Biota && AG.Biota.dive ? 1 : AG.clamp((R.cam.z - 14) / 30, 0, 0.55); u.uClear.value += (want - u.uClear.value) * Math.min(1, dt * 3); } // clearer water close up, clear when diving
     u.uSun.value.set(sd.x, Math.max(0.25, Sky.sunHeight()), sd.y);
     u.uLight.value = 0.25 + 0.75 * day;
     u.uTint.value.copy(sun.color).lerp(new THREE.Color(1, 1, 1), 0.6);
@@ -787,6 +792,13 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     if (xi < 0 || yi < 0 || xi >= W || yi >= H) return 0;
     const i = yi * W + xi;
     return Wd.fl[i] > 0.004 && Wd.elev[i] < SEA ? 0 : colTop(i);
+  };
+  // the sea floor under open water (groundAt gives the water's surface there), else the ground
+  V.floorAt = function (x, y) {
+    const xi = x | 0, yi = y | 0;
+    if (xi < 0 || yi < 0 || xi >= W || yi >= H) return 0;
+    const i = yi * W + xi;
+    return Wd.elev[i] < SEA && !Wd.frozen[i] ? colTop(i) : V.groundAt(x, y);
   };
 
   // ------------------------------------------------------------ placing instances
@@ -1828,6 +1840,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     }
     people.count = np; heads.count = nh; hats.count = nhat; beasts.count = nb; props.count = nprop;
     for (const m of [people, heads, hats, beasts, props]) flag(m);
+    if (AG.Biota && M3 && M3.ready && M3.creature) AG.Biota.draw(t, wx0, wy0, ws, V.floorAt, R.cam); // life of the sea (and of deep time) from its regions
     if (M3 && M3.ready) { M3.endFrame(); V.stats.models = M3.stats; }
     V.stats.creatures = np + nb + (M3 && M3.ready ? M3.drawn : 0);
   }

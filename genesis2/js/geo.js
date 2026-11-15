@@ -624,9 +624,17 @@
   // The fine map painted from the coarse crust and climate, a band of rows at a time: deep time
   // builds its next picture of the land a few rows per frame (quiet: the renderer draws those rows
   // into a hidden picture itself and morphs the map into it, so nothing is marked for repainting).
+  // how green the land is: bare rock and sand while life is only in the sea, the first mosses and
+  // low plants of the Silurian, the first forests of the Devonian, the full cover from the coal
+  // forests of the Carboniferous on (life.js's period starts, in millions of years)
+  Geo.greening = function () {
+    if (Geo.phase !== 'deep') return 1;
+    const m = Geo.myr;
+    return m < 18 ? 0 : m < 26 ? ((m - 18) / 8) * 0.3 : m < 34 ? 0.3 + ((m - 26) / 8) * 0.7 : 1;
+  };
   Geo.paintRows = function (yA, yB, quiet) {
     const { elev, fl, ft, frozen, veg, soil, snow, tbase, moist, ice, rock, plate } = Wd;
-    const P = Geo.plates, sl = Geo.seaLevel;
+    const P = Geo.plates, sl = Geo.seaLevel, green = Geo.greening();
     for (let y = yA; y < yB; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, c = Geo.cellOf(x, y), p = P[Geo.plate[c]] || P[0];
       const ux = (x - p.ox * CS) & (T - 1), uy = (y - p.oy * CS) & (T - 1), tI = uy * T + ux;
@@ -654,7 +662,7 @@
       else if (tt > 0.58 && mo < 0.3) soil[i] = SO.SAND;
       else if (rock[i] === ROCK.VOLCANIC && elev[i] < AG.HILL) soil[i] = SO.ASH;
       else soil[i] = SO.DIRT;
-      veg[i] = ice[i] ? 0 : AG.clamp(Wd.vegCap(mo, tt, soil[i]) * (0.55 + (tileA[(tI + 999) & (T * T - 1)] + 0.5) * 0.7), 0, 255) | 0;
+      veg[i] = ice[i] ? 0 : AG.clamp(Wd.vegCap(mo, tt, soil[i]) * (0.55 + (tileA[(tI + 999) & (T * T - 1)] + 0.5) * 0.7) * green, 0, 255) | 0;
       snow[i] = ice[i] || elev[i] > AG.PEAK || tt < 0.06 ? 220 : 0;
     }
     if (quiet) return;

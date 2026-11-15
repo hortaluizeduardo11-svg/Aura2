@@ -83,6 +83,11 @@
     for (const h of HATS) bank('pt' + h, () => hatGeo(h), false);
     M.ready = true;
   };
+  // (for creatures.js: its own models share the parts builder, the banks and the frame)
+  M._parts = (t) => new Parts(t === undefined ? TX.FUR : t);
+  M._bank = (key, build, shadow) => bank(key, build, shadow);
+  M._drawn = () => drawn++;
+  M._tex = () => TX;
   M.endFrame = function () {
     let n = 0, meshes = 0;
     for (const b of banks.values()) { n += b.n; if (b.n) meshes++; b.end(); }
@@ -577,6 +582,7 @@
   M.animal = function (i, x, y, z, k, ry, roll, lie) {
     const U = AG.U, Life = AG.Life, sid = U.sid[i], sp = sid >= 0 ? Life.species[sid] : null;
     if (!sp) return false;
+    if (M.creature && M.isCreature && M.isCreature(sp.common)) { const C = M.creatureInfo(sp.common), f = AG.clamp(U.genes[i * AG.NG + AG.G.STAT] / 255, 0, 1); M.creature(sp.common, x, y, z, (C.len[0] + (C.len[1] - C.len[0]) * f) * M.m2u, ry, lie ? 0 : roll * 0.5, sp.color[0] / 255, sp.color[1] / 255, sp.color[2] / 255); return true; }
     const m = morphOf(sp), o = i * Life.GL, albino = Life.isAlbino(U.gen, o), sex = DIMORPH.has(m.kind) ? U.sex[i] : 0;
     const variant = sp.domestic ? U.uid[i] % 3 : 0;
     const key = ((sid * 12 + variant * 4 + (albino ? 2 : 0) + sex) * 64) + m.ver; // (a number: no string built per animal per frame)
@@ -587,6 +593,18 @@
     drawn++;
     // lying down: the body sinks onto the ground and the legs fold away under it
     b.add(x, lie ? y - (ud.leg || 0.14) * ks * 0.85 : y, z, ks, ks, ks, ry, lie ? 0 : roll, f, f, f);
+    return true;
+  };
+
+  // a modern animal drawn from its species alone (no body: deep time and the years of history)
+  M.animalAt = function (sp, x, y, z, ry, roll) {
+    if (!sp || sp.arch > 3) return false;
+    const m = morphOf(sp), key = ((sp.id * 12) * 64) + m.ver;
+    const b = bank(key, () => animalGeo(sp, 0, false, 0), true), ud = b.geo.userData;
+    const h = sp.arch === 2 ? M.birdLength(sp.mean[AG.Life.L.SIZE]) : tableAt(WITHERS[sp.arch] || WITHERS[0], sp.mean[AG.Life.L.SIZE]);
+    const ks = (h * M.m2u) / (ud.withers || 0.3);
+    drawn++;
+    b.add(x, y, z, ks, ks, ks, ry, roll || 0, 1, 1, 1);
     return true;
   };
 
