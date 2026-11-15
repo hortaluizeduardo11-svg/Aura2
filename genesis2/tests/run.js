@@ -142,7 +142,7 @@ test('determinism: the whole world (deep time, Dawn, history) replays from its s
 test('history: a snapshot copied over many frames restores the same world as one taken at once', () => {
   const W = 224, H = 144;
   const run = (async) => {
-    const A = fromSave(dawnSave(7, W, H), W, H);
+    const A = fromSave(dawnSave(13, W, H), W, H);
     for (let y = 0; y < 40; y += 4) A.Sim.yearStep(4);
     A.asyncSnaps = async; A.History.lastSnapYear = -1e9;
     const before = A.History.snaps.length;
@@ -200,7 +200,7 @@ test('people: skin pigment follows the sun (darker under a strong sun, lighter u
   // The same people under a scorching or a dim sky: pigment drifts toward what the light favours.
   const W = 224, H = 144;
   const run = (hot) => {
-    const A = fromSave(dawnSave(7, W, H), W, H), Wd = A.World;
+    const A = fromSave(dawnSave(11, W, H), W, H), Wd = A.World;
     for (let i = 0; i < A.N; i++) Wd.tbase[i] = hot ? Math.max(Wd.tbase[i], 0.85) : Math.min(Wd.tbase[i], 0.2);
     for (let y = 0; y < 1600; y += 8) A.Sim.yearStep(8);
     let sum = 0, n = 0;
@@ -214,7 +214,7 @@ test('people: skin pigment follows the sun (darker under a strong sun, lighter u
 });
 
 test('save/load: a loaded world has the same future as the original', () => {
-  const W = 224, H = 144, A = fromSave(dawnSave(7, W, H), W, H);
+  const W = 224, H = 144, A = fromSave(dawnSave(13, W, H), W, H);
   for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);
   const mid = A.History.serialize();
   for (let y = 0; y < 120; y += 2) A.Sim.yearStep(2);
@@ -269,7 +269,7 @@ function landRegions(AG) { // land regions grouped by landmass, largest masses f
 }
 
 test('evolution: a new seaway splits a population into two species; a connected one stays one', () => {
-  const W = 224, H = 144, text = dawnSave(7, W, H);
+  const W = 224, H = 144, text = dawnSave(13, W, H);
   const run = (split) => {
     const AG = fromSave(text, W, H), Life = AG.Life, Wd = AG.World, RS = Life.RS;
     Life.envFromWorld();
@@ -294,7 +294,7 @@ test('evolution: a new seaway splits a population into two species; a connected 
 });
 
 test('evolution: selection fits cold tolerance to the climate', () => {
-  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Life = AG.Life, L = Life.L, e = Life.env;
+  const W = 224, H = 144, AG = fromSave(dawnSave(13, W, H), W, H), Life = AG.Life, L = Life.L, e = Life.env;
   Life.envFromWorld();
   // the coldest and warmest regions where wild grazers already live (so the land can feed them)
   const lived = new Set(); for (const sp of Life.byArch(Life.ARCH.GRAZER)) if (!sp.domestic) for (const [r, R] of sp.regions) if (R.n > 2) lived.add(r);
@@ -314,7 +314,7 @@ test('evolution: selection fits cold tolerance to the climate', () => {
 
 // ------------------------------------------------------------------ technology
 test('technology: prerequisites, conditions and bans gate every invention', () => {
-  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Tech = AG.Tech, Civ = AG.Civ;
+  const W = 224, H = 144, AG = fromSave(dawnSave(13, W, H), W, H), Tech = AG.Tech, Civ = AG.Civ;
   const c = Civ.cities.find((q) => q.alive);
   const ctx = Object.assign(Civ.techContext(c), { pop: 400, innovation: 3, contacts: 6 });
   let gated = 0;
@@ -331,7 +331,7 @@ test('technology: prerequisites, conditions and bans gate every invention', () =
   Tech.banned.delete('pottery');
   // and in a running history (a fresh copy of the world, untouched by the probes above), no
   // invention is ever first found before its prerequisites
-  const B = fromSave(dawnSave(7, W, H), W, H), TB = B.Tech;
+  const B = fromSave(dawnSave(13, W, H), W, H), TB = B.Tech;
   for (let y = 0; y < 1500; y += 5) B.Sim.yearStep(5);
   let checked = 0;
   for (const t of TB.LIST) { const f = TB.firsts[t.key]; if (!f) continue; for (const p of t.pre) { if (TB.STARTING.includes(p)) continue; const fp = TB.firsts[p]; assert(fp && fp.year <= f.year, `${t.name} (${f.year}) came before its prerequisite ${p}`); } checked++; }
@@ -340,7 +340,7 @@ test('technology: prerequisites, conditions and bans gate every invention', () =
 
 // ------------------------------------------------------------------ level of detail
 test('LOD: embodying and folding keeps every person record, and both modes feed people alike', () => {
-  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Civ = AG.Civ, People = AG.People, Sim = AG.Sim;
+  const W = 224, H = 144, AG = fromSave(dawnSave(13, W, H), W, H), Civ = AG.Civ, People = AG.People, Sim = AG.Sim;
   for (let y = 0; y < 60; y += 2) Sim.yearStep(2);
   const c = Civ.cities.filter((q) => q.alive).sort((a, b) => b.members.length - a.members.length)[0];
   const before = new Set(c.members);
@@ -414,12 +414,12 @@ test('habitat: animals are placed where their kind would live, in groups, and wi
   assert(grazers === 0 || resting / grazers > 0.3, `grazers bed down at night (${resting}/${grazers})`);
   // winter: songbirds of cold lands have flown south, so fewer are here than in summer
   const songs = () => { let n = 0; for (let i = 0; i < U.hi; i++) if (U.alive[i] && U.sid[i] >= 0 && Hab.profile(Life.species[U.sid[i]]).migrant) n++; return n; };
-  const summerSongs = songs();
   Sim.setMode('history');
-  AG.tick = Math.ceil(AG.tick / Y) * Y + Math.round(Y * 0.85); // deep winter (a world loaded in winter embodies like this)
+  // the same regional populations embodied in summer and then in deep winter (a world loaded in winter embodies like this)
+  const embodyAt = (f) => { AG.tick = Math.ceil(AG.tick / Y) * Y + Math.round(Y * f); AG.mode = 'watch'; Life.embody(); const n = songs(), season = AG.Sky.season(); AG.mode = 'history'; Life.fold(); return [n, season]; };
+  const [summerSongs] = embodyAt(0.4), [winterSongs, winterSeason] = embodyAt(0.78); // (early winter: room for the bear to settle and sleep before spring)
   AG.mode = 'watch'; Life.embody();
-  assert(AG.Sky.season() === 3, 'the second embodying is in winter');
-  const winterSongs = songs();
+  assert(winterSeason === 3, 'the second embodying is in winter');
   assert(summerSongs === 0 || winterSongs < summerSongs * 0.8, `fewer songbirds in a cold winter (${summerSongs} -> ${winterSongs})`);
   // a bear in cold country goes to a den and sleeps through the winter, burning little
   const m = new Float32Array(Life.NL).fill(128); m[Life.L.SIZE] = 230; m[Life.L.COLD] = 200; m[Life.L.HEAT] = 20; m[Life.L.SOCIAL] = 40;
@@ -443,7 +443,7 @@ test('habitat: animals are placed where their kind would live, in groups, and wi
 test('sizes: animals are drawn at real sizes from their own genes, and follow them as they evolve', () => {
   const { SIM } = require('./harness');
   const W = 224, H = 144, AG = load({ W, H, modules: SIM.concat(['models3d']) }), Life = AG.Life, U = AG.U, M = AG.Models3D, L = Life.L;
-  AG.Sim.newWorld(3);
+  AG.Sim.newWorld(3); AG.Geo.myr = 200; // (the animals of today: in deep time each period has its own forms)
   const body = (arch, size, extra, age) => {
     const m = new Float32Array(Life.NL).fill(128); m[L.SIZE] = size; Object.assign(m, extra || {});
     const s = Life.newSpecies(arch, m, null, Life.when());
@@ -479,7 +479,7 @@ test('sizes: animals are drawn at real sizes from their own genes, and follow th
 
 // ------------------------------------------------------------ the later ages, war and plague
 test('ages: inventions run on past the Classical age to the stars and on into future technology', () => {
-  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), T = AG.Tech, Civ = AG.Civ;
+  const W = 224, H = 144, AG = fromSave(dawnSave(13, W, H), W, H), T = AG.Tech, Civ = AG.Civ;
   const c = Civ.cities.filter((q) => q.alive).sort((a, b) => b.members.length - a.members.length)[0], k = Civ.kingdoms[c.kd];
   assert(T.ERAS.length === 15 && T.ERAS[14] === 'Stellar', 'fifteen ages, the last the Stellar');
   for (const t of T.LIST) for (const p of t.preIds) assert(T.LIST[p].era <= t.era, `${t.name} needs nothing from a later age`);
@@ -497,7 +497,7 @@ test('ages: inventions run on past the Classical age to the stars and on into fu
 });
 
 test('plague lab: a pathogen spreads between communities, earns DNA, is noticed and cured; a rumour kills nobody', () => {
-  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Civ = AG.Civ, Pl = AG.Plague, T = AG.Tech;
+  const W = 224, H = 144, AG = fromSave(dawnSave(13, W, H), W, H), Civ = AG.Civ, Pl = AG.Plague, T = AG.Tech;
   for (let y = 0; y < 300; y += 5) AG.Sim.yearStep(5); // (a world of many communities)
   for (const c of Civ.cities) if (c.alive) for (const t of T.LIST) if (t.era <= 9) T.learn(c, t, 'god'); // (an age with medicine and science)
   const c = Civ.cities.filter((q) => q.alive).sort((a, b) => b.members.length - a.members.length)[0];
@@ -517,7 +517,7 @@ test('plague lab: a pathogen spreads between communities, earns DNA, is noticed 
 });
 
 test('realms: a god founds towns, raises wonders (one of each), crowns, revolts and unites; deeds are marked', () => {
-  const W = 224, H = 144, AG = fromSave(dawnSave(7, W, H), W, H), Civ = AG.Civ, Rm = AG.Realms, T = AG.Tech, Wd = AG.World;
+  const W = 224, H = 144, AG = fromSave(dawnSave(13, W, H), W, H), Civ = AG.Civ, Rm = AG.Realms, T = AG.Tech, Wd = AG.World;
   for (let y = 0; y < 200; y += 5) AG.Sim.yearStep(5);
   const spots = [];
   const inland = (x, y) => { for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) { const i = (y + dy) * W + x + dx; if (!Wd.passLand(i) || Wd.ice[i] || Wd.owner[i] >= 0 || Wd.elev[i] > 0.62) return false; } return true; };
@@ -540,6 +540,31 @@ test('realms: a god founds towns, raises wonders (one of each), crowns, revolts 
   assert(Rm.unite(k1, B).ok && k1.cities.length > before && !B.alive, 'two realms become one');
   for (const k of ['town', 'wonder', 'republic']) assert(AG.Deeds.got[k] !== undefined, 'deed: ' + k);
   return `${made.length} cities; ${Rm.standing().map((b) => b.wname).join(' and ')}; ${k1.name} of ${k1.cities.length} communities; ${AG.Deeds.count()} deeds`;
+});
+
+test('deep time: life begins in the sea, crawls onto land in the Devonian, has its dinosaurs, loses them to an asteroid, and reaches the animals of today', () => {
+  const W = 224, H = 144, AG = load({ W, H }), Life = AG.Life;
+  AG.Sim.newWorld(13);
+  const names = new Map(), seen = (p) => { for (const s of Life.alive()) { const k = Life.PERIODS[p][1]; if (!names.has(k)) names.set(k, new Set()); names.get(k).add(s.common); } };
+  assert(Life.alive().every((s) => Life.isSea(s.arch)), 'in Year 0 all life is in the sea');
+  let landAt = -1, impact = false, dino = false;
+  while (AG.mode === 'deep') {
+    AG.Sim.deepStep();
+    const p = Life.periodAt(AG.Geo.myr); seen(p);
+    if (landAt < 0 && Life.alive().some((s) => !Life.isSea(s.arch))) landAt = AG.Geo.myr;
+    if (Life.kpg) impact = true;
+    if (Life.alive().some((s) => /sauropod|theropod|tyrant|raptor|horned|armoured dinosaur|stegosaur|duckbill|ornithopod/.test(s.common))) dino = true;
+  }
+  const all = (k) => [...(names.get(k) || [])];
+  assert(landAt >= Life.LAND_MYR - 0.6 && landAt < Life.LAND_MYR + 1, `life comes onto the land in the Devonian (${landAt} Myr)`);
+  assert(all('Cambrian').some((n) => /trilobite|jellyfish|anomalocarid/.test(n)), `Cambrian seas: ${all('Cambrian').join(', ')}`);
+  assert(dino, 'dinosaurs walk the Mesozoic');
+  assert(impact, 'an asteroid ends the Cretaceous');
+  const now = Life.alive().filter((s) => !s.sapient).map((s) => s.common);
+  assert(now.some((n) => /deer|elk|horse|bison|aurochs|gazelle|ibex|mammoth/.test(n)), `the animals of today at the Dawn (${now.slice(0, 8).join(', ')})`);
+  assert(Life.alive().some((s) => Life.isSea(s.arch)) && now.some((n) => /sardine|tuna|cod|reef fish|whale|shark|orca|dolphin|octopus|turtle|jellyfish|manta|dugong|seal|squid|barracuda/.test(n)), 'the seas are full at the Dawn');
+  const sea = Life.alive().filter((s) => Life.isSea(s.arch));
+  return `land at ${landAt} Myr; Jurassic: ${all('Jurassic').slice(0, 5).join(', ')}; Cretaceous: ${all('Cretaceous').slice(0, 5).join(', ')}; ${sea.length} sea species at the Dawn (${[...new Set(sea.map((s) => s.common))].slice(0, 6).join(', ')})`;
 });
 
 test('textures: every surface tiles seamlessly, averages a neutral grey, and is the same every run', () => {

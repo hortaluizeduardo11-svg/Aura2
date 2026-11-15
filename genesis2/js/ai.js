@@ -139,6 +139,7 @@
         const T = Wd.T(c);
         let lo = 0.32 - U.cold[i] * 0.5, hi = 0.82 + U.heat[i] * 0.45;
         if (U.pid[i] >= 0) { const cc = Civ.cities[U.city[i]]; if (cc && Tech.knows(cc, 'hides')) lo -= 0.25; if (cc) lo -= 0.12; }
+        if (U.task[i] === AG.TK.HIBERNATE && U.st[i] === ST.WORK) lo -= 0.5; // (a den keeps out the cold)
         if (T < lo) { U.energy[i] -= (lo - T) * 0.02; if (T < lo - 0.25) hurt(i, (lo - 0.25 - T) * 6, 'cold'); }
         else if (T > hi) { U.energy[i] -= (T - hi) * 0.02; if (T > hi + 0.25) hurt(i, (T - hi - 0.25) * 6, 'heat'); }
       }
@@ -388,6 +389,8 @@
         if ((s2 === SP.PREDATOR && !(U.flags[j] & FL.DOMESTIC)) || (s2 === SP.PERSON && (U.task[j] === TK.HUNT || !domestic))) { if (domestic && s2 === SP.PERSON) continue; if (!(U.flags[i] & FL.FLEE)) fleeFrom(i, j); return; }
       }
     }
+    // nightfall stops an idle stroll (not a flight, a trek or a walk to water)
+    if (U.st[i] === ST.MOVE && U.task[i] === TK.WANDER && !(U.flags[i] & FL.FLEE) && !domestic && sp !== SP.PREDATOR && AG.Sky.daylight() < 0.25 && rnd() < 0.35) U.st[i] = ST.IDLE;
     if (U.st[i] === ST.MOVE) return;
     U.flags[i] &= ~FL.FLEE;
     if (U.st[i] !== ST.IDLE) return;
