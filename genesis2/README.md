@@ -9,7 +9,14 @@ onto bare land in the Devonian, and runs through the giant insects of the coal f
 sail-backs, the dinosaurs, pterosaurs, ichthyosaurs, plesiosaurs and mosasaurs, an asteroid
 that ends them, and the mammals, birds, reef fish, sharks and whales of today. Creatures of
 legend (unicorns, griffins, rocs, sea serpents) and life from other worlds can arise among them.
-Zoom in on the sea and dive to see it all swimming over coral reefs and kelp forests. When a primate lineage has evolved the minds for it (a
+Zoom in on the sea and dive to see it all swimming over coral reefs and kelp forests.
+**The Age of Dinosaurs** comes first: on its way to people, deep time stops once in the Jurassic,
+when the great dinosaurs have evolved, and the camera flies down into the 3D close-up of the
+biggest herd. Stegosaurs, sauropods, ornithopods, raptors and great theropods walk the land as
+living animals (pterosaurs overhead, early mammals underfoot) among conifers, cycads and tree
+ferns, with no grass or flowers yet. Watch them, set down more with Release, or end their age
+with the Asteroid; Ages carries on toward the asteroid that ends the Cretaceous, which is seen to
+fall. Any other moment of deep time can be watched up close the same way with 1×, 4× or 16×. When a primate lineage has evolved the minds for it (a
 different year in every world), people appear, and from then on history runs on its own:
 - hunter-gatherer bands spread, split and marry between camps
 - languages drift apart
@@ -78,6 +85,7 @@ the title screen back.
 | **Ages** | deep time, ~6 million years a second | Plates drift; species radiate and go extinct. Nothing is drawn on top of the map: the land itself shows the plates at work, morphing smoothly as continents part, collide and raise mountains. |
 | **Skip to the Dawn** | deep time, fast | The rest of deep time runs at once, and the camera lands on the first band at its fire. |
 | **1× · 4× · 16×** | watch | People and animals near the camera act moment to moment: work trips, meals, courtship, fights, hunting. You can possess one of them. |
+| **1× · 4× · 16× in deep time** | deep time watched | Any moment of deep time can be watched up close: the clock of the ages waits, the period's land animals become bodies that graze, hunt, herd and fly, its sea teems in the close-up, the weather and nights come and go. Ages goes on. |
 | **Centuries · Millennia** | history | Everyone lives on their records in year steps. Bands become villages, chiefdoms rise and fall, the sea creeps up the coast. |
 
 **Input:**
@@ -114,7 +122,7 @@ Settings take effect at once and are saved in the browser.
 - **War:** the war room: every war with its score, generals, arms and fronts, the last battle,
   vassals and alliances.
 - **Lab:** the plague lab (below).
-- **Deeds:** the deeds this world has lived through (37 of them, from the first farmers to a
+- **Deeds:** the deeds this world has lived through (39 of them, from the first farmers to a
   colony around another star), the great wonders standing, and the space program.
 - **World:** save/load, time-lapse, scenarios, new world, engine stats, the census of peoples and
   diseases. Graphics settings are in the menu.
@@ -132,6 +140,9 @@ Settings take effect at once and are saved in the browser.
   spread, compete and evolve like any other, in deep time or in history.
 - **Divine:** bless, curse, plague (with a disease designer), send a dream, omens, inspire,
   harmony, discord.
+- **Asteroid:** a dinosaur-killer where you tap: a crater, fire and a long winter in which most big
+  animals die (bodies fall where they stand) and the small inherit the world. Before the end of
+  the Cretaceous it ends the age of dinosaurs at once.
 - **Ruin:** meteors (they fly in real time, even while paused, with a 3D flight and impact up
   close), tornadoes, tsunamis.
 - **Deep:** dig, ore, magma, aquifers.

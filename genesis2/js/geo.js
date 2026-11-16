@@ -86,7 +86,7 @@
     rng = AG.makeRng((Math.imul(seed, 2654435761) ^ 0x51ed270b) >>> 0); Geo.rng = rng;
     buildTiles(seed); Geo.tilesFor = seed;
     const n1 = AG.makeNoise(seed + 101), n2 = AG.makeNoise(seed + 102), n3 = AG.makeNoise(seed + 103);
-    Geo.phase = 'deep'; Geo.myr = 0; Geo.dawnMyr = 0; Geo.year = 0; Geo.stepN = 0; // the world is born in Year 0
+    Geo.phase = 'deep'; Geo.myr = 0; Geo.dawnMyr = 0; Geo.year = 0; Geo.stepN = 0; Geo.watchYears = 0; // the world is born in Year 0
     Geo.quakes = Geo.eruptions = Geo.splits = Geo.sutures = 0;
     Geo.events.length = 0; Geo.frames.length = 0; Geo.volcanoes.length = 0;
     Geo.iceVol = 0.1; Geo.seaLevel = 0; Geo.applied = 0;
@@ -988,7 +988,7 @@
   // One calendar from the world's birth: Year 0, 1, 2, ... Deep time counts in millions of years;
   // the Age of People continues the same count from the Dawn. y = years since the Dawn (or null for now).
   AG.calYear = function (y) {
-    if (Geo.phase === 'deep' && (y === null || y === undefined)) return Math.round(Geo.myr * 1e6);
+    if (Geo.phase === 'deep' && (y === null || y === undefined)) return Math.round(Geo.myr * 1e6) + (Geo.watchYears || 0);
     return Math.round(Geo.dawnMyr * 1e6) + Math.floor(y === null || y === undefined ? Geo.year : y);
   };
   AG.calText = (y) => `Year ${AG.calYear(y).toLocaleString('en-US')}`;

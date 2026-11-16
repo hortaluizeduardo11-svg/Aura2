@@ -67,6 +67,29 @@
     if (AG.onDawn) AG.onDawn(p);
   };
 
+  // ------------------------------------------------------------ deep time up close
+  // The clock of the ages can stop at any moment of deep time and the world be watched tick by
+  // tick: the period's land animals are embodied and live, feed, hunt and flock like any animals,
+  // its sea teems in the close-up, weather and night come and go. Ages takes the world back into
+  // deep time, the bodies folding into their regional populations again.
+  Sim.watchDeep = function () {
+    if (AG.mode !== 'deep') return false;
+    Sim.geoSeen = Geo.events.length; // (the quakes and rifts of the ages are history, not news)
+    AG.mode = 'watch'; Geo.watchYears = 0;
+    AG.tick += (192 - (AG.tick % AG.DAY_TICKS) + AG.DAY_TICKS) % AG.DAY_TICKS; // arrive in the morning
+    Life.embody();
+    return true;
+  };
+  Sim.resumeDeep = function () {
+    if (AG.mode !== 'watch' || Geo.phase !== 'deep') return false;
+    Life.fold();
+    for (let i = 0; i < AG.U.hi; i++) if (AG.U.alive[i]) AG.Ent.remove(i);
+    AG.Proj.reset();
+    AG.mode = 'deep'; Geo.watchYears = 0;
+    Wd.dirty.fill(1);
+    return true;
+  };
+
   // ------------------------------------------------------------ modes
   Sim.setMode = function (m) {
     if (m === AG.mode || AG.mode === 'deep') return;
@@ -100,7 +123,8 @@
     AG.Proj.tick();
     time('civ', () => Civ.tick());
     if (AG.tick % 120 === 0) Life.census();
-    if (AG.tick % 480 === 0) { Life.yearStep(0); } // keeps speciation and extinction checks alive
+    if (Geo.phase === 'deep') { if (AG.tick % AG.YEAR_TICKS === 0) Geo.watchYears = (Geo.watchYears || 0) + 1; } // (deep time watched: the years tick on the ages' clock)
+    else if (AG.tick % 480 === 0) { Life.yearStep(0); } // keeps speciation and extinction checks alive
     AG.God.tick();
     geoEvents();
     if (AG.tick % 240 === 0) AG.History.yearTick();

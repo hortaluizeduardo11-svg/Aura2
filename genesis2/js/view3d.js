@@ -1028,7 +1028,14 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
   // over a dozen frames instead. The new instances are written into the buffers as it goes, but
   // the GPU keeps drawing the old set until the last row is done and the buffers are flagged.
   let fj = null;
+  // the flora of the age (deep time): 1 before the flowering plants (Devonian to Jurassic: conifers,
+  // cycads and tree ferns over fern floors, no grass, flowers or cacti); 2 the Cretaceous (the first
+  // flowering trees and flowers, still no grass); 3 the Paleogene (grass, but no cacti yet); 0 today
+  let cEra = 0;
+  const eraFlora = () => { if (AG.Geo.phase !== 'deep' || !AG.Life.periodIdx) return 0; const p = AG.Life.periodIdx(); return p <= 7 ? 1 : p === 8 ? 2 : p === 9 ? 3 : 0; };
+  V.floraEra = () => cEra;
   function floraBegin() {
+    cEra = eraFlora();
     for (const name in PL) cnt[name] = 0;
     fj = { phase: 0, row: 0, total: 0, K: 1, season: Sky.season(), ms: 0 };
   }
@@ -1098,6 +1105,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     }
   }
   function broadleaf(n, kind) { // kind: 0 oak-like, 1 birch, 2 willow, 3 olive
+    if (cEra === 1) { if (hr() < 0.45) palm(n * 0.7); else conifer(n * 0.85); return; } // (before flowers: cycads and tree ferns, conifers)
     for (let k = trees(n); k > 0; k--) {
       spot();
       const s = (0.5 + hr() * 0.32) * lush, ry = hr() * 6.28, v = vary();
@@ -1122,6 +1130,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     }
   }
   function jungle(n, emergent) {
+    if (cEra === 1) { palm(n * 0.8); if (emergent) conifer(n * 0.6); return; } // (a fern-and-cycad jungle under tall conifers)
     for (let k = trees(n); k > 0; k--) {
       spot();
       const s = ((emergent ? 0.85 : 0.55) + hr() * 0.3) * lush, ry = hr() * 6.28, v = vary(), th = emergent ? 1.5 : 0.85;
@@ -1131,13 +1140,13 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
     }
   }
   function palm(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = (0.75 + hr() * 0.4) * lush, w = 230 + hr() * 25; put('palms', PX, cBase, PZ, s, s * (1 + hr() * 0.35), hr() * 6.28, 0, w, w, w); } }
-  function acacia(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = (0.85 + hr() * 0.45) * lush, w = 225 + hr() * 30; put('acacias', PX, cBase, PZ, s * 1.2, s, hr() * 6.28, 0, w, w * (0.95 + hr() * 0.08), w * 0.9); } }
+  function acacia(n) { if (cEra === 1 || cEra === 2) { conifer(n * 0.8, true); return; } for (let k = trees(n); k > 0; k--) { spot(); const s = (0.85 + hr() * 0.45) * lush, w = 225 + hr() * 30; put('acacias', PX, cBase, PZ, s * 1.2, s, hr() * 6.28, 0, w, w * (0.95 + hr() * 0.08), w * 0.9); } }
   function cypress(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = 0.45 + hr() * 0.25, v = vary(); put('cypress', PX, cBase, PZ, s, s * (2 + hr() * 0.8), hr() * 6.28, 0, 52 * v, 92 * v, 62 * v); } }
   function dead(n) { for (let k = trees(n); k > 0; k--) { spot(); const s = 0.55 + hr() * 0.35; put('bare', PX, cBase, PZ, s, s * 1.5, hr() * 6.28, (hr() - 0.5) * 0.3, 92, 80, 70); } }
   function bush(n, c) { for (let k = many(n); k > 0; k--) { spot(); const s = 0.28 + hr() * 0.2, v = vary(); put('bushes', PX, cBase, PZ, s, s * 0.85, hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
-  function grass(n) { if (cSn > 80) return; const c = cGrass; for (let k = many(n); k > 0; k--) { spot(); const s = 0.2 + hr() * 0.13, v = vary(); put('grass', PX, cBase, PZ, s, s * (0.7 + hr() * 0.45), hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
+  function grass(n) { if (cSn > 80) return; if (cEra === 1 || cEra === 2) { fern(n * 0.35); return; } /* (no grass before the Paleogene: ferns carpet the ground) */ const c = cGrass; for (let k = many(n); k > 0; k--) { spot(); const s = 0.2 + hr() * 0.13, v = vary(); put('grass', PX, cBase, PZ, s, s * (0.7 + hr() * 0.45), hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
   function fern(n) { if (cSn > 80) return; const c = cSeason === 2 ? FERN_AUT : cWinter ? FERN_WIN : FERN; for (let k = many(n); k > 0; k--) { spot(); const s = 0.35 + hr() * 0.2, v = vary(); put('ferns', PX, cBase, PZ, s, s, hr() * 6.28, 0, c[0] * v, c[1] * v, c[2] * v); } }
-  function flower(n, gold) { if (!gold && cSeason > 1) return; for (let k = many(n); k > 0; k--) { spot(); const c = gold ? HOLYGOLD : PETALS[(hr() * PETALS.length) | 0]; put('flowers', PX, cBase + 0.06, PZ, 0.08, 0.08, 0, 0, c[0], c[1], c[2]); } }
+  function flower(n, gold) { if (!gold && (cSeason > 1 || cEra === 1)) return; for (let k = many(n); k > 0; k--) { spot(); const c = gold ? HOLYGOLD : PETALS[(hr() * PETALS.length) | 0]; put('flowers', PX, cBase + 0.06, PZ, 0.08, 0.08, 0, 0, c[0], c[1], c[2]); } }
   function rock(n, flat) {
     const c = cRock;
     for (let k = many(n); k > 0; k--) {
@@ -1200,7 +1209,8 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
         break;
       case BIOME.DESERT: {
         const r = hr();
-        if (T > 0.6 && r < 0.07 * K) put('cacti', x + 0.5, base, y + 0.5, 0.9 + hr() * 0.4, 0.9 + hr() * 0.5, hr() * 6.28, 0, 86, 168, 90);
+        if (cEra) { if (r < 0.06 * K) palm(0.05 / K); } // (no cacti yet: a few hardy cycads)
+        else if (T > 0.6 && r < 0.07 * K) put('cacti', x + 0.5, base, y + 0.5, 0.9 + hr() * 0.4, 0.9 + hr() * 0.5, hr() * 6.28, 0, 86, 168, 90);
         else if (r < 0.17 * K) put('cacti', x + 0.3 + hr() * 0.4, base, y + 0.3 + hr() * 0.4, 0.9, 0.28, hr() * 6.28, 0, 96, 158, 84); // a squat barrel cactus
         bush(0.16, B_DES); rock(0.08); if (v > 20) grass(0.12);
         break;

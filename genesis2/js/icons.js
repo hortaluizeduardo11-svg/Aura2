@@ -46,6 +46,7 @@
     'blitz': ['.......yyy..', '......yyy...', '.....yyy....', '....yyyyyy..', '.......yy...', '......yy....', '.....yy.....', '....yyyyy...', '.......y....', '..r...y.....', '.rrr.y......', 'rrrrr.......'],
     'nuke': ['...oooooo...', '..oyyyyyyo..', '.oyzzzzzzyo.', '.oyyzzzzyyo.', '..ooyyyyoo..', '....oyyo....', '....oyyo....', '....oyyo....', '...ooyyoo...', '..ooyyyyoo..', '.oooooooooo.', 'dddddddddddd'],
     'zero': ['............', '.....a......', '..a..a..a...', '...aGGGa....', '..GGlGGGG...', 'aaGlGGeGGaa.', '..GGGeGGG...', '..GGeGGlG...', '...aGGGa....', '..a..a..a...', '.....a......', '............'],
+    'asteroid': ['k.........ox', '.....o..oyo.', '.......oyzo.', '......oyyo..', '....dddoo...', '...dggddd...', '..dggdgdxd..', '..dgddddxd..', '..ddddxxxd..', '...dxxxxd...', 'o...ddd...o.', 'roo.....oorr'],
     'legend': ['..........y.', '.........yz.', '........yy..', '.....wwwy...', '....wwwwww..', '...pwwxwwww.', '..ppwwwwwwww', '.pp.wwwww.ww', 'pp..wwwww...', 'p..wwwwww...', '..wwwwwww...', '..wwwwwww...'],
     'starseed': ['y...........', 'zyo.........', '.yoo........', '...oGGGG....', '...GGGGGG...', '..GGkGGkGG..', '..GkkGGkkG..', '..GGGGGGGG..', '...GGllGG...', '....GGGG....', '..G..GG..G..', '.G..G..G..G.'],
     'dive': ['.c..c..c..c.', 'cBccBccBccBc', 'BBBBBBBBBBBB', 'BBBBBBBBBBBB', 'BBBoooBBBBBB', 'BBoooooBBoBB', 'BokooooooooB', 'BBoooooBBoBB', 'BBBoooBBBBBB', 'NNNNNNNNNNNN', 'NNPNNNGNNNPN', 'NPPPNGGGNPPP'],

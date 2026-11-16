@@ -593,6 +593,32 @@ test('textures: every surface tiles seamlessly, averages a neutral grey, and is 
   return `${T.NAMES.length} surfaces of ${S}x${S} in ${fmt(T.ms)} ms; worst seam ratio ${fmt(worstK)} (${worst})`;
 });
 
+test('the age of dinosaurs can be watched up close: deep time stops, dinosaurs live as bodies, then the ages go on to the asteroid and the Dawn', () => {
+  const W = 224, H = 144, AG = load({ W, H }), Life = AG.Life, U = AG.U;
+  AG.Sim.newWorld(13);
+  while (AG.Geo.myr < 68) AG.Sim.deepStep();
+  const ev0 = AG.Geo.events.length, myr = AG.Geo.myr;
+  assert(AG.Sim.watchDeep() && AG.mode === 'watch' && AG.Geo.phase === 'deep', 'deep time slows to a walk');
+  const dinos = new Set(['early sauropod', 'sauropod', 'stegosaur', 'small ornithopod', 'duckbill', 'horned dinosaur', 'armoured dinosaur', 'early theropod', 'small raptor', 'raptor', 'great theropod', 'tyrant lizard']);
+  const census = () => { const by = new Map(); for (let i = 0; i < U.hi; i++) { if (!U.alive[i] || U.sid[i] < 0) continue; const s = Life.species[U.sid[i]]; if (s) by.set(s.common, (by.get(s.common) || 0) + 1); } return by; };
+  const c0 = census(), dino0 = [...c0].filter(([k]) => dinos.has(k));
+  assert(dino0.length >= 2, `dinosaurs walk as bodies (${[...c0].map(([k, n]) => k + ' ' + n).join(', ')})`);
+  const x0 = new Map(); for (let i = 0; i < U.hi; i++) if (U.alive[i]) x0.set(i, [U.x[i], U.y[i]]);
+  for (let k = 0; k < AG.YEAR_TICKS + 20; k++) AG.Sim.tick();
+  let moved = 0; for (const [i, p] of x0) if (U.alive[i] && Math.hypot(U.x[i] - p[0], U.y[i] - p[1]) > 1) moved++;
+  assert(moved > x0.size * 0.3, `they move about (${moved} of ${x0.size})`);
+  assert(AG.Geo.myr === myr && AG.Geo.watchYears === 1 && AG.calYear(null) === Math.round(myr * 1e6) + 1, 'the ages wait while a year is watched');
+  assert(AG.Sim.geoSeen >= ev0, 'the quakes of the ages are not replayed');
+  assert(AG.Sim.resumeDeep() && AG.mode === 'deep', 'Ages takes the world back into deep time');
+  let alive = 0; for (let i = 0; i < U.hi; i++) if (U.alive[i]) alive++;
+  assert(alive === 0, 'the bodies fold back into their populations');
+  while (AG.mode === 'deep' && !Life.kpg) AG.Sim.deepStep();
+  const big = Life.alive().filter((s) => dinos.has(s.common) && s.mean[Life.L.SIZE] > 150).length;
+  AG.Sim.skipDeep();
+  assert(AG.mode === 'history' && AG.Geo.phase === 'history', 'and on to the Dawn');
+  return `${dino0.map(([k, n]) => n + ' ' + k).join(', ')}; ${moved}/${x0.size} moved in a year; ${big} big dinosaur species just after the asteroid`;
+});
+
 test('big worlds: coarse geology, batched life, and wild animals embodied around the camera that follow it', () => {
   const W = 832, H = 512, AG = load({ W, H }), Life = AG.Life, U = AG.U;
   assert(AG.N > 400000 && AG.Geo.CS === 8, `a big world paints from 8-cell geology (CS ${AG.Geo.CS})`);

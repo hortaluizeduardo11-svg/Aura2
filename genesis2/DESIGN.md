@@ -89,6 +89,20 @@ suite runs determinism, geology, genetics and technology tests without a browser
 | Centuries | 20 years per second | **History**: aggregate year steps, Δ = 1 |
 | Millennia | up to 400 years per second | **History**: Δ = 8 |
 | Ages | 6 million years per second | **Deep time** (before the Age of People); *Skip to the Dawn* races the rest |
+| 1×, 4×, 16× in deep time | as Watch | **Deep time watched** (`Sim.watchDeep`): mode Watch while `Geo.phase` stays deep. Geology and the life model wait; the period's land species are embodied (`Life.embody`) and live as bodies; geological events already logged are skipped (`Sim.geoSeen`); years watched are added to the calendar (`Geo.watchYears`). Ages (`Sim.resumeDeep`) folds the bodies back. |
+
+**The Age of Dinosaurs stop** (main.js `deepMoments`, setting `dinoStop`): once per world, at the
+first deep step in the Jurassic past 66 Myr with at least two dinosaur kinds alive (not behind the
+title, in a demo or during Skip to the Dawn), the camera jumps to the region with most dinosaur
+biomass, the world is watched at 1x, and then the camera moves to the densest gathering of big
+dinosaurs on open ground. When the Cretaceous asteroid (`Life.impact`) strikes during Ages, a big
+meteor is launched over the view. The **Asteroid** tool launches one anywhere; on impact
+`Life.strike()` runs the same regional extinction and 90% of embodied big animals die.
+
+**The plants of the age** (view3d `eraFlora`, render `decoEra`): in deep time, Devonian to Jurassic
+show conifers, cycads and tree ferns (palms stand in) over ferns, with no broadleaf trees, grass,
+flowers or cacti; the Cretaceous adds broadleaf trees and flowers but no grass; the Paleogene
+grass but no cacti.
 
 The sim runs under a per-frame budget (9 ms at the High quality level, down to 5 ms at Minimum,
 and doubled when the frame rate is capped at 30). A history step is split into phases and spread over as many frames as it needs:

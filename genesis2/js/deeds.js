@@ -46,6 +46,8 @@
     ['dragon', 'Myth', 'Dragonslayer', 'Defenders bring down a dragon', null],
     ['kaiju', 'Myth', 'Monster down', 'Defenders bring down a kaiju', null],
     ['kraken', 'Myth', 'Calm seas', 'Drive off a kraken', null],
+    ['dinos', 'Myth', 'Thunder lizards', 'Watch the age of dinosaurs up close', null],
+    ['asteroid', 'Myth', 'Extinction event', 'Bring down a great asteroid', null],
     ['legend', 'Myth', 'Here be dragons', 'Raise a creature of legend', null],
     ['starseed', 'Myth', 'Visitors', 'Seed life from another world', null],
     ['dive', 'Myth', 'Twenty fathoms', 'Dive under the sea in the close-up', null],

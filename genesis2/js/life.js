@@ -527,6 +527,7 @@
   function lifeEvent(kind, text) { if (AG.History && AG.History.event) AG.History.event(kind, text, { cause: 'evolution' }); }
   // The end of the Cretaceous: a great asteroid. Big land animals almost all perish.
   function impact() {
+    const dinos = !Life.kpg && AG.Geo.phase === 'deep' && AG.Geo.myr >= 50;
     Life.kpg = true; Life.massExtinctions++;
     AG.Geo.climate.aerosol += 0.15;
     AG.Geo.events.push({ kind: 'impact', myr: AG.Geo.myr });
@@ -536,8 +537,11 @@
       for (const [r] of s.regions) if (rr() < p) s.regions.delete(r);
       if (!s.regions.size && s.sapient) continue;
     }
-    lifeEvent('extinction', 'A great asteroid strikes: fire and a long winter end the age of the dinosaurs; the small survive');
+    lifeEvent('extinction', dinos ? 'A great asteroid strikes: fire and a long winter end the age of the dinosaurs; the small survive' : 'A great asteroid strikes: fire and a long winter; most of the big animals die and the small inherit the world');
   }
+  // (a god's asteroid: the same blow at any time; before the end of the Cretaceous it ends the
+  // age of the dinosaurs there and then)
+  Life.strike = function () { impact(); return true; };
   // An emptied way of life does not stay empty: some survivors of a related kind take it up
   // (after the great asteroid, mammals became the hunters).
   const DONOR = { 0: [3, 1], 1: [3, 0], 2: [0, 3], 3: [0, 1], 4: [5], 5: [4] };

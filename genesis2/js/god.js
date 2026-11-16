@@ -259,6 +259,7 @@
     { id: 'harmony', cat: 'divine', name: 'Harmony', mode: 'click', color: '#81d4fa', desc: 'Tap two peoples to bind them in friendship (ends wars).', click: (x, y) => twoRealms(x, y, true) },
     { id: 'discord', cat: 'divine', name: 'Discord', mode: 'click', color: '#ef5350', desc: 'Tap two peoples to sow hatred between them.', click: (x, y) => twoRealms(x, y, false) },
     // disasters
+    { id: 'asteroid', cat: 'ruin', name: 'Asteroid', mode: 'click', color: '#ff5722', desc: 'A dinosaur-killer: a giant impact where you tap, then fire and a long winter. Most big animals die and the small inherit the world. Before the end of the Cretaceous it ends the age of the dinosaurs at once.', click: (x, y) => God.asteroid(x, y) },
     { id: 'meteor', cat: 'ruin', name: 'Meteor', mode: 'click', color: '#ff7043', desc: 'Tap a target to launch a meteor. Watch its flight and impact in real time, even while paused.', click: (x, y) => { God.meteors.push({ x, y, t: 0, T: 45, r: 4 + God.brush.r * 0.45, realTime: true }); } },
     { id: 'volcano', cat: 'ruin', name: 'Volcano', mode: 'click', color: '#d84315', desc: 'Raise an erupting volcano.', click: (x, y) => God.volcano(x, y, 4) },
     { id: 'tornado', cat: 'ruin', name: 'Tornado', mode: 'click', color: '#b0bec5', desc: 'Spawn a tornado. Keep holding to steer it.', click: (x, y) => { God.tornadoes.push({ x, y, vx: 0, vy: 0, life: 700, steer: true, a: 0 }); } },
@@ -702,8 +703,29 @@
     God.shake = 20;
     Civ.experience(x, y, 'fire', 4); Civ.experience(x, y, 'watcher', 2);
     witness(x, y, r * 4, AG.People.MK.DISASTER, 'the falling star', -0.9);
-    AG.History.event('quake', `A meteor strikes ${placeName(x, y)}`, { x, y, cause: 'a falling star' });
+    if (!m.quiet) AG.History.event('quake', `${m.asteroid ? 'A great asteroid' : 'A meteor'} strikes ${placeName(x, y)}`, { x, y, cause: 'a falling star' });
+    if (m.asteroid) asteroidWinter(m);
   }
+  // A dinosaur-killer: the crater, then the fire and the long winter that follow it. Most of the big
+  // animals die (their regions emptied; in Watch time the bodies fall where they stand) and the small
+  // inherit the world. Before the end of the Cretaceous it ends the age of the dinosaurs there and then.
+  function asteroidWinter(m) {
+    const Life = AG.Life, ended = !Life.kpg && AG.Geo.phase === 'deep' && AG.Geo.myr >= 50;
+    Life.strike();
+    let dead = 0;
+    for (let i = 0; i < U.hi; i++) {
+      if (!U.alive[i] || U.pid[i] >= 0 || U.sid[i] < 0) continue;
+      const s = Life.species[U.sid[i]]; if (!s || s.sapient || s.domestic) continue;
+      if (s.mean[Life.L.SIZE] > 150 && rnd() < 0.9) { Ent.kill(i, 'the great asteroid'); dead++; }
+    }
+    AG.Sky.flash = 1; God.shake = 40;
+    if (AG.Deeds) AG.Deeds.note('asteroid');
+    toast(ended ? 'The great asteroid strikes: the age of the dinosaurs ends in fire and a long winter' : `A great asteroid strikes: fire and a long winter${dead ? `; ${dead} great beasts die` : ''}`);
+  }
+  God.asteroid = function (x, y) {
+    if (God.meteors.some((q) => q.asteroid)) { toast('An asteroid is already falling'); return; }
+    God.meteors.push({ x, y, t: 0, T: 80, r: 18, realTime: true, asteroid: true });
+  };
   God.quake = function (x, y, mag, natural) {
     mag = mag || 7;
     const sc = Math.max(0.3, (mag - 4.5) / 3);

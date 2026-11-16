@@ -363,6 +363,7 @@
       }
     }
     animated[c] = ani;
+    sig = (Math.imul(sig, 7) + decoEra()) | 0; // (the plants of the age: a new age redraws them)
     if (out) mo.sigB[c] = sig; // trees follow when the morph reaches this chunk
     else if (sig !== decoSig[c]) { decoSig[c] = sig; decoDirty[c] = 1; }
   }
@@ -604,7 +605,12 @@
   function hash(x, y) { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return (h ^ (h >>> 16)) >>> 0; }
   const SHADOW = pack(8, 18, 16, 64);
   const scratch = {};
+  // the plants of the age in deep time (as view3d's flora): 1 conifers and cycads, no flowers or
+  // cacti (Devonian to Jurassic); 2 the Cretaceous's first flowering trees (no cacti); 3 the
+  // Paleogene (no cacti); 0 today
+  function decoEra() { if (AG.Geo.phase !== 'deep' || !AG.Life.periodIdx) return 0; const p = AG.Life.periodIdx(); return p <= 7 ? 1 : p === 8 ? 2 : p === 9 ? 3 : 0; }
   function buildDeco(c, k) {
+    const era = decoEra();
     const cx0 = (c % CW) << 4, cy0 = ((c / CW) | 0) << 4;
     const bw = 18 * k, bh = 19 * k; // one cell of padding left and right, three on top
     if (!scratch[k]) scratch[k] = new Uint32Array(bw * bh);
@@ -619,6 +625,7 @@
       const h = hash(x, y), v = Wd.veg[i], s = Wd.soil[i], T = Wd.tbase[i], snow = Wd.snow[i] > 120;
       let name = null, pk = null, pal = null;
       const tree = () => {
+        if (era === 1) { name = 'pine'; pk = snow ? 'snowpine' : 'pine'; return; }
         if (snow || T < 0.3) { name = 'pine'; pk = snow || (season === 3 && T < 0.4) ? 'snowpine' : 'pine'; }
         else if (T > 0.68) { name = 'jungle'; pk = 'jungle'; }
         else if (season === 3 && T < 0.48) { name = 'dead'; pk = 'dead'; }
@@ -629,13 +636,13 @@
         else if (v >= 110) { if (h % (far ? 17 : 9) === 0) tree(); else if (!far && h % 5 === 0) { name = 'bush'; pk = leaf; } }
         else if (v >= 60 && !far) {
           if (h % 6 === 0) { name = 'tuft'; pk = season === 2 || T > 0.62 ? 'tuftDry' : 'tuft'; }
-          else if (season <= 1 && h % 17 === 0) { name = 'flower'; pk = 'f' + (h >>> 8) % PETALS.length; pal = { f: PETALS[(h >>> 8) % PETALS.length], y: [255, 232, 120], g: [72, 150, 60] }; }
+          else if (season <= 1 && era !== 1 && h % 17 === 0) { name = 'flower'; pk = 'f' + (h >>> 8) % PETALS.length; pal = { f: PETALS[(h >>> 8) % PETALS.length], y: [255, 232, 120], g: [72, 150, 60] }; }
         }
         if (!name && v > 40 && h % 4 === 0 && x > 0 && x < W - 1 && y > 0 && y < H - 1 && (Wd.fl[i - 1] > 0.01 || Wd.fl[i + 1] > 0.01 || Wd.fl[i - W] > 0.01 || Wd.fl[i + W] > 0.01)) { name = 'reed'; pk = 'reed'; }
         if (s === SO.HOLY && !name && h % 5 === 0) { name = 'flower'; pk = 'holy'; pal = { f: [255, 236, 140], y: [255, 255, 220], g: [150, 170, 70] }; }
       } else if (s === SO.ROCK) { if (h % (far ? 41 : 19) === 0) { name = 'rock'; pk = snow ? 'snowrock' : 'rock'; } else if (v > 60 && h % 9 === 0) tree(); }
       else if (s === SO.SAND) {
-        if (T > 0.55 && Wd.elev[i] > SEA + 0.02 && h % 29 === 0) { name = 'cactus'; pk = 'cactus'; }
+        if (!era && T > 0.55 && Wd.elev[i] > SEA + 0.02 && h % 29 === 0) { name = 'cactus'; pk = 'cactus'; }
         else if (v > 20 && h % 13 === 0) { name = 'bush'; pk = 'tuftDry'; pal = { L: [196, 182, 104], g: [150, 136, 80], G: [110, 100, 64] }; }
       } else if (s === SO.ASH) { if (h % 11 === 0) { name = 'dead'; pk = 'dead'; } }
       else if (s === SO.BASALT) { if (h % 15 === 0) { name = 'rock'; pk = 'basalt'; } }

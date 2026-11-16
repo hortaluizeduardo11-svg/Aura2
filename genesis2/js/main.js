@@ -91,7 +91,14 @@
     s = String(s);
     if (s === '0') { AG.paused = true; AG.UI.syncSpeed(); return; }
     AG.paused = false;
-    if (AG.mode === 'deep') { AG.UI.syncSpeed(); return; } // deep time has one speed (and the Dawn button)
+    if (Geo.phase === 'deep') { // before people: Ages, or the moment watched up close (no history yet)
+      if (s === 'a') { if (AG.mode === 'watch') { Sim.resumeDeep(); R.bordersDirty = true; } }
+      else if (!HIST[s]) {
+        AG.speed = +s || 1; lastSpeed = s;
+        if (AG.mode === 'deep') { setFocus(); Sim.watchDeep(); R.bordersDirty = true; if (!AG.creating && !AG.dinoBusy) AG.UI.toast(`Watching the ${AG.Life.periodName()} up close: zoom in to see its life. Ages carries on through time.`); }
+      }
+      AG.UI.syncSpeed(); return;
+    }
     lastSpeed = s;
     if (HIST[s]) {
       AG.histRate = HIST[s].rate; AG.histDy = HIST[s].dy;
@@ -105,10 +112,70 @@
   AG.togglePause = function () { if (AG.paused) AG.setSpeed(AG.mode === 'deep' ? 'a' : lastSpeed); else AG.setSpeed('0'); };
 
   // Run the rest of deep time quickly but without freezing the page: a big slice each frame.
-  AG.skipToDawn = function () { if (AG.mode === 'deep') { AG.fastDawn = true; AG.paused = false; Loader.show('Racing through the ages', 'Plates drift and species evolve until a lineage of primates becomes people.'); } };
+  AG.skipToDawn = function () { if (Geo.phase === 'deep' && AG.mode === 'watch') Sim.resumeDeep(); if (AG.mode === 'deep') { AG.fastDawn = true; AG.paused = false; Loader.show('Racing through the ages', 'Plates drift and species evolve until a lineage of primates becomes people.'); } };
+
+  // ------------------------------------------------------------ moments of deep time
+  // Once on its way deep time stops in the age of dinosaurs (the Jurassic, when the great ones have
+  // evolved): the camera flies down to the biggest herd and the world runs at 1x, the dinosaurs
+  // alive as bodies. Ages goes on toward the great asteroid, which is seen to fall.
+  const DINOS = new Set(['early sauropod', 'sauropod', 'stegosaur', 'small ornithopod', 'duckbill', 'horned dinosaur', 'armoured dinosaur', 'early theropod', 'small raptor', 'raptor', 'great theropod', 'tyrant lizard']);
+  AG.isDino = (name) => DINOS.has(name);
+  function dinoSpot() {
+    const Life = AG.Life, score = new Float32Array(Life.RN);
+    let best = -1, bv = 0, kinds = new Set();
+    for (const s of Life.alive()) {
+      if (!DINOS.has(s.common)) continue;
+      kinds.add(s.common);
+      const w = (s.mean[Life.L.SIZE] > 170 ? 3 : 1) * (s.arch === Life.ARCH.PREDATOR ? 1.5 : 1);
+      for (const [r, R] of s.regions) score[r] += Math.sqrt(R.n) * w;
+    }
+    for (let r = 0; r < Life.RN; r++) if (score[r] > bv && Life.env.land[r] > 0.6) { bv = score[r]; best = r; }
+    return best < 0 || kinds.size < 2 ? null : { x: (best % Life.RW + 0.5) * Life.RS, y: (((best / Life.RW) | 0) + 0.5) * Life.RS, kinds: [...kinds] };
+  }
+  AG.dinoStop = function (force) {
+    const Life = AG.Life, p = dinoSpot();
+    if (!p) return false;
+    AG.dinoSeen = true; AG.dinoBusy = true;
+    R.jumpTo(p.x, p.y, 14); // (down into the 3D close-up: the animals are embodied around here)
+    AG.setSpeed('1');
+    AG.dinoBusy = false;
+    // then to the thickest gathering of the big ones out in the open, where the canopy hides nothing
+    { const U = AG.U, Wd = AG.World, SZ = Life.L.SIZE, cells = new Map(); let best = null, bw = 0;
+      for (let i = 0; i < U.hi; i++) {
+        if (!U.alive[i] || U.sid[i] < 0) continue;
+        const s = Life.species[U.sid[i]]; if (!s || !DINOS.has(s.common)) continue;
+        const j = (U.y[i] | 0) * AG.W + (U.x[i] | 0), k = ((U.y[i] / 10) | 0) * 4096 + ((U.x[i] / 10) | 0);
+        const w = (s.mean[SZ] > 150 ? 3 : 1) * (s.arch === Life.ARCH.PREDATOR ? 2 : 1) * (Wd.veg[j] < 150 ? 1.6 : 0.5);
+        const c = cells.get(k) || { w: 0, x: 0, y: 0 }; c.w += w; c.x += U.x[i] * w; c.y += U.y[i] * w; cells.set(k, c);
+        if (c.w > bw) { bw = c.w; best = c; }
+      }
+      if (best) R.jumpTo(best.x / best.w, best.y / best.w, 18); }
+    const names = p.kinds.slice(0, 5).map((k) => Life.plural(k));
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    AG.History.event('genesis', `The Age of Dinosaurs: ${list} walk the land`, { x: p.x, y: p.y, cause: `${Math.round(Geo.myr)} million years of evolution` });
+    if (AG.Deeds) AG.Deeds.note('dinos');
+    if (!force) {
+      Loader.show('The Age of Dinosaurs', `${Geo.label()}, the ${Life.periodName()}: ${list} walk the land. Watch them up close and use your powers; press Ages to go on toward the great asteroid.`);
+      Loader.set(0.6);
+      setTimeout(() => { try { R.prewarm(); } catch (e) { showError(e); } setTimeout(() => { try { AG.View3D.prewarm(); } catch (e) { /* 3D is optional */ } Loader.set(1, 'Ready'); Loader.hide(); setTimeout(() => AG.UI.toast('Creatures → Release sets down more dinosaurs; Destruction → Asteroid ends their age. Ages goes on.'), 1800); }, 30); }, 30);
+    }
+    return true;
+  };
+  function deepMoments() {
+    const Life = AG.Life;
+    if (AG.mode !== 'deep' || AG.fastDawn) return;
+    if (!AG.dinoSeen && AG.Settings.v.dinoStop !== 'off' && !(AG.Title && AG.Title.on) && !AG.Demos._after && Geo.myr >= 66 && Geo.myr < Life.KPG_MYR && !Life.kpg) AG.dinoStop();
+    if (Life.kpg && !AG.kpgSeen) { // the great asteroid: seen to fall on the land in view
+      AG.kpgSeen = true;
+      let x = R.cam.x, y = R.cam.y;
+      for (let t = 0; t < 40; t++) { const qx = R.cam.x + (AG.rnd() - 0.5) * 120, qy = R.cam.y + (AG.rnd() - 0.5) * 80; if (qx > 20 && qy > 20 && qx < AG.W - 20 && qy < AG.H - 20) { x = qx; y = qy; break; } }
+      AG.God.meteors.push({ x, y, t: 0, T: 70, r: 16, realTime: true, quiet: true });
+      AG.UI.toast('A great asteroid strikes: the age of the dinosaurs ends in fire and a long winter.');
+    }
+  }
 
   AG.newWorld = function (seed) {
-    AG.creating = true;
+    AG.creating = true; AG.dinoSeen = false; AG.kpgSeen = false;
     Sim.newWorld(seed);
     AG.fastDawn = false; AG.paused = false;
     R.reset(); AG.View3D.reset(); AG.UI.reset();
@@ -221,14 +288,14 @@
           else {
             acc += (dt / 1000) * DEEP_MYPS * (AG.Title && AG.Title.on ? 0.3 : 1); // (slowly behind the title screen: the land drifts, the Dawn waits)
             // one geology step at most per frame (a step is the heaviest thing deep time does)
-            if (acc >= Sim.DEEP_DT) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; stepped = true; }
+            if (acc >= Sim.DEEP_DT) { Sim.deepStep(); acc -= Sim.DEEP_DT; myr += Sim.DEEP_DT; stepped = true; deepMoments(); }
             if (acc > Sim.DEEP_DT * 2) acc = Sim.DEEP_DT * 2;
           }
         }
         // the next picture of the land is built off screen a few rows per frame (skipped on frames
         // that already ran a step); the map then morphs into it everywhere at once
         if (AG.mode === 'deep' && !stepped) R.deepFrame(Math.max(4, Math.ceil(AG.H * (dt / 1000) / (LEVELS[Perf.level].repaint / 500))));
-        if (AG.mode !== 'deep') { acc = 0; if (AG.Demos._after) { const f = AG.Demos._after; AG.Demos._after = null; f(); } }
+        if (AG.mode !== 'deep') { acc = 0; if (AG.Demos._after && Geo.phase !== 'deep') { const f = AG.Demos._after; AG.Demos._after = null; f(); } }
       } else if (AG.mode === 'watch') {
         if (!AG.paused) acc += dt * AG.speed;
         let steps = 0;

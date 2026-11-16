@@ -81,7 +81,7 @@
     { id: 'life', name: 'Creatures', icon: 'tab-life', groups: [['Release', ['grazers', 'hunters', 'birds', 'apes']], ['Genes', ['geneup', 'genedown', 'mutate']], ['Plenty', ['fertile']], ['Wonders', ['legend', 'starseed']], ['Look', [['panel:life', 'Tree of life'], ['dive', 'Dive']]]] },
     { id: 'weather', name: 'Weather', icon: 'tab-weather', groups: [['Storms', ['rain', 'thunder', 'blizzard', 'heat', 'bolt']], ['Elements', ['water', 'lava', 'acid', 'fire', 'freeze', 'drain']]] },
     { id: 'plague', name: 'Plague', icon: 'tab-plague', groups: [['Lab', [['panel:plague', 'Plague lab'], 'zero', 'plague']], ['Watch', [['ov:plague', 'Sickness map'], ['panel:war', 'War room']]]] },
-    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse', 'locusts']], ['Sci-fi', ['ufo', 'goo', 'hole']], ['Monsters', ['dragon', 'kraken', 'kaiju']]] },
+    { id: 'ruin', name: 'Destruction', icon: 'tab-ruin', groups: [['From the sky', ['meteor', 'asteroid', 'tornado']], ['From below', ['volcano', 'erupt', 'fault', 'tsunami']], ['Pestilence', ['plague', 'curse', 'locusts']], ['Sci-fi', ['ufo', 'goo', 'hole']], ['Monsters', ['dragon', 'kraken', 'kaiju']]] },
     { id: 'world', name: 'World', icon: 'tab-world', groups: [['Look', ['inspect']], ['Layer', [['view:0', 'Underground'], ['view:1', 'Surface'], ['view:2', 'Sky'], ['dive', 'Dive']]],
       ['Map', [['ov:realms', 'Realms'], ['ov:faith', 'Faiths'], ['ov:language', 'Languages'], ['ov:era', 'Eras'], ['ov:genes', 'Genes'], ['ov:rock', 'Rock'], ['ov:resources', 'Resources'], ['ov:heat', 'Climate'], ['ov:none', 'Plain'], ['trade', 'Trade routes']]],
       ['Windows', [['panel:inspect', 'Inspector'], ['panel:world', 'World stats'], ['minimap', 'Minimap']]], ['Game', [['act:save', 'Save'], ['act:load', 'Load'], ['act:timelapse', 'Time-lapse'], ['act:menu', 'Settings'], ['act:title', 'Title screen']]]] },
@@ -259,9 +259,10 @@
     const cur = AG.paused ? '0' : AG.mode === 'deep' ? 'a' : AG.mode === 'history' ? (AG.histRate > 100 ? 'm' : 'c') : String(AG.speed);
     for (const b of document.querySelectorAll('#speed button')) {
       b.classList.toggle('on', b.dataset.speed === cur);
-      b.disabled = AG.mode === 'deep' ? !(b.dataset.speed === '0' || b.dataset.speed === 'a') : b.dataset.speed === 'a';
+      // (before people: Ages, or the moment watched at 1x-16x; after: no Ages)
+      b.disabled = Geo.phase === 'deep' ? b.dataset.speed === 'c' || b.dataset.speed === 'm' : b.dataset.speed === 'a';
     }
-    $('#btn-dawn').hidden = AG.mode !== 'deep';
+    $('#btn-dawn').hidden = Geo.phase !== 'deep';
   };
   function fillDiseases() {
     $('#disease').innerHTML = AG.DISEASES.map((d, i) => `<option value="${i}">${esc(d.name)}</option>`).join('');
@@ -493,7 +494,7 @@
     else {
       const season = AG.mode === 'watch' ? ' · ' + Sky.SEASONS[Sky.season()] : '';
       const storm = AG.mode === 'watch' && Sky.storms.find((s) => Math.abs(s.x - R.cam.x) < 80 && Math.abs(s.y - R.cam.y) < 60);
-      label = `${Geo.label()} · ${worldEra()}${season}${storm ? ' · ' + Sky.STORMS[storm.type].name : ''}`;
+      label = `${Geo.label()} · ${Geo.phase === 'deep' && AG.Life.periodName ? AG.Life.periodName() : worldEra()}${season}${storm ? ' · ' + Sky.STORMS[storm.type].name : ''}`;
     }
     $('#clock').innerHTML = `<span class="sun" style="background:${sun}"></span>${esc(label)}`;
     if (AG.Settings.v.showFps === 'on') $('#fps').textContent = `${Math.round(AG.stats.fps)} fps · ${AG.Perf.LEVELS[AG.Perf.level].name}${R.stats.idle ? ' · still' : ''}`;
@@ -994,6 +995,7 @@
       ['ticker', 'Event ticker', [['on', 'On'], ['off', 'Off']], () => 'The latest happenings at the bottom of the screen.'],
       ['minimap', 'Minimap', [['on', 'On'], ['off', 'Off']], () => 'The small map of the whole world.'],
       ['shake', 'Screen shake', [['on', 'On'], ['off', 'Off']], () => 'The jolt of quakes, eruptions and meteor strikes.'],
+      ['dinoStop', 'Age of dinosaurs', [['on', 'Stop'], ['off', 'Pass']], () => 'Deep time stops once in the Jurassic, when the great dinosaurs have evolved: the camera flies down to them and the world runs at 1× so you can watch them live. Ages carries on toward the asteroid. Any moment of deep time can be watched up close with 1×, 4× or 16×.'],
       ['worldSize', 'World size', [['auto', 'Auto'], ['screen', 'Screen'], ['large', 'Large'], ['huge', 'Huge'], ['colossal', 'Colossal'], ['titanic', 'Titanic']], () => `How big the next world is. Screen fits your screen; Large (768×512), Huge (1024×768, the usual), Colossal (1536×1024) and Titanic (2048×1536) are many screens across, to pan and explore. Bigger worlds hold more peoples and take longer to make; Titanic wants a strong computer. Takes effect when the page is loaded again${AG.Settings.v.worldSize !== loadedWorldSize ? ': <button type="button" class="link" data-mact="reload">reload now</button> (save your world first)' : ''}. This world: ${W}×${H}, ${fmt(W * H)} cells.`],
     ],
   };
