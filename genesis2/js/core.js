@@ -23,6 +23,7 @@
       water: 'auto',      // rippling water: auto | on | off
       shake: 'on', vignette: 'on', showFps: 'off', ticker: 'on', minimap: 'on',
       worldSize: 'auto',  // auto (huge) | screen | large | huge | colossal | titanic (takes effect when the page loads)
+      foldBar: 'auto',    // the power bar folds away once a power is picked: auto (on phones) | on | off
       dinoStop: 'on',     // deep time stops in the age of dinosaurs to watch them: on | off
     };
     const KEY = 'aura2.settings', v = Object.assign({}, DEF), subs = [];

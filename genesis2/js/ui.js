@@ -75,7 +75,7 @@
   // the groups; the last family holds the world's own switches (layers, map overlays, windows,
   // save and load). Every power appears exactly once.
   const BAR = [
-    { id: 'terrain', name: 'Terrain', icon: 'tab-terrain', groups: [['Shape', ['raise', 'lower', 'smooth']], ['Paint', ['grass', 'forest', 'desert', 'grain', 'snowcap']], ['Geology', ['plate', 'calm', 'iceage', 'warm']], ['Underground', ['dig', 'fill', 'ore', 'magma', 'aquifer']]] },
+    { id: 'terrain', name: 'Terrain', icon: 'tab-terrain', groups: [['Shape', ['raise', 'lower', 'smooth']], ['Geology', ['plate', 'calm', 'iceage', 'warm']], ['Paint', ['grass', 'forest', 'desert', 'grain', 'snowcap']], ['Underground', ['dig', 'fill', 'ore', 'magma', 'aquifer']]] },
     { id: 'civ', name: 'Civilizations', icon: 'tab-civ', groups: [['People', ['people', 'possess']], ['Guide', ['dream', 'omen', 'inspire']], ['Diplomacy', ['harmony', 'discord']], ['Grace', ['bless']], ['Look', [['panel:peoples', 'Peoples'], ['panel:chronicle', 'History']]]] },
     { id: 'peoples', name: 'Peoples', icon: 'tab-peoples', groups: [['Peoples', ['people', 'race-sylvan', 'race-stonekin', 'race-ashborn', 'race-saurian', 'race-hivekin', 'race-tidefolk', 'race-lithari', 'race-voidborn']], ['Biology', ['uplift']], ['Ages', ['eureka', 'brain', 'inspire']], ['Look', [['panel:world', 'Peoples']]]] },
     { id: 'realms', name: 'Realms', icon: 'tab-realms', groups: [['Rulers', ['crown', 'assassin', 'hero', 'prophet']], ['Realm', ['golden', 'revolution', 'unite', 'exodus']], ['Build', ['town', 'metropolis', 'wonder', 'launch']], ['Look', [['panel:deeds', 'Deeds'], ['panel:war', 'War room']]]] },
@@ -93,26 +93,58 @@
   for (const T of BAR) for (const [, items] of T.groups) for (const it of items) if (typeof it === 'string') tabOfTool[it] = T.id;
   const icon = (id) => AG.Icons.url(id);
   function buildBar() {
-    $('#bartabs').innerHTML = BAR.map((T) => `<button type="button" class="btab" role="tab" data-btab="${T.id}" aria-selected="false" title="${T.name}"><i class="bt-sz" aria-hidden="true"><img src="${icon(T.icon)}" alt=""><em>${T.name}</em></i><span><img src="${icon(T.icon)}" alt=""><em>${T.name}</em></span></button>`).join('');
+    const fold = `<button type="button" class="btab bfold" id="bar-fold" aria-label="Fold the power bar away" title="Fold the power bar away"><i class="bt-sz" aria-hidden="true"><img src="${icon('back')}" alt=""></i><span><img src="${icon('back')}" alt=""></span></button>`;
+    $('#bartabs').innerHTML = fold + BAR.map((T) => `<button type="button" class="btab" role="tab" data-btab="${T.id}" aria-selected="false" title="${T.name}"><i class="bt-sz" aria-hidden="true"><img src="${icon(T.icon)}" alt=""><em>${T.name}</em></i><span><img src="${icon(T.icon)}" alt=""><em>${T.name}</em></span></button>`).join('');
     $('#bar-backimg').src = icon('back');
     $('#bartabs').addEventListener('click', (e) => { const b = e.target.closest('[data-btab]'); if (b) showTab(b.dataset.btab, true); });
     $('#bar-back').addEventListener('click', () => setBarOpen(false));
+    $('#bar-fold').addEventListener('click', () => setBarOpen(false));
+    // the bar is as tall as its tools need: the dock, panel, ticker and the rest stand above it
+    if (window.ResizeObserver) { const bar = $('#bar'), root = document.documentElement; new ResizeObserver(() => { const h = bar.offsetHeight; if (h > 0) { root.style.setProperty('--barh', h + 'px'); fitTabs(); gridEdge(); } }).observe(bar); }
+    window.addEventListener('resize', fitTabs);
+    $('#bartabs').addEventListener('scroll', tabEdges, { passive: true });
+    $('#pgrid').addEventListener('scroll', gridEdge, { passive: true });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTabs);
+    fitTabs();
     $('#pgrid').addEventListener('click', (e) => {
       const b = e.target.closest('[data-tool],[data-wx]'); if (!b) return;
-      if (b.dataset.tool) { selectTool(b.dataset.tool); showTip(b, true); return; }
+      if (b.dataset.tool) {
+        selectTool(b.dataset.tool);
+        if (foldsAfterPick()) { // the picked power is in hand (the dock shows it): the bar gives the map back
+          const t = God.byId[b.dataset.tool];
+          setBarOpen(false); hideTip();
+          UI.toast(`${t.name}: ${t.mode === 'brush' ? 'drag on the map' : 'tap the map'}. The tabs below open the bar again.`);
+        } else showTip(b, true);
+        return;
+      }
       worldAction(b.dataset.wx);
     });
     // tooltips: on hover with a mouse; on touch a selection shows the card for a moment instead
     $('#pgrid').addEventListener('pointerover', (e) => { if (e.pointerType !== 'mouse') return; const b = e.target.closest('[data-tool],[data-wx]'); if (b) showTip(b, false); });
     $('#pgrid').addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-tool],[data-wx]'))) hideTip(); });
     $('#pgrid').addEventListener('scroll', hideTip, { passive: true });
-    // a vertical wheel scrolls the bar sideways when it is wider than the screen
-    $('#pgrid').addEventListener('wheel', (e) => { const g = e.currentTarget; if (g.scrollWidth > g.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { g.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+  }
+  const BAR_SHORT = { assassin: 'Assassin' }; // (names too long for a cell)
+  // does the bar fold away once a power is picked? (setting: Auto folds on phones only)
+  const foldsAfterPick = () => { const v = AG.Settings.v.foldBar; return v === 'on' || (v !== 'off' && window.matchMedia('(max-width: 760px)').matches); };
+  // tabs show their names while they all fit; when they do not, only the open tab does (the rest are icons)
+  function fitTabs() {
+    const t = $('#bartabs'); if (!t || !t.clientWidth) return;
+    t.classList.remove('icons');
+    if (t.scrollWidth > t.clientWidth + 1) t.classList.add('icons');
+    const on = t.querySelector('.btab.on'); if (on) t.scrollLeft = Math.max(0, on.offsetLeft - (t.clientWidth - on.offsetWidth) / 2);
+    tabEdges();
+  }
+  function gridEdge() { const g = $('#pgrid'); if (g) g.classList.toggle('more-d', g.scrollTop + g.clientHeight < g.scrollHeight - 2); }
+  function tabEdges() {
+    const t = $('#bartabs'); if (!t) return;
+    t.classList.toggle('more-r', t.scrollLeft + t.clientWidth < t.scrollWidth - 2);
+    t.classList.toggle('more-l', t.scrollLeft > 2);
   }
   function itemHTML(it) {
     if (typeof it === 'string') {
       const t = God.byId[it]; if (!t) return '';
-      return `<button type="button" class="pcell${God.tool === it ? ' on' : ''}" data-tool="${it}" aria-label="${esc(t.name)}" aria-pressed="${God.tool === it}"><img src="${icon(it)}" alt=""></button>`;
+      return `<button type="button" class="pcell${God.tool === it ? ' on' : ''}" data-tool="${it}" aria-label="${esc(t.name)}" aria-pressed="${God.tool === it}"><img src="${icon(it)}" alt=""><span class="pl">${esc(BAR_SHORT[it] || t.short || t.name)}</span></button>`;
     }
     const [key, label] = it;
     return `<button type="button" class="pchip${worldOn(key) ? ' on' : ''}" data-wx="${key}">${esc(label)}</button>`;
@@ -123,10 +155,11 @@
     const T = BAR.find((b) => b.id === id) || BAR[0];
     for (const b of document.querySelectorAll('.btab')) { const on = b.dataset.btab === T.id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }
     $('#pgrid').innerHTML = T.groups.map(([name, items], k) => {
-      const wide = items.some((it) => typeof it !== 'string');
-      return `${k ? '<i class="pdiv" aria-hidden="true"></i>' : ''}<div class="pgroup" role="group" aria-label="${esc(name)}"><div class="pcap">${esc(name)}</div><div class="pcells${wide ? ' wide' : ''}">${items.map(itemHTML).join('')}</div></div>`;
+      const chips = items.every((it) => typeof it !== 'string');
+      return `<div class="pgroup" role="group" aria-label="${esc(name)}"><div class="pcap">${esc(name)}</div><div class="pcells${chips ? ' chips' : ''}"${chips && items.length >= 5 ? ' style="--rows:3"' : ''}>${items.map(itemHTML).join('')}</div></div>`;
     }).join('');
-    $('#pgrid').scrollLeft = 0;
+    $('#pgrid').scrollTop = 0;
+    fitTabs(); gridEdge();
     if (fromUser) setBarOpen(true);
   }
   UI.showTab = showTab;
@@ -196,7 +229,8 @@
     el.hidden = false;
     const r = b.getBoundingClientRect(), app = $('#app').getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
     el.style.left = Math.round(AG.clamp(r.left + r.width / 2 - w / 2 - app.left, 8, app.width - w - 8)) + 'px';
-    el.style.top = Math.round(Math.max(8, r.top - app.top - h - 10 - (b.closest('#pgrid') ? 16 : 0))) + 'px';
+    const top = b.closest('#pgrid') ? $('#bar').getBoundingClientRect().top : r.top; // (a tool's tip stands above the bar)
+    el.style.top = Math.round(Math.max(8, top - app.top - h - 10)) + 'px';
     clearTimeout(tipTimer);
     if (brief) tipTimer = setTimeout(hideTip, 2600);
   }
@@ -1012,6 +1046,7 @@
       ['ticker', 'Event ticker', [['on', 'On'], ['off', 'Off']], () => 'The latest happenings at the bottom of the screen.'],
       ['minimap', 'Minimap', [['on', 'On'], ['off', 'Off']], () => 'The small map of the whole world.'],
       ['shake', 'Screen shake', [['on', 'On'], ['off', 'Off']], () => 'The jolt of quakes, eruptions and meteor strikes.'],
+      ['foldBar', 'Power bar after picking a power', [['auto', 'Auto'], ['on', 'Fold'], ['off', 'Stay open']], () => 'Whether the power bar folds away once you pick a power, so the map is clear to work on. Auto folds it on phones only; the tabs along the bottom open it again.'],
       ['dinoStop', 'Age of dinosaurs', [['on', 'Stop'], ['off', 'Pass']], () => 'Deep time stops once in the Jurassic, when the great dinosaurs have evolved: the camera flies down to them and the world runs at 1× so you can watch them live. Ages carries on toward the asteroid. Any moment of deep time can be watched up close with 1×, 4× or 16×.'],
       ['worldSize', 'World size', [['auto', 'Auto'], ['screen', 'Screen'], ['large', 'Large'], ['huge', 'Huge'], ['colossal', 'Colossal'], ['titanic', 'Titanic']], () => `How big the next world is. Screen fits your screen; Large (768×512), Huge (1024×768, the usual), Colossal (1536×1024) and Titanic (2048×1536) are many screens across, to pan and explore. Bigger worlds hold more peoples and take longer to make; Titanic wants a strong computer. Takes effect when the page is loaded again${AG.Settings.v.worldSize !== loadedWorldSize ? ': <button type="button" class="link" data-mact="reload">reload now</button> (save your world first)' : ''}. This world: ${W}×${H}, ${fmt(W * H)} cells.`],
     ],

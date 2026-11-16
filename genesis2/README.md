@@ -130,6 +130,16 @@ Settings take effect at once and are saved in the browser.
 - **World:** save/load, time-lapse, scenarios, new world, engine stats, the census of peoples and
   diseases. Graphics settings are in the menu.
 
+**The power bar** along the bottom shows every power of the open tab at once, never cut off: each
+group is a labelled box, each power has its pixel icon and its name under it, and the boxes wrap
+onto as many rows as the screen needs (on a phone the bar is taller, up to about half the screen).
+The open tab always shows its name; when the names of all ten tabs fit they all show, otherwise the
+others are icons, and the strip fades at an edge when more tabs lie that way. Tools that are only
+text (the map overlays, windows and game actions of the World tab) sit in two or three rows. On a
+phone the fold button (red, at the start of the tabs) puts the bar away, and picking a power folds
+it by itself so the map is clear to work on; the tabs open it again. Menu → Settings → "Power bar
+after picking a power" chooses Auto (phones only), Fold or Stay open.
+
 **Powers** (about 100, each with its own pixel icon; this is what they do, the bar groups them in ten tabs):
 - **Land:** raise or lower ground, plant meadows, forests or wild grain.
 - **Geology:** push a plate, trigger or calm a fault, force an eruption, start an ice age, warm

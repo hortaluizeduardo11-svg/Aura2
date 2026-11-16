@@ -561,6 +561,19 @@ SIZE). This is a fact of evolution, not a flag.
 
 ---
 
+### 6.3.1 The power bar (`ui.js` BAR, `index.html` #bar)
+
+Ten tabs, each a list of groups of tools (or text chips). The drawer is `height: auto` (min 132 px
+plus the bottom safe-area inset, max 54% of the viewport, 62-74% on phones) so nothing is clipped
+by a fixed height; `#pgrid` is a wrapping flex container (vertical scroll with a fade only past the
+cap, never horizontal) of group boxes, each a caption over wrapping cells (icon over its name;
+two-row or three-row column grids for text chips on wide screens). A ResizeObserver on `#bar` writes
+its real height to `--barh`, which the dock, panel, ticker, compass and avatar pad stand above.
+`fitTabs` shows tab names while all fit and otherwise only the open tab's; `tabEdges` fades the strip
+where more tabs lie. At 760 px and below the red back handle moves into the tab strip, cells and
+icons are smaller (28 px icons, 9 px names) and a picked power folds the bar (`foldBar`: auto /
+on / off). Names too long for a cell have a short form (`BAR_SHORT`, `tool.short`).
+
 ### 6.4 Big worlds
 
 Over 400k cells the per-cell systems are bounded so a Huge world costs about what a screen-sized

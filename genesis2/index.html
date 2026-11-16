@@ -93,25 +93,30 @@
   .btab em { font: 500 13px/1 var(--font); font-style: normal; color: var(--ink); white-space: nowrap; }
   .btab:hover > span { background: #565a4e; }
   .btab.on > span { background: var(--ember); box-shadow: inset 0 2px 0 var(--ember-hi); }
-  #drawer { position: relative; display: flex; align-items: stretch; gap: 10px; height: 132px; padding: 10px max(10px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
+  #drawer { position: relative; display: flex; align-items: stretch; gap: 10px; height: auto; min-height: calc(132px + env(safe-area-inset-bottom, 0px)); max-height: min(54vh, 440px); max-height: min(54dvh, 440px); padding: 10px max(10px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
     background: var(--p2); border-top: 2px solid var(--lo); box-shadow: inset 0 -2px 0 var(--sh); }
   #drawer::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: linear-gradient(#c3c6b8, #8a8e80 45%, #545849); } /* a metal strip along the top edge */
   html.bar-closed #drawer { display: none; }
   html.bar-closed #bartabs { margin-bottom: 0; }
-  #bar-back { flex: none; width: 48px; margin-top: 4px; padding: 0; display: grid; place-items: center; background: var(--ember); border: 2px solid var(--lo); box-shadow: inset 2px 2px 0 var(--ember-hi), inset -2px -2px 0 var(--ember-lo); }
+  #bar-back { flex: none; width: 48px; height: 84px; margin-top: 4px; padding: 0; display: grid; place-items: center; background: var(--ember); border: 2px solid var(--lo); box-shadow: inset 2px 2px 0 var(--ember-hi), inset -2px -2px 0 var(--ember-lo); }
   #bar-back:hover { filter: brightness(1.1); }
   #bar-back img { width: 42px; height: 42px; }
-  #pgrid { flex: 1; min-width: 0; display: flex; align-items: stretch; margin-top: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--p3) transparent; }
-  .pgroup { flex: none; display: flex; flex-direction: column; gap: 3px; padding: 0 9px; }
-  .pgroup:first-child { padding-left: 0; }
-  .pdiv { flex: none; width: 4px; background: linear-gradient(90deg, var(--div) 0 2px, #50544a 2px 3px, transparent 3px); }
+  #pgrid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 8px; margin-top: 4px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--hi) transparent; }
+  #pgrid.more-d { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); } /* (more below: scroll) */
+  #pgrid::-webkit-scrollbar { width: 8px; } #pgrid::-webkit-scrollbar-thumb { background: var(--hi); border: 2px solid var(--p2); }
+  .pgroup { flex: 0 1 auto; max-width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 5px 7px 7px; background: rgba(0, 0, 0, 0.2); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.32); }
   .pcap { font: 500 11px/13px var(--font); color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; height: 13px; }
-  .pcells { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 46px); grid-auto-columns: 46px; gap: 4px; }
-  .pcells.wide { grid-auto-columns: auto; }
-  .pcell, .pchip { position: relative; height: 46px; padding: 0; background: var(--cell); border: 2px solid var(--cellb); box-shadow: inset 1px 1px 0 #3a3c35, inset -1px -1px 0 #101110; display: grid; place-items: center; }
-  .pcell { width: 46px; }
-  .pcell img { width: 42px; height: 42px; display: block; }
-  .pchip { min-width: 46px; padding: 0 11px; font: 500 13px/1.05 var(--font); color: var(--ink); white-space: nowrap; text-align: center; }
+  .pcells { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pcell, .pchip { position: relative; background: var(--cell); border: 2px solid var(--cellb); box-shadow: inset 1px 1px 0 #3a3c35, inset -1px -1px 0 #101110; }
+  .pcell { width: 56px; min-height: 64px; padding: 3px 1px 3px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; }
+  .pcell img { width: 42px; height: 42px; display: block; flex: none; }
+  .pcell .pl { display: block; max-width: 100%; font: 500 10px/1.05 var(--font); color: var(--muted); text-align: center; overflow-wrap: break-word; hyphens: none; }
+  .pcell:hover .pl, .pcell.on .pl { color: var(--ink); }
+  .pcell.on .pl { color: var(--sel-hi); }
+  @media (min-width: 761px) { .pcells.chips { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows, 2), 38px); } .pcells.chips .pchip { height: 38px; } } /* (text buttons: two or three rows, as a strip) */
+  .btab.bfold { display: none; } .btab.bfold > span { background: var(--ember); } .btab.bfold img { width: 24px; height: 24px; }
+  html.bar-closed .btab.bfold { display: none !important; }
+  .pchip { height: 40px; min-width: 46px; padding: 0 11px; display: grid; place-items: center; font: 500 13px/1.05 var(--font); color: var(--ink); white-space: nowrap; text-align: center; }
   .pcell:hover, .pchip:hover { background: #33362e; }
   .pcell.on, .pchip.on { border-color: var(--sel); background: #3d3320; box-shadow: inset 0 0 0 1px var(--sel-hi); }
   .pchip.on { color: var(--sel-hi); }
@@ -335,8 +340,14 @@
 
   /* ---------- smaller screens ---------- */
   @media (max-width: 1360px) { #stats { display: none; } }
-  @media (max-width: 1100px) { .btab em { display: none; } .btab > span, .btab .bt-sz { padding: 2px 14px 0; } #ticker { width: min(460px, calc(100% - 200px)); } }
+  #bartabs.more-r { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent); } /* (a fade at an edge: more tabs that way) */
+  #bartabs.more-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 30px); mask-image: linear-gradient(90deg, transparent, #000 30px); }
+  #bartabs.more-l.more-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 30px, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(90deg, transparent, #000 30px, #000 calc(100% - 30px), transparent); }
+  #bartabs.icons .btab:not(.on) em { display: none; } /* (when the names do not all fit: icons, and the open tab's name; ui.js fitTabs) */
+  @media (max-width: 1100px) { .btab > span, .btab .bt-sz { padding: 2px 14px 0; } #ticker { width: min(460px, calc(100% - 200px)); } }
   @media (max-height: 720px) { #minimapwrap { display: none; } }
+  @media (max-width: 760px) and (max-height: 700px) { #drawer { max-height: min(72vh, 520px); max-height: min(72dvh, 520px); } }
+  @media (max-width: 900px) and (max-height: 520px) { #drawer { max-height: min(74vh, 520px); max-height: min(74dvh, 520px); } }
   @media (max-width: 760px) {
     :root { --hudh: 92px; --barh: 164px; }
     html.bar-closed { --barh: 38px; }
@@ -350,7 +361,18 @@
     #minimapwrap { display: none; }
     #bartabs { padding-left: max(8px, env(safe-area-inset-left, 0px)); }
     #drawer { gap: 8px; }
-    #bar-back { width: 40px; }
+    #bar-back { display: none; } /* (the fold button is in the tab strip instead) */
+    .btab.bfold { display: block; }
+    #drawer { max-height: min(62vh, 520px); max-height: min(62dvh, 520px); }
+    .pgroup { padding: 3px 4px 5px; gap: 3px; }
+    .pcell { width: 50px; min-height: 50px; padding: 2px 0 2px; }
+    .pcell img { width: 28px; height: 28px; }
+    .pcell .pl { font-size: 9px; letter-spacing: -0.2px; }
+    .pchip { height: 34px; min-width: 40px; padding: 0 8px; font-size: 12px; }
+    #drawer { padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+    .pcells { gap: 3px; }
+    #pgrid { gap: 5px; margin-top: 2px; }
+    #drawer { padding-top: 8px; }
     .dkslot { width: 50px; height: 50px; }
     #dk-brushc { width: 30px; height: 30px; }
     #dk-toolimg { width: 28px; height: 28px; }
