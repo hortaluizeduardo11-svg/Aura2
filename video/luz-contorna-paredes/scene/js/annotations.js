@@ -129,7 +129,7 @@ export function buildAnnotations(scene) {
   const screen = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.004, 10), screenM);
   screen.position.y = 0.017;
   A.controle.add(screen);
-  A.controle.scale.setScalar(1.7);
+  A.controle.scale.setScalar(1.25);
 
   // --- mancha de presença (cena 6) ---
   const c = document.createElement('canvas');

@@ -21,13 +21,34 @@ DUR = float(EV["duracao"])
 N = int(DUR * SR)
 rng = np.random.default_rng(42)
 t = np.arange(N) / SR
-_MS = np.array([m[0] for m in EV["mapa"]])
-_MV = np.array([m[1] for m in EV["mapa"]])
+TRECHOS = EV["trechos"]
 
 
 def V(s):
-    """tempo do roteiro visual -> tempo do vídeo final"""
-    return float(np.interp(s, _MS, _MV))
+    """tempo do roteiro visual -> tempo do vídeo final (no início exato de um trecho, vale esse trecho)"""
+    for tr in TRECHOS:
+        if abs(s - tr["s0"]) < 1e-6:
+            return tr["v0"]
+    for tr in TRECHOS:
+        if tr["s0"] - 1e-6 <= s <= tr["s1"] + 1e-6:
+            m = np.array(tr["mapa"])
+            return float(np.interp(s, m[:, 0], m[:, 1]))
+    # parte do roteiro que ficou fora do vídeo: fim do trecho anterior
+    ant = [tr for tr in TRECHOS if tr["s1"] <= s]
+    return max(ant, key=lambda tr: tr["s1"])["v1"] if ant else 0.0
+
+
+def pedacos(a, b):
+    """intervalo [a, b] do roteiro -> pedaços (va, vb) no vídeo (o roteiro tem cortes)"""
+    out = []
+    for tr in TRECHOS:
+        x0, x1 = max(a, tr["s0"]), min(b, tr["s1"])
+        if x1 > x0 + 1e-6:
+            out.append((V(x0) if x0 > tr["s0"] + 1e-6 else tr["v0"], V(x1) if x1 < tr["s1"] - 1e-6 else tr["v1"]))
+    return out
+
+
+VIN = EV.get("vinhetas", {})
 
 
 def bp(x, lo, hi, order=2):
@@ -130,23 +151,41 @@ PROG = [
     (78.0, 84.0, [45, 52, 57, 61, 64], 0.5),     # A
     (84.0, 95.0, [50, 57, 62, 66, 69, 74], 0.45),  # D maior — resolução
 ]
+# vinhetas do cotidiano (tempo do vídeo direto): rádio luminoso, esconde-esconde brincalhão,
+# esquina com expectativa, celular com estranhamento
+PROG_VIN = {
+    "radio": ([41, 53, 57, 60, 64, 69], 0.55),     # Fmaj9
+    "esconde": ([43, 55, 59, 62, 64], 0.5),        # G6
+    "esquina": ([40, 52, 56, 59, 62], 0.6),        # E7
+    "celular": ([38, 50, 57, 62, 64], 0.4),        # Dm(add9)
+}
 
 
 def musica():
     mus = np.zeros((N, 2))
     xf = int(1.2 * SR)
+    trechos = []
     for (a, b, notes, br) in PROG:
-        a, b = V(a), V(b)
+        for (va, vb) in pedacos(a, b):
+            trechos.append((va, vb, notes, br))
+    for nome, (notes, br) in PROG_VIN.items():
+        if nome in VIN:
+            trechos.append((VIN[nome]["v0"], VIN[nome]["v1"], notes, br))
+    for (a, b, notes, br) in trechos:
         i0 = max(0, int(a * SR) - xf // 2)
         i1 = min(N, int(b * SR) + xf // 2)
         n = i1 - i0
+        if n <= xf * 2:
+            continue
         seg = pad_chord(notes, n, br)
         seg *= env_ar(n, xf, xf)[:, None]
         mus[i0:i1] += seg
     # sub-grave na fundamental
     sub = np.zeros(N)
-    for (a, b, notes, _) in PROG:
-        i0, i1 = int(V(a) * SR), min(N, int(V(b) * SR))
+    for (a, b, notes, _) in trechos:
+        i0, i1 = int(a * SR), min(N, int(b * SR))
+        if i1 - i0 < SR * 0.9:
+            continue
         f = midi(notes[0] - 12)
         tt = np.arange(i1 - i0) / SR
         sub[i0:i1] += np.sin(2 * np.pi * f * tt) * env_ar(i1 - i0, 0.4 * SR, 0.4 * SR)
@@ -157,29 +196,41 @@ def musica():
     step = 60 / bpm / 2
     pl = np.zeros((N, 2))
     k = 0
-    tk = V(36.0)
-    while tk < V(78.0):
-        chord = next(p for p in PROG if V(p[0]) <= tk < V(p[1]))[2]
-        dens = 0.55 if tk < V(49) else (0.95 if tk < V(63) else 0.35)
+    janelas = [(va, vb, 0.55) for va, vb in pedacos(36.0, 49.0)] + [(va, vb, 0.95) for va, vb in pedacos(49.0, 63.0)] \
+        + [(va, vb, 0.35) for va, vb in pedacos(63.0, 78.0)] \
+        + [(VIN[n]["v0"], VIN[n]["v1"], d) for n, d in (("esconde", 0.8), ("esquina", 0.9), ("celular", 0.4)) if n in VIN]
+    passos_pulso = []
+    for va, vb, dens in janelas:
+        x = va
+        while x < vb:
+            passos_pulso.append((x, dens))
+            x += step
+    for tk, dens in passos_pulso:
+        cand = [c for c in trechos if c[0] <= tk < c[1]]
+        if not cand:
+            k += 1
+            continue
+        chord = cand[0][2]
         if (k % 2 == 0) or rng.random() < dens:
             m = chord[1 + (k * 3) % (len(chord) - 1)] + 12
             n = int(0.5 * SR)
             tt = np.arange(n) / SR
             f = midi(m)
             y = (np.sin(2 * np.pi * f * tt + 1.2 * np.sin(2 * np.pi * f * 2 * tt) * np.exp(-tt * 18)) * np.exp(-tt * 7.5))
-            g = 0.055 * (0.6 + 0.4 * smooth(V(36), V(60), tk)) * (0.7 if V(63) <= tk < V(78) else 1.0)
+            g = 0.055 * (0.6 + 0.4 * min(1.0, dens))
             place(pl, y, tk, g, pan=0.35 if k % 2 else -0.35)
         k += 1
-        tk += step
     mus += pl
 
     # batida grave (tensão) na cena 5
-    for tb in np.arange(V(49.0), V(63.0), 60 / bpm):
-        n = int(0.35 * SR)
-        tt = np.arange(n) / SR
-        f = 55 * np.exp(-tt * 9) + 42
-        y = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 10)
-        place(mus, y, tb, 0.16 * smooth(V(49), V(54), tb))
+    batidas = pedacos(49.0, 63.0) + ([(VIN["esquina"]["v0"], VIN["esquina"]["v1"])] if "esquina" in VIN else [])
+    for va, vb in batidas:
+        for tb in np.arange(va, vb, 60 / bpm):
+            n = int(0.35 * SR)
+            tt = np.arange(n) / SR
+            f = 55 * np.exp(-tt * 9) + 42
+            y = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 10)
+            place(mus, y, tb, 0.16 * smooth(va, va + 3.0, tb))
 
     # nuvem alta cintilante (curiosidade) nas cenas 2–3
     sh = rng.standard_normal(N)
@@ -187,8 +238,7 @@ def musica():
     mus[:, 0] += sh; mus[:, 1] += np.roll(sh, 300)
 
     # envelope global: tensão crescente, queda na reviravolta, resolução e fade nos créditos
-    g = (0.55 + 0.25 * smooth(V(10), V(23), t) + 0.2 * smooth(V(36), V(60), t)) \
-        * (1 - 0.35 * smooth(V(62.5), V(64), t) * (1 - smooth(V(76), V(79), t))) \
+    g = (0.55 + 0.25 * smooth(V(10), V(23), t) + 0.2 * smooth(V(36), V(49), t)) \
         * smooth(0.0, 1.6, t) * (1 - smooth(DUR - 2.0, DUR, t))
     mus *= g[:, None]
     mus = reverb(mus, wet=0.35, decay=3.0, seed=3)
@@ -251,7 +301,10 @@ def ambiente():
     x[:, 0] = lp(x[:, 0], 700, 3); x[:, 1] = lp(x[:, 1], 700, 3)
     x /= np.abs(x).max()
     esquema = smooth(V(10.3), V(11.9), t) * (1 - smooth(V(23.0), V(24.3), t)) + ((t >= V(78.0)) & (t < V(84.6))) * 1.0
-    g = 0.05 * (1 - 0.8 * esquema) * smooth(0, 1.0, t) * (1 - smooth(V(90), V(93), t))
+    radio = np.zeros(N)
+    if "radio" in VIN:
+        radio = smooth(VIN["radio"]["v0"] - 0.2, VIN["radio"]["v0"] + 0.3, t) * (1 - smooth(VIN["radio"]["v1"] - 0.3, VIN["radio"]["v1"] + 0.2, t))
+    g = 0.05 * (1 - 0.8 * esquema) * (1 - 0.85 * radio) * smooth(0, 1.0, t) * (1 - smooth(V(90), V(93), t))
     out = x * g[:, None]
     # carros passando ao longe
     for tc in [V(x) for x in (2.0, 27.5, 46.0, 57.0, 66.0, 86.0)]:
@@ -297,6 +350,36 @@ def main():
     # aparecimento da tela ilustrativa e da fórmula
     place(fx, blip(520, 780, 0.25), ev["tela"], 0.07)
     place(fx, blip(880, 1170, 0.2), ev["formula"], 0.05)
+    # cortes entre trechos que não são vizinhos no roteiro (entradas e saídas das vinhetas)
+    for a_, b_ in zip(TRECHOS[:-1], TRECHOS[1:]):
+        if abs(a_["s1"] - b_["s0"]) > 1e-6:
+            place(fx, np.stack([whoosh(0.8, 300, 3200), whoosh(0.8, 300, 3200)], 1), b_["v0"] - 0.4, 0.09)
+    vn = ev.get("vinhetas", {})
+    if "radio" in vn:
+        # sintonia: chiado que vira um tom, e a musiquinha quando o sinal chega ao carro
+        n = int(0.9 * SR)
+        tt = np.arange(n) / SR
+        chiado = bp(rng.standard_normal(n), 1500, 5000) * np.exp(-tt * 3) * 0.5
+        tom = np.sin(2 * np.pi * (700 + 500 * tt) * tt) * np.exp(-((tt - 0.6) ** 2) / 0.02) * 0.4
+        place(fx, chiado + tom, vn["radio"]["sintonia"], 0.06)
+        place(fx, chime((72, 76, 79, 84), 0.14), vn["radio"]["notas"], 0.06)
+    if "esconde" in vn:
+        place(fx, blip(980, 1480, 0.14), vn["esconde"]["quem"], 0.08)
+        place(fx, blip(1200, 900, 0.1), vn["esconde"]["quem"] + 0.12, 0.05)
+    if "esquina" in vn:
+        for i, tp in enumerate(vn["esquina"]["passos"]):
+            place(fx, passo(), tp, 0.14, pan=-0.1 if i % 2 else 0.1)
+        # motor do carro chegando (abafado atrás do prédio) e um brilho sonoro suave
+        v0, v1 = vn["esquina"]["v0"], vn["esquina"]["v1"]
+        n = int((v1 - v0) * SR)
+        tt = np.arange(n) / SR
+        motor = lp(rng.standard_normal(n), 220, 2) * (0.4 + 0.6 * (tt / tt[-1]) ** 2)
+        motor += 0.3 * np.sin(2 * np.pi * (48 + 10 * tt / tt[-1]) * tt) * (tt / tt[-1])
+        place(fx, motor * env_ar(n, 0.4 * SR, 0.3 * SR), v0, 0.09, pan=-0.3)
+        place(fx, chime((84, 88), 0.06), vn["esquina"]["brilho"], 0.035)
+    if "celular" in vn:
+        place(fx, chime((83, 88), 0.1), vn["celular"]["mensagem"], 0.05)
+        place(fx, whoosh(0.7, 200, 1200, 0.5), vn["celular"]["borrao"], 0.05)
     # créditos: acorde final suave já está na música; um "chime" discreto
     place(fx, chime((74, 81, 86), 0.12), ev["creditos"] + 0.2, 0.05)
     fx = reverb(fx, wet=0.15, decay=1.2, seed=9)

@@ -83,14 +83,17 @@ export class Overlay {
     // durante a tela ilustrativa a indicação fica no cabeçalho do cartão
     $('pill').style.opacity = (P.pilula * (1 - st.detector.op)).toFixed(3);
     $('pill').style.transform = `translateX(${((1 - P.pilula) * -24).toFixed(1)}px)`;
+    $('pillReal').style.opacity = (P.real || 0).toFixed(3);
 
     // ---- etiqueta "Representação das ondas" ----
     const tag = $('tag');
     tag.style.opacity = st.tag.op.toFixed(3);
     if (tag.dataset.extra !== st.tag.extra) { $('tagExtra').innerHTML = st.tag.extra; tag.dataset.extra = st.tag.extra; }
 
-    // ---- rótulos ancorados no 3D ----
-    for (const L of st.rotulos) this.placeLabel(L.id, L.html, L.pos, L.op, L.cls);
+    // ---- rótulos ancorados no 3D (os que não vieram neste quadro somem) ----
+    const vistos = new Set();
+    for (const L of st.rotulos) { this.placeLabel(L.id, L.html, L.pos, L.op, L.cls); vistos.add(L.id); }
+    for (const [id, d] of Object.entries(this.labels)) if (!vistos.has(id)) d.style.opacity = 0;
 
     // ---- cartão de definição ----
     $('def').style.opacity = st.def.toFixed(3);

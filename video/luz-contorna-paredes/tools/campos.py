@@ -60,14 +60,16 @@ def h1(kr, exato):
     return np.sqrt(2 / (np.pi * kr)) * np.exp(1j * (kr - 3 * np.pi / 4))
 
 
-def campo(lam):
+def campo(lam, S=S, xa0=-A / 2, xa1=A / 2):
+    """abertura em z = 0 entre xa0 e xa1 (o resto da linha z = 0 é opaco)"""
     X, Z = grade()
     k = 2 * np.pi / lam
     exato = lam >= 0.05
-    n = int(np.ceil(A / (lam / 8)))
+    larg = xa1 - xa0
+    n = int(np.ceil(larg / (lam / 8)))
     n = max(n, 64)
-    xa = -A / 2 + (np.arange(n) + 0.5) * A / n
-    da = A / n
+    xa = xa0 + (np.arange(n) + 0.5) * larg / n
+    da = larg / n
     rs = np.hypot(xa - S[0], 0 - S[1])
     uinc = h0(k * rs, exato)
     U = np.zeros(X.shape, dtype=np.complex128)
@@ -83,12 +85,11 @@ def campo(lam):
     return U, Ilivre
 
 
-def feixe_geometrico():
+def feixe_geometrico(S=S, xa0=-A / 2, xa1=A / 2):
+    """óptica geométrica: iluminado se a reta da fonte até o ponto cruza z = 0 dentro da abertura"""
     X, Z = grade()
-    # retas que partem da fonte e passam pelas bordas da abertura
-    meia = (A / 2) * (Z - S[1]) / (0 - S[1])
-    dentro = (np.abs(X) <= meia).astype(np.float64)
-    return dentro
+    xc = S[0] + (X - S[0]) * (0 - S[1]) / (Z - S[1])
+    return ((xc >= xa0) & (xc <= xa1)).astype(np.float64)
 
 
 def reduz(arr):
@@ -97,6 +98,7 @@ def reduz(arr):
 
 def salvar(nome, razao, U=None):
     razao = reduz(razao)
+    razao[0] = razao[1]  # primeira linha (rente à barreira): evita picos numéricos
     v = np.clip((np.log10(np.maximum(razao, 1e-9)) - LOG_MIN) / LOG_SPAN, 0, 1)
     img = np.zeros((NZ, NX, 3), dtype=np.uint8)
     img[..., 0] = np.round(v * 255)
@@ -114,28 +116,51 @@ def salvar(nome, razao, U=None):
     return razao
 
 
+# Casos: nome -> (lambda, fonte, abertura). Gume = borda única (quina de prédio, topo de morro):
+# a linha z = 0 é opaca para x < 0 e aberta para x > 0.
+GUME = (0.0, 30.0)
+FENDA = (-A / 2, A / 2)
+TODOS = {
+    "500nm": (500e-9, S, FENDA),
+    "1cm": (0.01, S, FENDA),
+    "10cm": (0.10, S, FENDA),
+    "1m": (1.0, S, FENDA),
+    # esconde-esconde: a amiga agachada logo atrás do muro, perto da abertura
+    "esconde_1m": (1.0, np.array([-1.6, -1.2]), FENDA),
+    # carro chegando pela rua transversal, atrás da quina do prédio
+    "gume_1m": (1.0, np.array([5.0, -10.0]), GUME),
+    # rádio FM (~100 MHz, lambda ~ 3 m) passando pelo topo do morro; e a luz, para comparar
+    "gume_3m": (3.0, np.array([1.0, -10.0]), GUME),
+    "gume_luz": (500e-9, np.array([1.0, -10.0]), GUME),
+}
+
+
 def main():
+    import sys
     os.makedirs(OUT, exist_ok=True)
-    resumo = {"dominio": [X0, X1, Z0, Z1], "fonte": S.tolist(), "abertura": A,
-              "log_min": LOG_MIN, "log_span": LOG_SPAN, "casos": {}}
-    # pontos de referência: eixo, borda da sombra e a posição do protagonista
-    sondas = {"eixo_z4": (0.0, 4.0), "protagonista": (-2.2, 2.2), "lateral_x4_z6": (-4.0, 6.0)}
-    for nome, lam in CASOS.items():
+    so = sys.argv[1:] or list(TODOS)
+    caminho = os.path.join(OUT, "campos.json")
+    resumo = json.load(open(caminho)) if os.path.exists(caminho) else {}
+    resumo.update({"dominio": [X0, X1, Z0, Z1], "abertura": A, "log_min": LOG_MIN, "log_span": LOG_SPAN})
+    resumo.setdefault("casos", {})
+    sondas = {"eixo_z4": (0.0, 4.0), "protagonista": (-2.2, 2.2), "lateral_x4_z6": (-4.0, 6.0),
+              "sombra_x-3_z2": (-3.0, 2.2), "sombra_x-4_z6": (-4.0, 6.0)}
+    for nome in so:
+        lam, fonte, (xa0, xa1) = TODOS[nome]
         if lam < 1e-3:
-            razao = feixe_geometrico()
-            U = None
+            razao, U = feixe_geometrico(fonte, xa0, xa1), None
         else:
-            U, Il = campo(lam)
+            U, Il = campo(lam, fonte, xa0, xa1)
             razao = np.abs(U) ** 2 / Il
         r = salvar(nome, razao, U)
-        info = {"lambda_m": lam}
+        info = {"lambda_m": lam, "fonte": [float(v) for v in fonte], "abertura": [xa0, xa1]}
         for sn, (sx, sz) in sondas.items():
             ix = int((sx - X0) / (X1 - X0) * NX)
             iz = int((sz - Z0) / (Z1 - Z0) * NZ)
             info[sn] = float(r[iz, ix])
         resumo["casos"][nome] = info
-        print(nome, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in info.items()})
-    with open(os.path.join(OUT, "campos.json"), "w") as f:
+        print(nome, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in info.items() if k.startswith(("prot", "sombra", "eixo"))})
+    with open(caminho, "w") as f:
         json.dump(resumo, f, indent=1)
 
 

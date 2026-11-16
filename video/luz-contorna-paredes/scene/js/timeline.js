@@ -146,8 +146,8 @@ export function camera(t, ctx) {
     const h = ctx.mao(t), e = ctx.olho(t), f = ctx.frente(t);
     const right = V(-f.z, 0, f.x).multiplyScalar(-1);
     const dolly = ss(36.0, 39.4, t);
-    const pos = e.clone().add(right.multiplyScalar(0.5 - 0.06 * dolly)).add(f.clone().multiplyScalar(-0.62 + 0.1 * dolly)).add(V(0, 0.3 - 0.05 * dolly, 0));
-    const tg = h.clone().add(f.clone().multiplyScalar(0.35)).add(V(0, -0.12, 0));
+    const pos = e.clone().add(right.multiplyScalar(0.62 - 0.06 * dolly)).add(f.clone().multiplyScalar(-0.95 + 0.12 * dolly)).add(V(0, 0.42 - 0.05 * dolly, 0));
+    const tg = h.clone().add(f.clone().multiplyScalar(0.3)).add(V(0, -0.08, 0));
     return look(pos.toArray(), tg.toArray(), 44);
   }
   if (t < 42.6) {

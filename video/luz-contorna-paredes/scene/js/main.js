@@ -6,6 +6,7 @@ import { WaveField } from './waves.js';
 import { buildAnnotations } from './annotations.js';
 import { Overlay } from './overlay.js';
 import * as T from './timeline.js';
+import * as Vn from './vinhetas.js';
 
 const W = 1080, H = 1920;
 const { ss, win, lerp, clamp } = T;
@@ -92,20 +93,30 @@ const loadTex = (url) => new Promise((res, rej) => loader.load(url, (t) => {
   res(t);
 }, undefined, rej));
 
-let som, luz, overlay, timeline;
+let som, luz, overlay, timeline, vn3d;
 const v3 = new THREE.Vector3();
 
+// piscadas: rápidas, a cada ~3 s, com variação
+function piscar(t, fase) {
+  const per = 3.1 + fase;
+  const u = ((t + fase * 7) % per) / per;
+  const d = Math.abs(u - 0.5) * per;
+  return d < 0.07 ? 1 - d / 0.07 : 0;
+}
+
 function poseProt(t) {
-  const p = T.protagonista(t);
+  const vv = Vn.vinheta(t);
+  const p = vv ? Vn.prota(vv) : T.protagonista(t);
   prot.root.position.set(p.x, 0.15, p.z);
   prot.root.rotation.y = p.rot;
-  prot.pose({ walk: p.walk, amt: p.amt, headYaw: p.headYaw, headPitch: p.headPitch, lean: p.lean, armR: p.armR });
+  prot.pose({ walk: p.walk, amt: p.amt, headYaw: p.headYaw, headPitch: p.headPitch, headRoll: p.headRoll, lean: p.lean,
+    armR: p.armR, armL: p.armL, blink: piscar(t, 0.3), brow: p.brow, smile: p.smile, mouthOpen: p.mouthOpen, crouch: p.crouch });
   prot.root.updateMatrixWorld(true);
   return p;
 }
 const ctx = {
   mao: (t) => { poseProt(t); return prot.arms[1].hand.localToWorld(new THREE.Vector3(0, -0.07, 0.035)); },
-  olho: (t) => { poseProt(t); return prot.head.localToWorld(new THREE.Vector3(0, 0.14, 0.09)); },
+  olho: (t) => { poseProt(t); return prot.head.localToWorld(prot.eyeLocal.clone()); },
   frente: (t) => { const r = T.protagonista(t).rot; return new THREE.Vector3(Math.sin(r), 0, Math.cos(r)); },
 };
 
@@ -176,7 +187,7 @@ function edicao(t, O, camState) {
   const cena1 = win(t, 5.3, 6.6, 0.35, 0.25);
   const top = win(t, 12.2, 23.0, 0.5, 0.4);
   P('voce', inn('você'), [-2.2, 2.05, 2.2], Math.max(cena1, top, win(t, 55.4, 63.0, 0.5, 0.2)), '', -30);
-  P('esc', inn('pessoa escondida'), [0, 2.1, -6.0], Math.max(cena1, top), '', -30);
+  P('esc', inn('sua amiga'), [0, 2.1, -6.0], Math.max(cena1, top), '', -30);
   P('visao', inn('linha de visão', false), [1.9, 0.2, -4.2], win(t, 5.3, 6.6, 0.4, 0.25), 'chip');
   P('parede', inn('parede', false), [-3.6, 0.2, -0.6], top, '', -6);
   P('abertura', inn('abertura · 1 m', false), [2.5, 0.2, 0.3], top, 'chip');
@@ -201,8 +212,8 @@ function edicao(t, O, camState) {
   // transições: linhas de velocidade e desfoque
   const pulsos = [[10.0, 11.4], [23.0, 24.2], [35.9, 36.3], [48.95, 49.6], [62.9, 63.3], [77.9, 78.3], [84.5, 84.9]];
   st.speed = Math.max(0, ...pulsos.map(([a, b]) => 0.75 * win(t, a, b, (b - a) * 0.35, (b - a) * 0.5)));
-  st.creditos = ss(90.2, 90.9, t);
-  st.fade = Math.max(1 - ss(0.0, 0.5, t), ss(94.4, 95.0, t));
+  st.creditos = t < 99 ? ss(90.2, 90.9, t) : 0;
+  st.fade = Math.max(1 - ss(0.0, 0.5, t), t < 99 ? ss(94.4, 95.0, t) : 0);
   return st;
 }
 
@@ -225,21 +236,37 @@ function tempoRoteiro(tv) {
   const u = Math.min(1, Math.max(0, x - i));
   return warp.s[i] + (warp.s[i + 1] - warp.s[i]) * u;
 }
+// inverso por trecho (o mapa tem cortes entre cenas não vizinhas no roteiro)
 function tempoVideo(ts) {
   if (!warp) return ts;
-  const s = warp.s;
-  let lo = 0, hi = s.length - 1;
-  if (ts <= s[0]) return 0;
-  if (ts >= s[hi]) return hi * warp.dt;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (s[m] <= ts) lo = m; else hi = m; }
-  const u = (ts - s[lo]) / Math.max(1e-9, s[hi] - s[lo]);
-  return (lo + u) * warp.dt;
+  const s = warp.s, dt = warp.dt;
+  let melhor = null;
+  // num limite exato entre trechos, vale o início do trecho que começa ali
+  for (const sg of warp.segs) if (Math.abs(ts - sg.s0) < 1e-6) return sg.v0;
+  for (const sg of warp.segs) {
+    if (ts < sg.s0 - 1e-6 || ts > sg.s1 + 1e-6) continue;
+    let lo = Math.round(sg.v0 / dt), hi = Math.min(s.length - 1, Math.round(sg.v1 / dt) - 1);
+    if (ts <= s[lo]) return lo * dt;
+    if (ts >= s[hi]) return hi * dt;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (s[m] <= ts) lo = m; else hi = m; }
+    const u = (ts - s[lo]) / Math.max(1e-9, s[hi] - s[lo]);
+    return (lo + u) * dt;
+  }
+  // fora de qualquer trecho (parte do roteiro que não entrou no vídeo): fim do trecho anterior
+  for (const sg of warp.segs) if (sg.s1 <= ts && (!melhor || sg.s1 > melhor.s1)) melhor = sg;
+  return melhor ? melhor.v1 : 0;
 }
 window.duracao = () => (warp ? warp.duracao : T.DURACAO);
 
+function camFor(t) {
+  const vv = Vn.vinheta(t);
+  return vv ? Vn.camera(vv, ctx) : camAt(t);
+}
+
 window.renderAt = (tv) => {
   const t = tempoRoteiro(tv);
-  const schem = T.esquema(t);
+  const v = Vn.vinheta(t);
+  const schem = v ? 0 : T.esquema(t);
   world.update(t, schem);
   // céu, névoa e luzes acompanham o modo esquemático
   skyU.uSchem.value = schem;
@@ -250,11 +277,11 @@ window.renderAt = (tv) => {
   hemi.intensity = lerp(1.55, 1.9, schem);
 
   // câmera (pode reposicionar o esqueleto para medir mão/olho)
-  const c = window.debugCam ? T.look(window.debugCam.pos, window.debugCam.target, window.debugCam.fov || 40) : camAt(t);
+  const c = window.debugCam ? T.look(window.debugCam.pos, window.debugCam.target, window.debugCam.fov || 40) : camFor(t);
   // desfoque proporcional ao movimento da câmera (acelerações nas transições)
   let blur = 0;
   if (!c.split) {
-    const cp = camAt(tempoRoteiro(Math.max(0, tv - 1 / 30)));
+    const cp = camFor(tempoRoteiro(Math.max(0, tv - 1 / 30)));
     if (!cp.split) {
       const dPos = c.pos.distanceTo(cp.pos);
       const dAng = c.quat.angleTo(cp.quat) * 180 / Math.PI;
@@ -265,15 +292,19 @@ window.renderAt = (tv) => {
   // personagens
   const p = poseProt(t);
   posicionaControle(p);
-  const e = T.escondida(t);
+  const e = v ? Vn.escondida(v) : T.escondida(t);
   esc.root.position.set(e.x, 0.06, e.z);
   esc.root.rotation.y = e.rot;
-  esc.pose({ headYaw: e.headYaw, headPitch: e.headPitch, armR: e.armR, armL: e.armL, mouthOpen: e.mouthOpen });
+  esc.pose({ headYaw: e.headYaw, headPitch: e.headPitch, armR: e.armR, armL: e.armL, mouthOpen: e.mouthOpen,
+    blink: piscar(t, 1.1), smile: e.smile ?? 0.8, tail: 0.12 * Math.sin(t * 2.3) + (e.tail || 0), crouch: e.crouch, walk: e.walk, amt: e.amt });
 
   // ondas
-  const O = T.ondas(t);
+  const O = v ? Vn.ondas(v) : T.ondas(t);
   som.set(O.som);
   luz.set(O.luz);
+  som.colocar(null);
+  luz.colocar(O.lugar || null);
+  Vn.atualizar(vn3d, v, t, prot);
 
   // apoios 3D
   ann.update(t, {
@@ -283,11 +314,11 @@ window.renderAt = (tv) => {
     senoide: win(t, 32.3, 35.95, 0.35, 0.3),
     controle: p.device,
     dial: p.dial,
-    mancha: 0.85 * win(t, 67.0, 75.4, 0.6, 0.4) * (0.85 + 0.15 * Math.sin(t * 3.1)),
+    mancha: (v ? (v.nome === 'esconde' ? 0.8 * ss(v.K[3], v.K[3] + 0.5, v.u) : 0) : 0.85 * win(t, 67.0, 75.4, 0.6, 0.4)) * (0.85 + 0.15 * Math.sin(t * 3.1)),
   });
 
   // personagem: no plano em primeira pessoa a cabeça some (câmera dentro dela)
-  const pov = (t >= 39.4 && t < 42.6) || (t >= 66.6 && t < 75.4);
+  const pov = v ? Vn.pov(v) : (t >= 39.4 && t < 42.6) || (t >= 66.6 && t < 75.4);
   prot.head.visible = !pov;
   // ao sair da visão em primeira pessoa, a câmera não pode atravessar a cabeça
   prot.root.visible = true;
@@ -317,9 +348,12 @@ window.renderAt = (tv) => {
     applyCam(camera, c);
     renderer.render(scene, camera);
   }
+  if (v) blur = Math.max(blur, Vn.desfoque(v));
   canvas.style.filter = blur > 0.25 ? `blur(${blur.toFixed(2)}px)` : 'none';
 
-  overlay.update(tv, edicao(t, O, c));
+  let st = edicao(t, O, c);
+  if (v) st = Vn.edicao(v, project, st);
+  overlay.update(tv, st);
   return true;
 };
 
@@ -332,10 +366,44 @@ window.eventos = () => {
     painelEntra: v(E.painelEntra), pilula: v(E.pilula), creditos: v(E.creditos),
     tela: v(66.85), formula: v(70.45), cliques: v(37.7),
     passos: T.passos().map(v), chamado: timeline.chamado, duracao: window.duracao(),
-    // amostras roteiro -> vídeo, para a trilha acompanhar as cenas
-    mapa: Array.from({ length: 191 }, (_, i) => [i * 0.5, v(i * 0.5)]),
+    vinhetas: Vn.deixas(warp && warp.segs),
+    // amostras roteiro -> vídeo por trecho, para a trilha acompanhar as cenas
+    trechos: (warp ? warp.segs : [{ cena: 0, s0: 0, s1: T.DURACAO, v0: 0, v1: T.DURACAO }]).map((sg) => ({
+      cena: sg.cena, s0: sg.s0, s1: sg.s1, v0: sg.v0, v1: sg.v1,
+      mapa: Array.from({ length: Math.max(2, Math.ceil((sg.s1 - sg.s0) / 0.25) + 1) }, (_, i) => {
+        const x = Math.min(sg.s1, sg.s0 + i * 0.25);
+        return [x, v(x)];
+      }),
+    })),
   };
 };
+
+// rosto da amiga (para a chamada de vídeo no celular)
+function rostoAmiga() {
+  const w = 256;
+  const r2 = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  r2.setSize(w, w);
+  r2.toneMapping = THREE.ACESFilmicToneMapping;
+  r2.outputColorSpace = THREE.SRGBColorSpace;
+  const sc = new THREE.Scene();
+  sc.background = new THREE.Color('#bfe3dc');
+  const pessoa = new Person(PALETAS.escondida);
+  pessoa.pose({ smile: 1, headRoll: 0.08 });
+  sc.add(pessoa.root);
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x9a8a7a, 2.0));
+  const key = new THREE.DirectionalLight(0xffe8d0, 1.6);
+  key.position.set(1, 2, 3);
+  sc.add(key);
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
+  cam.position.set(0, 1.5, 1.15);
+  cam.lookAt(0, 1.46, 0);
+  r2.render(sc, cam);
+  const c = document.createElement('canvas');
+  c.width = c.height = w;
+  c.getContext('2d').drawImage(r2.domElement, 0, 0);
+  r2.dispose();
+  return c;
+}
 
 // retrato da pessoa escondida, visto da abertura, para a simulação de imagem (tools/visao.py)
 window.renderRetrato = () => {
@@ -367,8 +435,11 @@ window.renderRetrato = () => {
 (async () => {
   timeline = await (await fetch('./data/timeline.json')).json();
   try { warp = await (await fetch('./data/warp.json')).json(); } catch (e) { warp = null; }
+  Vn.configurar(warp, timeline);
+  vn3d = Vn.construir(scene);
+  Vn.desenharTela(vn3d, rostoAmiga());
   const maps = {};
-  for (const k of ['500nm', '1cm', '10cm', '1m']) maps[k] = await loadTex(`./data/campo_${k}.png`);
+  for (const k of ['500nm', '1cm', '10cm', '1m', 'esconde_1m', 'gume_1m', 'gume_3m', 'gume_luz']) maps[k] = await loadTex(`./data/campo_${k}.png`);
   som = new WaveField(scene, maps);
   luz = new WaveField(scene, maps);
   overlay = new Overlay(timeline);
