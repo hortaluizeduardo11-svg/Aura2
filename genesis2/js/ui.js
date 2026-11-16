@@ -23,6 +23,8 @@
     $('#compass').addEventListener('click', () => AG.View3D.north());
     buildBar(); showTab('terrain'); setBarOpen(true); selectTool('inspect');
     $('#dk-brush').addEventListener('click', () => setBrushPop($('#brushpop').hidden));
+    $('#dk-pause').addEventListener('click', () => AG.togglePause());
+    $('#dk-fast').addEventListener('click', () => { const list = speedList(), i = list.indexOf(curSpeed()); AG.setSpeed(list[(i + 1) % list.length]); }); // (the next faster; from the fastest, back to the slowest)
     $('#dk-tool').addEventListener('click', () => { if (God.tool !== 'inspect') selectTool('inspect'); else setBrushPop($('#brushpop').hidden); });
     $('#brushpop-x').addEventListener('click', () => setBrushPop(false));
     $('#shaperow').addEventListener('click', (e) => { const b = e.target.closest('[data-shape]'); if (b) { God.brush.shape = b.dataset.shape; syncDock(); } });
@@ -255,8 +257,23 @@
   function revealTool(id) { const tab = tabOfTool[id]; if (tab) { showTab(tab); setBarOpen(true); } selectTool(id); }
   UI.revealTool = revealTool;
   function syncLayers() { refreshBarState(); }
+  // the speeds the Speed up button steps through, slowest to fastest (before people: no history speeds)
+  const speedList = () => (Geo.phase === 'deep' ? ['1', '4', '16', 'a'] : ['1', '4', '16', 'c', 'm']);
+  const curSpeed = () => (AG.mode === 'deep' ? 'a' : AG.mode === 'history' ? (AG.histRate > 100 ? 'm' : 'c') : String(AG.speed));
+  const SPEED_NAME = { 1: '1×', 4: '4×', 16: '16×', c: 'Cent.', m: 'Mill.', a: 'Ages' };
   UI.syncSpeed = function () {
-    const cur = AG.paused ? '0' : AG.mode === 'deep' ? 'a' : AG.mode === 'history' ? (AG.histRate > 100 ? 'm' : 'c') : String(AG.speed);
+    const cur = AG.paused ? '0' : curSpeed();
+    { // the time buttons of the dock
+      const pi = $('#dk-pauseimg'), fi = $('#dk-fastimg'), sp = curSpeed(), list = speedList(), next = list[(Math.max(0, list.indexOf(sp)) + 1) % list.length];
+      if (pi) {
+        pi.src = icon(AG.paused ? 'play' : 'pause'); fi.src = icon('ffwd');
+        $('#dk-pause').classList.toggle('paused', !!AG.paused);
+        $('#dk-pause').setAttribute('aria-pressed', !!AG.paused);
+        { const t = AG.paused ? 'Resume (Space)' : 'Pause (Space)'; $('#dk-pause').title = t; $('#dk-pause').setAttribute('aria-label', t); }
+        $('#dk-speed').textContent = SPEED_NAME[sp] || sp;
+        { const t = `Speed up: now ${SPEED_NAME[sp] || sp}, next ${SPEED_NAME[next]}`; $('#dk-fast').title = t; $('#dk-fast').setAttribute('aria-label', t); }
+      }
+    }
     for (const b of document.querySelectorAll('#speed button')) {
       b.classList.toggle('on', b.dataset.speed === cur);
       // (before people: Ages, or the moment watched at 1x-16x; after: no Ages)
@@ -1016,6 +1033,7 @@
         <kbd>U</kbd><span>In 3D: dive (the sea turns clear over its reefs and sea life)</span>
         <kbd>WASD · arrows</kbd><span>Pan the camera, or walk while possessing</span>
         <kbd>Space</kbd><span>Pause, or strike while possessing</span>
+        <kbd>⏸ ⏩ (dock)</kbd><span>The Pause/Resume and Speed up buttons under the brush and power slots: Speed up steps 1× → 4× → 16× → Centuries → Millennia (before people: 1× → 4× → 16× → Ages) and back to 1×</span>
         <kbd>1 2 3 · 4 5</kbd><span>Watch at 1×, 4×, 16× · Centuries · Millennia</span>
         <kbd>Tab · B</kbd><span>Cycle layers · cycle overlays</span>
         <kbd>Esc</kbd><span>Cancel, release a possessed body, or open this menu</span>

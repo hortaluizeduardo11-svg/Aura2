@@ -94,7 +94,10 @@ the title screen back.
 - Right-drag turns and tilts in 3D; `[` and `]` turn, `N` faces north.
 - `U` dives: in the 3D close-up the sea turns clear, showing its reefs and everything swimming
   there (also the Dive switch in the Creatures and World tabs).
-- `1`–`5` set the speeds and Space pauses.
+- `1`–`5` set the speeds and Space pauses. The left dock under the brush and power slots has big
+  **Pause/Resume** and **Speed up** buttons for the thumb: Speed up steps to the next faster speed
+  (1× → 4× → 16× → Centuries → Millennia, and before people 1× → 4× → 16× → Ages) and from the
+  fastest back to 1×; it shows the speed you are at. On a short screen they sit beside the brush.
 - `Tab` cycles layers and `B` cycles overlays.
 - `Esc` cancels, closes the brush window, releases a possessed body, or opens the menu. On the
   title screen, `Esc` or `Enter` plays.

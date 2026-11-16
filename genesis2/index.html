@@ -129,6 +129,12 @@
   .dkslot:hover { filter: brightness(1.12); }
   .dkslot.on { box-shadow: inset 0 0 0 2px var(--sel), 0 3px 0 rgba(0, 0, 0, 0.35); }
   #dk-brushc { width: 45px; height: 45px; }
+  .tm1 { margin-top: 8px; }
+  #dk-pauseimg, #dk-fastimg { width: 42px; height: 42px; }
+  #dk-speed { position: absolute; right: 4px; bottom: 2px; font: 500 11px/1 var(--font); color: var(--sel-hi); text-shadow: 1px 1px 0 #000; }
+  #dk-pause.paused { box-shadow: inset 0 0 0 2px var(--gold), 0 3px 0 rgba(0, 0, 0, 0.35); }
+  #dock { flex-flow: column wrap; align-content: flex-start; } /* (on a short screen the time buttons take a second column) */
+  @media (min-height: 721px) and (min-width: 761px) { #dock { top: calc(var(--hudh) + 150px); } .no-minimap #dock { top: var(--hudh); } } /* (below the minimap) */
   #dk-size { position: absolute; right: 4px; bottom: 2px; font: 500 11px/1 var(--font); color: var(--sel-hi); text-shadow: 1px 1px 0 #000; }
   #dk-toolimg { width: 42px; height: 42px; }
   #dk-x { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; display: grid; place-items: center; background: var(--ember); border: 2px solid var(--lo); box-shadow: inset 1px 1px 0 var(--ember-hi), inset -1px -1px 0 var(--ember-lo); }
@@ -348,6 +354,7 @@
     .dkslot { width: 50px; height: 50px; }
     #dk-brushc { width: 30px; height: 30px; }
     #dk-toolimg { width: 28px; height: 28px; }
+    #dk-pauseimg, #dk-fastimg { width: 28px; height: 28px; }
     #brushpop { left: 70px; width: min(260px, calc(100% - 80px)); }
     #ticker { width: calc(100% - 24px); }
     #ticker li { font-size: 13.5px; padding: 6px 10px; }
@@ -393,9 +400,11 @@
     <div id="hoverinfo"></div>
   </div>
 
-  <div id="dock" aria-label="Brush and current power">
+  <div id="dock" aria-label="Brush, current power and time">
     <button type="button" id="dk-brush" class="dkslot" title="Brush size and shape" aria-expanded="false"><canvas id="dk-brushc" width="15" height="15"></canvas><span id="dk-size">5</span></button>
     <button type="button" id="dk-tool" class="dkslot" title="Current power (tap to put it down)"><img id="dk-toolimg" alt=""><span id="dk-x" hidden><svg width="10" height="10" viewBox="0 0 5 5" shape-rendering="crispEdges" aria-hidden="true"><path fill="#fff" d="M0 0h1v1H0zM4 0h1v1H4zM1 1h1v1H1zM3 1h1v1H3zM2 2h1v1H2zM1 3h1v1H1zM3 3h1v1H3zM0 4h1v1H0zM4 4h1v1H4z"/></svg></span></button>
+    <button type="button" id="dk-pause" class="dkslot tm tm1" title="Pause (Space)" aria-label="Pause" aria-pressed="false"><img id="dk-pauseimg" alt=""></button>
+    <button type="button" id="dk-fast" class="dkslot tm" title="Speed up" aria-label="Speed up"><img id="dk-fastimg" alt=""><span id="dk-speed">1×</span></button>
   </div>
   <div id="brushpop" class="win" hidden>
     <div class="wtitle"><b id="toolname">Brush</b><button type="button" class="xbtn" id="brushpop-x" aria-label="Close the brush settings"><svg width="12" height="12" viewBox="0 0 6 6" shape-rendering="crispEdges" aria-hidden="true"><path fill="#fff" d="M0 0h1v1H0zM5 0h1v1H5zM1 1h1v1H1zM4 1h1v1H4zM2 2h2v2H2zM1 4h1v1H1zM4 4h1v1H4zM0 5h1v1H0zM5 5h1v1H5z"/></svg></button></div>
