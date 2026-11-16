@@ -9,7 +9,7 @@
   const rnd = AG.rnd;
 
   const God = (AG.God = {
-    tool: 'inspect', cur: null, brush: { r: 5, str: 0.6, shape: 'round' },
+    tool: 'inspect', cur: null, brush: { r: Math.round(5 * AG.PK), str: 0.6, shape: 'round' }, /* (the brush is bigger on a bigger world) */
     input: { dx: 0, dy: 0, act: false, power: false, aimX: 0, aimY: 0, moveTo: null },
     possessed: -1, tornadoes: [], meteors: [], impacts: [], shake: 0, disease: 0, pendingKd: -1, pendingCity: -1,
     down: false, wx: 0, wy: 0,
@@ -94,7 +94,7 @@
     toast(`${alien ? 'A comet seeds the' : 'A legend is born: the'} ${Life.plural(sp.common)}${AG.View3D && AG.View3D.active ? '' : ' (zoom in to see them)'}`);
     if (AG.Deeds) AG.Deeds.note(alien ? 'starseed' : 'legend');
   }
-  function storm(type) { return (x, y) => { Sky.spawnStorm(type, x, y, 14 + God.brush.r * 2.2, 1100, false); if (type === 'thunder') Civ.experience(x, y, 'storm', 1); toast(`${Sky.STORMS[type].name} summoned`); }; }
+  function storm(type) { return (x, y) => { Sky.spawnStorm(type, x, y, 14 * AG.PK + God.brush.r * 2.2, 1100, false); if (type === 'thunder') Civ.experience(x, y, 'storm', 1); toast(`${Sky.STORMS[type].name} summoned`); }; }
   const toast = (m) => AG.UI && AG.UI.toast(m);
   function realmAt(x, y) { const c = Civ.cityAt(x, y); return c ? Civ.kingdoms[c.kd] : null; }
 
@@ -260,7 +260,7 @@
     { id: 'discord', cat: 'divine', name: 'Discord', mode: 'click', color: '#ef5350', desc: 'Tap two peoples to sow hatred between them.', click: (x, y) => twoRealms(x, y, false) },
     // disasters
     { id: 'asteroid', cat: 'ruin', name: 'Asteroid', mode: 'click', color: '#ff5722', desc: 'A dinosaur-killer: a giant impact where you tap, then fire and a long winter. Most big animals die and the small inherit the world. Before the end of the Cretaceous it ends the age of the dinosaurs at once.', click: (x, y) => God.asteroid(x, y) },
-    { id: 'meteor', cat: 'ruin', name: 'Meteor', mode: 'click', color: '#ff7043', desc: 'Tap a target to launch a meteor. Watch its flight and impact in real time, even while paused.', click: (x, y) => { God.meteors.push({ x, y, t: 0, T: 45, r: 4 + God.brush.r * 0.45, realTime: true }); } },
+    { id: 'meteor', cat: 'ruin', name: 'Meteor', mode: 'click', color: '#ff7043', desc: 'Tap a target to launch a meteor. Watch its flight and impact in real time, even while paused.', click: (x, y) => { God.meteors.push({ x, y, t: 0, T: 45, r: God.meteorR(), realTime: true }); } },
     { id: 'volcano', cat: 'ruin', name: 'Volcano', mode: 'click', color: '#d84315', desc: 'Raise an erupting volcano.', click: (x, y) => God.volcano(x, y, 4) },
     { id: 'tornado', cat: 'ruin', name: 'Tornado', mode: 'click', color: '#b0bec5', desc: 'Spawn a tornado. Keep holding to steer it.', click: (x, y) => { God.tornadoes.push({ x, y, vx: 0, vy: 0, life: 700, steer: true, a: 0 }); } },
     { id: 'tsunami', cat: 'ruin', name: 'Tsunami', mode: 'click', color: '#4fc3f7', desc: 'Send a great wave onto the nearest coast.', click: (x, y) => God.tsunami(x, y, 8) },
@@ -327,7 +327,7 @@
       } },
     { id: 'ufo', cat: 'ruin', name: 'UFO', mode: 'click', color: '#80deea', desc: 'Send a ship of lights over a community: it takes a few people into the sky, and sometimes leaves a secret behind.', click: (x, y) => God.summon('ufo', x, y) },
     { id: 'goo', cat: 'ruin', name: 'Grey goo', mode: 'click', color: '#9e9e9e', desc: 'Release self-copying machines that eat everything in a widening circle until their power runs out.', click: (x, y) => God.summon('goo', x, y, God.brush.r) },
-    { id: 'hole', cat: 'ruin', name: 'Black hole', mode: 'click', color: '#311b92', desc: 'Open a small black hole: it drags in creatures, swallows towns and land, and leaves a deep pit.', click: (x, y) => God.summon('hole', x, y, 3 + God.brush.r * 0.5) },
+    { id: 'hole', cat: 'ruin', name: 'Black hole', mode: 'click', color: '#311b92', desc: 'Open a small black hole: it drags in creatures, swallows towns and land, and leaves a deep pit.', click: (x, y) => God.summon('hole', x, y, 3 * AG.PK + God.brush.r * 0.5) },
     { id: 'dragon', cat: 'ruin', name: 'Dragon', mode: 'click', color: '#c62828', desc: 'Wake a dragon. It flies from town to town breathing fire, until the defenders (with the arms of their age) bring it down.', click: (x, y) => God.summon('dragon', x, y) },
     // war: the god of battles
     { id: 'declare', cat: 'war', name: 'Declare war', mode: 'click', color: '#e53935', desc: 'Tap the realm that attacks, then the realm it attacks. Vassals and allies join their side.',
@@ -345,7 +345,7 @@
     { id: 'blitz', cat: 'war', name: 'Blitz', mode: 'click', color: '#ffca28', desc: 'Tap a community at war: its realm strikes every enemy at once from there, fast and hard.',
       click: (x, y) => { const c = Civ.cityAt(x, y) || Civ.nearestCity(x, y, -1, 20); if (!c) { toast('Tap a community'); return; } if (!AG.Warfare.blitz(c)) toast(`The ${Civ.kingdoms[c.kd].name} are at peace`); } },
     { id: 'nuke', cat: 'war', name: 'The bomb', mode: 'click', color: '#fff176', desc: 'Only a god sends this: a blinding flash, a firestorm, a crater and fallout that poisons the land for years. (Peoples never use it on their own.)',
-      click: (x, y) => God.nuke(x, y, 6 + God.brush.r * 0.35) },
+      click: (x, y) => God.nuke(x, y, 6 * AG.PK + God.brush.r * 0.35) },
     { id: 'uplift', cat: 'peoples', name: 'Uplift', mode: 'click', color: '#a1887f', desc: 'Raise the apes near here to minds: they found a people of their own, with their own tongue.',
       click: (x, y) => { if (!AG.Races || !AG.Races.uplift(x, y)) toast('There are no apes to uplift near here (or the Dawn has not come)'); } },
     { id: 'dig', cat: 'deep', name: 'Dig', mode: 'brush', color: '#795548', desc: 'Hollow out caverns.', deep: true, apply: (x, y) => deep(x, y, (i) => { if (Wd.ug[i] !== UG.BEDROCK && !Wd.ugOpen(i)) Wd.ug[i] = UG.CAVE; }) },
@@ -493,7 +493,7 @@
   God.summon = function (kind, x, y, r) {
     const w = { kind, x, y, t: 0, r: r || 4, done: false };
     if (kind === 'ufo') { w.life = 7; w.took = false; }
-    else if (kind === 'goo') { w.life = 26; w.r = 0.5; w.max = 8 + (r || 4) * 1.4; AG.History.event('god', `Grey goo boils up ${placeName(x, y)}: tiny machines begin to eat the world`, { x, y, cause: 'grey goo' }); }
+    else if (kind === 'goo') { w.life = 26; w.r = 0.5; w.max = 8 * AG.PK + (r || 4) * 1.4; AG.History.event('god', `Grey goo boils up ${placeName(x, y)}: tiny machines begin to eat the world`, { x, y, cause: 'grey goo' }); }
     else if (kind === 'hole') { w.life = 12; AG.History.event('god', `A black hole opens ${placeName(x, y)}`, { x, y, cause: 'a black hole' }); }
     else if (kind === 'kraken') {
       let best = null, bd = 1e9; // it rises from the nearest sea
@@ -502,7 +502,7 @@
       w.x = best[0]; w.y = best[1]; w.life = 75; w.hp = 500; w.hit = 0; w.tgt = -1;
       AG.History.event('god', `A kraken rises from the sea ${placeName(w.x, w.y)}`, { x: w.x, y: w.y, cause: 'a kraken' });
     } else if (kind === 'kaiju') { w.life = 100; w.hp = 3200; w.hit = 0; w.stomp = 0; w.tgt = -1; w.vx = 0; w.vy = 0; w.name = (AG.Lang ? AG.Lang.personName(-1, 1) : 'Old Stone') + ' the Behemoth'; AG.History.event('god', `A colossal monster, ${w.name}, wakes ${placeName(x, y)}`, { x, y, cause: 'a kaiju' }); }
-    else if (kind === 'locusts') { w.life = 40; w.r = 4 + (r || 4) * 0.4; w.bite = 0; w.vx = 0; w.vy = 0; AG.History.event('god', `A plague of locusts darkens the sky ${placeName(x, y)}`, { x, y, cause: 'locusts' }); }
+    else if (kind === 'locusts') { w.life = 40; w.r = 4 * AG.PK + (r || 4) * 0.4; w.bite = 0; w.vx = 0; w.vy = 0; AG.History.event('god', `A plague of locusts darkens the sky ${placeName(x, y)}`, { x, y, cause: 'locusts' }); }
     else if (kind === 'rocket') { w.life = 9; }
     else if (kind === 'dragon') { w.life = 70; w.hp = 260; w.vx = 0; w.vy = 0; w.breath = 0; w.tgt = -1; w.name = (AG.Lang ? AG.Lang.personName(-1, 1) : 'Old Red') + ' the Dragon'; AG.History.event('god', `A dragon, ${w.name}, takes wing ${placeName(x, y)}`, { x, y, cause: 'a dragon' }); }
     God.wonders.push(w);
@@ -515,7 +515,7 @@
       if (w.kind === 'ufo') {
         if (!w.took && w.t > 3) {
           w.took = true;
-          const c = cityNear(w.x, w.y, 12);
+          const c = cityNear(w.x, w.y, 12 * AG.PK);
           if (c) {
             const n = Math.min(3, c.members.length), names = [];
             for (let k = 0; k < n; k++) { const P = AG.People.get(c.members[(rnd() * c.members.length) | 0]); if (P && P.died === null) { names.push(P.name); if (P.body >= 0 && U.alive[P.body]) Ent.remove(P.body, true); AG.People.die(P, 'taken into the sky'); } }
@@ -562,9 +562,9 @@
         w.hit += dt;
         if (w.hit > 0.8) {
           w.hit = 0;
-          for (const j of unitsIn(w.x, w.y, 8, 1)) if (U.sp[j] === SP.SHIP || Math.hypot(U.x[j] - w.x, U.y[j] - w.y) < 3) Ent.kill(j, 'the kraken');
+          for (const j of unitsIn(w.x, w.y, 8 * AG.MK, 1)) if (U.sp[j] === SP.SHIP || Math.hypot(U.x[j] - w.x, U.y[j] - w.y) < 3 * AG.MK) Ent.kill(j, 'the kraken');
           let smashed = 0;
-          eachCell(w.x, w.y, 5, (i) => { if (Wd.bgrid[i] && smashed < 1 && rnd() < 0.2) { Civ.damageBuilding(Wd.bgrid[i] - 1, 200, -1); smashed++; } });
+          eachCell(w.x, w.y, 5 * AG.MK, (i) => { if (Wd.bgrid[i] && smashed < 1 && rnd() < 0.2) { Civ.damageBuilding(Wd.bgrid[i] - 1, 200, -1); smashed++; } });
           if (c && Math.hypot(c.x - w.x, c.y - w.y) < 9) {
             killFolded(c, 0.02, 'the kraken');
             const sold = Civ.persons(c).filter((P) => P.job === AG.J.SOLDIER).length;
@@ -582,8 +582,8 @@
         w.stomp += dt; w.hit += dt;
         if (w.stomp > 0.3) {
           w.stomp = 0;
-          eachCell(w.x, w.y, 1.8, (i) => { if (Wd.bgrid[i]) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1); if (Wd.veg[i] > 30) Wd.veg[i] = 30; });
-          for (const j of unitsIn(w.x, w.y, 2, 1)) Ent.kill(j, 'trampled by a monster');
+          eachCell(w.x, w.y, 1.8 * AG.MK, (i) => { if (Wd.bgrid[i]) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1); if (Wd.veg[i] > 30) Wd.veg[i] = 30; });
+          for (const j of unitsIn(w.x, w.y, 2 * AG.MK, 1)) Ent.kill(j, 'trampled by a monster');
           Wd.wakeArea(w.x | 0, w.y | 0, 3); God.shake = Math.max(God.shake, 3);
         }
         if (c && d < 6 && w.hit > 0.6) {
@@ -621,8 +621,8 @@
           if (w.breath > 0.4) {
             w.breath = 0;
             const bx = w.x + w.vx * 0.25, by = w.y + w.vy * 0.25;
-            eachCell(bx, by, 2.2, (i) => { if (Wd.veg[i] > 10 || Wd.bgrid[i]) Wd.fire[i] = 245; if (Wd.bgrid[i]) Civ.damageBuilding(Wd.bgrid[i] - 1, 30, -1); Wd.heat[i] = Math.min(1.2, Wd.heat[i] + 0.3); });
-            for (const j of unitsIn(bx, by, 2.2, 1)) Ent.damage(j, 40, -1, 'dragonfire');
+            eachCell(bx, by, 2.2 * AG.MK, (i) => { if (Wd.veg[i] > 10 || Wd.bgrid[i]) Wd.fire[i] = 245; if (Wd.bgrid[i]) Civ.damageBuilding(Wd.bgrid[i] - 1, 30, -1); Wd.heat[i] = Math.min(1.2, Wd.heat[i] + 0.3); });
+            for (const j of unitsIn(bx, by, 2.2 * AG.MK, 1)) Ent.damage(j, 40, -1, 'dragonfire');
             killFolded(c, 0.03, 'dragonfire');
             AG.FX.burst(bx, by, 'ember', 14); Wd.wakeArea(bx | 0, by | 0, 3);
             // the town fights back with the arms of its age
@@ -695,7 +695,7 @@
     });
     for (const j of unitsIn(x, y, r * 1.5, 1)) Ent.damage(j, 300 * (1 - Math.sqrt(AG.dist2(U.x[j], U.y[j], x, y)) / (r * 1.5)), -1, 'a meteor');
     Wd.wakeArea(x | 0, y | 0, Math.ceil(r * 2)); Wd.wakeU(x | 0, y | 0); Wd.epoch++;
-    AG.FX.burst(x, y, 'explosion', 90); AG.FX.burst(x, y, 'debris', 30); AG.FX.burst(x, y, 'ember', 30);
+    AG.FX.burst(x, y, 'explosion', Math.round(90 * AG.MK)); AG.FX.burst(x, y, 'debris', Math.round(30 * AG.MK)); AG.FX.burst(x, y, 'ember', Math.round(30 * AG.MK));
     God.impacts.push({ x, y, r, height, water: waterHit, age: 0 });
     if (God.impacts.length > 12) God.impacts.shift();
     if (AG.View3D && AG.View3D.invalidate) AG.View3D.invalidate();
@@ -722,24 +722,25 @@
     if (AG.Deeds) AG.Deeds.note('asteroid');
     toast(ended ? 'The great asteroid strikes: the age of the dinosaurs ends in fire and a long winter' : `A great asteroid strikes: fire and a long winter${dead ? `; ${dead} great beasts die` : ''}`);
   }
+  God.meteorR = () => 4 * AG.PK + God.brush.r * 0.45; // (a meteor's crater radius: a bigger world gets bigger meteors)
   God.asteroid = function (x, y) {
     if (God.meteors.some((q) => q.asteroid)) { toast('An asteroid is already falling'); return; }
-    God.meteors.push({ x, y, t: 0, T: 80, r: 18, realTime: true, asteroid: true });
+    God.meteors.push({ x, y, t: 0, T: 80, r: 18 * AG.PK, realTime: true, asteroid: true });
   };
   God.quake = function (x, y, mag, natural) {
     mag = mag || 7;
     const sc = Math.max(0.3, (mag - 4.5) / 3);
-    const a = rnd() * Math.PI, len = (14 + God.brush.r) * sc, ca = Math.cos(a), sa = Math.sin(a);
+    const a = rnd() * Math.PI, len = (14 * AG.PK + God.brush.r) * sc, ca = Math.cos(a), sa = Math.sin(a);
     let vents = 0;
     for (let s = -len; s <= len; s += 0.5) {
       const wob = Math.sin(s * 0.35) * 2.2 + (rnd() - 0.5) * 1.2;
       const px = x + ca * s - sa * wob, py = y + sa * s + ca * wob;
-      eachCell(px, py, 1.1, (i) => {
+      eachCell(px, py, 1.1 * AG.MK, (i) => {
         Wd.elev[i] = Math.max(0.03, Wd.elev[i] - 0.02); Wd.soil[i] = SO.ROCK; Wd.veg[i] = 0;
         if (vents < 2 && rnd() < 0.01) { for (let k = 0; k < 9; k++) { const j = i + ((k % 3) - 1) + (((k / 3) | 0) - 1) * W; if (Wd.ugT[j] === UF.MAGMA) { Wd.vents.push({ x: i % W, y: (i / W) | 0, life: 160, rate: 0.006 }); vents++; break; } } }
       });
     }
-    const R = 8 + 6 * sc;
+    const R = (8 + 6 * sc) * AG.PK;
     for (const b of Civ.buildings) if (b.alive && AG.dist2(b.cx, b.cy, x, y) < R * R) Civ.damageBuilding(b.id, (40 + rnd() * 90) * sc, -1);
     for (const j of unitsIn(x, y, R, 1)) Ent.damage(j, (4 + rnd() * 10) * sc, -1, 'the earthquake');
     for (const j of unitsIn(x, y, R, 0)) Ent.damage(j, (8 + rnd() * 18) * sc, -1, 'a cave-in');
@@ -757,7 +758,7 @@
   };
   God.volcano = function (x, y, vei, natural) {
     vei = vei || 4;
-    const r = (5 + vei * 1.6) * (natural ? 0.8 : 1) + (natural ? 0 : God.brush.r * 0.4);
+    const r = (5 + vei * 1.6) * AG.PK * (natural ? 0.8 : 1) + (natural ? 0 : God.brush.r * 0.4);
     eachCell(x, y, r, (i, f, cx, cy, dd) => {
       const d = dd / r;
       if (Wd.bgrid[i] && d < 0.8) Civ.destroyBuilding(Wd.bgrid[i] - 1, -1);
@@ -765,8 +766,8 @@
       if (d < 0.7) { Wd.soil[i] = SO.BASALT; Wd.veg[i] = 0; }
       Wd.snow[i] = 0; Wd.fl[i] = Wd.ft[i] === FT.WATER ? 0 : Wd.fl[i];
     });
-    eachCell(x, y, 1.6, (i) => { Wd.elev[i] -= 0.05; });
-    eachCell(x, y, 4, (i) => { if (Wd.ug[i] !== UG.BEDROCK) { Wd.ug[i] = UG.CAVE; Wd.ugT[i] = UF.MAGMA; Wd.ugF[i] = 255; } });
+    eachCell(x, y, 1.6 * AG.MK, (i) => { Wd.elev[i] -= 0.05; });
+    eachCell(x, y, 4 * AG.MK, (i) => { if (Wd.ug[i] !== UG.BEDROCK) { Wd.ug[i] = UG.CAVE; Wd.ugT[i] = UF.MAGMA; Wd.ugF[i] = 255; } });
     Wd.vents.push({ x: x | 0, y: y | 0, life: 300 + vei * 140, rate: 0.006 + vei * 0.0015 });
     eachCell(x, y, r * 2.5, (i, f) => { if (Wd.soil[i] === SO.DIRT && rnd() < f) Wd.fert[i] = Math.min(255, Wd.fert[i] + 25 * f); }); // ash makes the land rich
     witness(x, y, r * 3, AG.People.MK.ERUPTION, 'the mountain of fire', -0.8);
@@ -779,14 +780,14 @@
   // A wave runs onto the coast near (x, y): water poured along the shore.
   God.tsunami = function (x, y, mag, natural) {
     let n = 0;
-    for (let t = 0; t < 400 && n < 60; t++) {
-      const a = rnd() * Math.PI * 2, rr = rnd() * 22, px = (x + Math.cos(a) * rr) | 0, py = (y + Math.sin(a) * rr) | 0;
+    for (let t = 0; t < 400 * AG.PK && n < 60 * AG.PK; t++) {
+      const a = rnd() * Math.PI * 2, rr = rnd() * 22 * AG.PK, px = (x + Math.cos(a) * rr) | 0, py = (y + Math.sin(a) * rr) | 0;
       if (px < 2 || py < 2 || px >= W - 2 || py >= H - 2) continue;
       const i = py * W + px;
-      if (Wd.elev[i] >= AG.SEA && Wd.elev[i] < AG.SEA + 0.05 && (Wd.fl[i - 1] > 0.05 || Wd.fl[i + 1] > 0.05 || Wd.fl[i - W] > 0.05 || Wd.fl[i + W] > 0.05)) { eachCell(px, py, 3, (j) => { Wd.fl[j] += 0.03 * (mag / 8); Wd.ft[j] = FT.WATER; }); n++; }
+      if (Wd.elev[i] >= AG.SEA && Wd.elev[i] < AG.SEA + 0.05 && (Wd.fl[i - 1] > 0.05 || Wd.fl[i + 1] > 0.05 || Wd.fl[i - W] > 0.05 || Wd.fl[i + W] > 0.05)) { eachCell(px, py, 3 * AG.MK, (j) => { Wd.fl[j] += 0.03 * (mag / 8); Wd.ft[j] = FT.WATER; }); n++; }
     }
-    Wd.wakeArea(x | 0, y | 0, 30); God.shake = 12;
-    witness(x, y, 30, AG.People.MK.FLOOD, 'the great wave', -0.9);
+    Wd.wakeArea(x | 0, y | 0, Math.ceil(30 * AG.PK)); God.shake = 12;
+    witness(x, y, 30 * AG.PK, AG.People.MK.FLOOD, 'the great wave', -0.9);
     Civ.experience(x, y, 'water', 4);
     AG.History.event('tsunami', `A great wave strikes the coast ${placeName(x, y)}`, { x, y, cause: natural ? 'an undersea earthquake' : 'divine will' });
   };
@@ -812,15 +813,15 @@
         t.vx += (Sky.wind.x * 0.12 + (rnd() - 0.5) * 0.15 - t.vx) * 0.05;
         t.vy += (Sky.wind.y * 0.12 + (rnd() - 0.5) * 0.15 - t.vy) * 0.05;
       }
-      const sp = Math.hypot(t.vx, t.vy); if (sp > 0.35) { t.vx *= 0.35 / sp; t.vy *= 0.35 / sp; }
+      const sp = Math.hypot(t.vx, t.vy); const top = 0.35 * AG.MK; if (sp > top) { t.vx *= top / sp; t.vy *= top / sp; }
       t.x += t.vx; t.y += t.vy; t.a += 0.3;
-      for (const j of unitsIn(t.x, t.y, 2.6, 1)) {
+      for (const j of unitsIn(t.x, t.y, 2.6 * AG.MK, 1)) {
         if (rnd() > 0.15 || (U.flags[j] & FL.POSSESSED)) continue;
         U.x[j] = AG.clamp(U.x[j] + (rnd() - 0.5) * 8, 1, W - 1); U.y[j] = AG.clamp(U.y[j] + (rnd() - 0.5) * 8, 1, H - 1);
         U.px[j] = U.x[j]; U.py[j] = U.y[j]; U.st[j] = ST.IDLE;
         Ent.damage(j, 6, -1, 'the tornado');
       }
-      eachCell(t.x, t.y, 2.2, (i) => {
+      eachCell(t.x, t.y, 2.2 * AG.MK, (i) => {
         if (Wd.veg[i]) Wd.veg[i] = Wd.veg[i] > 25 ? Wd.veg[i] - 25 : 0;
         Wd.snow[i] = 0; if (Wd.fl[i] > 0) Wd.fl[i] *= 0.92;
         if (Wd.bgrid[i] && rnd() < 0.3) Civ.damageBuilding(Wd.bgrid[i] - 1, 5, -1);

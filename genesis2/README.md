@@ -140,6 +140,14 @@ phone the fold button (red, at the start of the tabs) puts the bar away, and pic
 it by itself so the map is clear to work on; the tabs open it again. Menu → Settings → "Power bar
 after picking a power" chooses Auto (phones only), Fold or Stay open.
 
+**Powers grow with the world.** Their sizes were set for a screen-sized world, so on a bigger one
+they are scaled up (about 2× on Huge, up to 3× on Titanic): meteors and asteroids make bigger
+craters and fireballs, quakes crack longer, volcanoes are wider, storms, tsunamis and tornadoes
+cover more ground, nukes, black holes, grey goo and locust swarms reach further, the sky-ship
+gathers from further off, and the dragon, kraken, kaiju and sky-ship are drawn larger (and reach
+further, a little less than the rest). The brush starts at twice the size on Huge and its slider
+goes up to 40. Small worlds keep the old sizes.
+
 **Powers** (about 100, each with its own pixel icon; this is what they do, the bar groups them in ten tabs):
 - **Land:** raise or lower ground, plant meadows, forests or wild grain.
 - **Geology:** push a plate, trigger or calm a fault, force an eruption, start an ice age, warm

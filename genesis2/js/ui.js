@@ -28,6 +28,7 @@
     $('#dk-tool').addEventListener('click', () => { if (God.tool !== 'inspect') selectTool('inspect'); else setBrushPop($('#brushpop').hidden); });
     $('#brushpop-x').addEventListener('click', () => setBrushPop(false));
     $('#shaperow').addEventListener('click', (e) => { const b = e.target.closest('[data-shape]'); if (b) { God.brush.shape = b.dataset.shape; syncDock(); } });
+    { const bs = $('#bsize'); bs.max = Math.round(20 * AG.PK); bs.value = God.brush.r; $('#bsizev').textContent = God.brush.r; } // (a bigger world has a bigger brush)
     $('#bsize').addEventListener('input', (e) => { God.brush.r = +e.target.value; $('#bsizev').textContent = e.target.value; drawBrushSlot(); });
     $('#bstr').addEventListener('input', (e) => { God.brush.str = +e.target.value; $('#bstrv').textContent = Math.round(e.target.value * 100); });
     $('#disease').addEventListener('change', (e) => { God.disease = +e.target.value; });
@@ -244,7 +245,7 @@
   const SIZED = new Set(['meteor', 'volcano', 'rain', 'thunder', 'blizzard', 'heat', 'fault']);
   function drawBrushSlot() {
     const c = $('#dk-brushc'); if (!c) return;
-    const g = c.getContext('2d'), r = God.brush.r, d = Math.max(1, Math.min(13, Math.round(1 + (r - 1) * 0.63))), sq = God.brush.shape === 'square';
+    const g = c.getContext('2d'), r = God.brush.r / AG.PK, d = Math.max(1, Math.min(13, Math.round(1 + (r - 1) * 0.63))), sq = God.brush.shape === 'square';
     g.clearRect(0, 0, 15, 15);
     const rr = d / 2;
     for (let y = 0; y < 15; y++) for (let x = 0; x < 15; x++) {
@@ -254,7 +255,7 @@
       const edge = sq ? Math.abs(dx) > rr - 1 || Math.abs(dy) > rr - 1 : dx * dx + dy * dy > (rr - 1) * (rr - 1);
       g.fillStyle = edge ? '#ffd27a' : '#f0a030'; g.fillRect(x, y, 1, 1);
     }
-    $('#dk-size').textContent = r;
+    $('#dk-size').textContent = God.brush.r;
   }
   function syncDock() {
     const t = God.cur;

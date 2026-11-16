@@ -89,7 +89,7 @@
     let light = 0;
     const flights = AG.God.meteors.slice(-MAX_FLIGHTS);
     for (const m of flights) {
-      const u = AG.clamp(m.t / m.T, 0, 1), size = Math.max(0.45, Math.min(2.6, m.r * 0.17));
+      const u = AG.clamp(m.t / m.T, 0, 1), size = Math.max(0.45, Math.min(2.6 * AG.MK, m.r * 0.17 * AG.MK));
       D.position(m, u, point);
       put(core, point.x, point.y, point.z, size, size * 1.15, size, 0xffffff, u * 8);
       if (light < lights.length && quality < 2) { const l = lights[light++]; l.position.copy(point); l.intensity = 2.4; }
@@ -118,20 +118,20 @@
         const seed = Math.sin(j * 127.1 + x * 31.7 + z) * 43758.5453, n = seed - Math.floor(seed);
         const angle = j * 2.39996, speed = r * (0.65 + n * 1.1), px = x + Math.cos(angle) * speed * a, pz = z + Math.sin(angle) * speed * a;
         const ground = AG.View3D.groundAt(px, pz), py = Math.max(ground + 0.08, height + (5 + n * 10) * a - 8 * a * a);
-        const s = (0.08 + n * 0.3) * Math.min(1, fade * 3);
+        const s = (0.08 + n * 0.3) * AG.MK * Math.min(1, fade * 3);
         put(debris, px, py, pz, s, s * (water ? 2.6 : 0.8), s, water ? (j % 2 ? 0xa1dded : 0xe2faff) : j % 5 ? 0x66504a : 0xf69b43, a * (2 + n * 7));
       }
       const puffs = quality >= 2 ? 12 : 28;
       for (let j = 0; j < puffs; j++) {
         const angle = j * 2.39996, speed = r * (0.45 + (j % 5) * 0.12), radius = speed * Math.sqrt(a + 0.01);
         const px = x + Math.cos(angle) * radius, pz = z + Math.sin(angle) * radius;
-        const s = (0.4 + a * (1 + (j % 3) * 0.2)) * fade;
+        const s = (0.4 + a * (1 + (j % 3) * 0.2)) * fade * AG.MK;
         put(dust, px, Math.max(height, AG.View3D.groundAt(px, pz)) + 0.4 + a * (1.1 + j % 3), pz, s * 1.5, s, s * 1.5, water ? 0xd4e8e8 : j % 2 ? 0x8b7767 : 0xb29b80, angle);
       }
     }
     // Hover is a preview; every launched meteor keeps its own independent marker.
     const hover = AG.Render.hover;
-    if (AG.God.tool === 'meteor' && hover.on) ring(hover.x, hover.y, 4 + AG.God.brush.r * 0.45, 0xffdbac, true);
+    if (AG.God.tool === 'meteor' && hover.on) ring(hover.x, hover.y, AG.God.meteorR(), 0xffdbac, true);
     for (const m of [core, flame, debris, dust]) {
       m.count = counters[m.id];
       if (m.count) { m.instanceMatrix.updateRange.offset = 0; m.instanceMatrix.updateRange.count = m.count * 16; m.instanceMatrix.needsUpdate = true; m.instanceColor.updateRange.offset = 0; m.instanceColor.updateRange.count = m.count * 3; m.instanceColor.needsUpdate = true; }

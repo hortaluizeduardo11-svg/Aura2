@@ -619,6 +619,31 @@ test('the age of dinosaurs can be watched up close: deep time stops, dinosaurs l
   return `${dino0.map(([k, n]) => n + ' ' + k).join(', ')}; ${moved}/${x0.size} moved in a year; ${big} big dinosaur species just after the asteroid`;
 });
 
+test('powers grow with the world: bigger meteors, quakes, volcanoes, storms and brush on a big world, unchanged on a small one', () => {
+  const small = load({ W: 224, H: 144 }), big = load({ W: 832, H: 512 });
+  assert(small.PK === 1 && small.MK === 1, `a small world keeps the old sizes (PK ${small.PK})`);
+  assert(big.PK > 1.4 && big.MK > 1.2 && big.PK <= 3, `a big world scales them (PK ${big.PK.toFixed(2)}, MK ${big.MK.toFixed(2)})`);
+  assert(big.God.brush.r > small.God.brush.r && big.God.brush.r === Math.round(5 * big.PK), `the brush starts bigger (${small.God.brush.r} -> ${big.God.brush.r})`);
+  assert(big.God.meteorR() > small.God.meteorR() * 1.4, `a meteor is bigger (${small.God.meteorR().toFixed(1)} -> ${big.God.meteorR().toFixed(1)} cells)`);
+  // what the powers do to the land: cells changed by a meteor, a volcano and a quake at the same default settings
+  const reach = (AG, what) => {
+    AG.Sim.newWorld(5); AG.Sim.skipDeep();
+    const Wd = AG.World, W = AG.W, H = AG.H, before = Wd.elev.slice(), x = W / 2, y = H / 2;
+    if (what === 'meteor') { AG.God.meteors.push({ x, y, t: 0, T: 1, r: AG.God.meteorR(), realTime: true }); AG.God.advanceMeteors(1); }
+    else if (what === 'volcano') AG.God.volcano(x, y, 4);
+    else AG.God.quake(x, y, 7, false);
+    let n = 0; for (let i = 0; i < AG.N; i++) if (Math.abs(Wd.elev[i] - before[i]) > 1e-4) n++;
+    return n;
+  };
+  const out = [];
+  for (const what of ['meteor', 'volcano', 'quake']) {
+    const a = reach(small, what), b = reach(big, what);
+    assert(b > a * 1.5, `a ${what} changes more land on a big world (${a} -> ${b} cells)`);
+    out.push(`${what} ${a}->${b}`);
+  }
+  return `PK ${big.PK.toFixed(2)}; cells changed ${out.join(', ')}; brush ${small.God.brush.r}->${big.God.brush.r}`;
+});
+
 test('big worlds: coarse geology, batched life, and wild animals embodied around the camera that follow it', () => {
   const W = 832, H = 512, AG = load({ W, H }), Life = AG.Life, U = AG.U;
   assert(AG.N > 400000 && AG.Geo.CS === 8, `a big world paints from 8-cell geology (CS ${AG.Geo.CS})`);

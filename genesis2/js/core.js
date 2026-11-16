@@ -72,6 +72,11 @@
     AG.WORLD_SIZE = fixed ? pick : 'screen';
   })();
   AG.N = AG.W * AG.H;
+  // How big the world is, as a factor for the size of what a god does: the powers' base sizes were set
+  // for a screen-sized world. 1 on small worlds, about 2 on Huge, 3 at most (PK: reaches and radii);
+  // monsters and other things drawn grow a little less (MK).
+  AG.PK = Math.max(1, Math.min(3, Math.sqrt(AG.N / 200000)));
+  AG.MK = Math.pow(AG.PK, 0.6);
   AG.SCALE = AG.N / 98304; // relative to the original 384x256 world, for populations and feature counts
   AG.CHUNK = 16; AG.CW = AG.W / 16; AG.CH = AG.H / 16; AG.NC = AG.CW * AG.CH;
   AG.TPS = 20;                        // simulation ticks per second at 1x

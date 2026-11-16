@@ -1781,9 +1781,13 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
       for (let q = 0; q < 2; q++) plane(s.cx, g, s.cy, s.id * 3.1 + q * Math.PI, era, kc, t, prop, 4 + q * 1.5);
     }
     // wonders and terrors: the sky-ship and its beam, the dragon, the black hole's maw
+    const prop0 = prop, MKs = AG.MK;
     for (const w of (AG.God && AG.God.wonders) || []) {
       if (w.x < wx0 || w.y < wy0 || w.x >= x1 || w.y >= y1) continue;
       const gy = V.groundAt(w.x, w.y);
+      // monsters and the sky-ship are drawn larger on a bigger world, grown about their own feet
+      const grown = MKs > 1.001 && (w.kind === 'dragon' || w.kind === 'kaiju' || w.kind === 'kraken' || w.kind === 'ufo');
+      const prop = grown ? (x, y, z, sx, sy, sz, ry, rgb, roll) => prop0(w.x + (x - w.x) * MKs, gy + (y - gy) * MKs, w.y + (z - w.y) * MKs, sx * MKs, sy * MKs, sz * MKs, ry, rgb, roll) : prop0;
       if (w.kind === 'ufo') {
         const lift = 6 + Math.max(0, 3 - w.t) * 8 + Math.max(0, w.t - w.life + 2) * 10;
         prop(w.x, gy + lift, w.y, 2.4, 0.3, 2.4, t, [154, 164, 176]); prop(w.x, gy + lift + 0.3, w.y, 1.0, 0.45, 1.0, t, [200, 246, 255]);
@@ -1804,7 +1808,7 @@ gl_FragColor = vec4( outgoingLight, diffuseColor.a );`;
       } else if (w.kind === 'kraken') {
         const sea = Math.max(gy, 0);
         for (let q = 0; q < 8; q++) { const a = q / 8 * Math.PI * 2 + t * 0.3, sway = Math.sin(t * 2 + q) * 0.4; for (let s2 = 0; s2 < 5; s2++) { const rr = 1.2 + s2 * 0.5, hh = Math.sin((s2 / 4) * Math.PI) * (2.2 + sway); prop(w.x + Math.cos(a) * rr, sea + hh, w.y + Math.sin(a) * rr, 0.4 - s2 * 0.06, 0.6, 0.4 - s2 * 0.06, -a, [110, 44, 120], sway * 0.5); } }
-        if (nh < MAXU - 1) place(heads, nh++, w.x, sea + 1.2, w.y, 2.2, 2.6, 2.2, t * 0.2, [122, 52, 134], 0);
+        if (nh < MAXU - 1) place(heads, nh++, w.x, sea + 1.2 * MKs, w.y, 2.2 * MKs, 2.6 * MKs, 2.2 * MKs, t * 0.2, [122, 52, 134], 0);
         prop(w.x + 0.5, sea + 1.6, w.y + 0.9, 0.3, 0.3, 0.1, 0, [255, 213, 79]); prop(w.x - 0.5, sea + 1.6, w.y + 0.9, 0.3, 0.3, 0.1, 0, [255, 213, 79]);
       } else if (w.kind === 'kaiju') {
         const ry = Math.atan2(w.vx, w.vy), fx = Math.sin(ry), fz = Math.cos(ry), rx = Math.cos(ry), rz = -Math.sin(ry), step = Math.sin(t * 4) * 0.3, K = 2.2;

@@ -588,6 +588,15 @@ one does:
 - **Physics:** chunks more than 8 beyond the focus never run; the focus is capped at 30×30 chunks
   around the camera when zoomed far out; the slow pass takes 48 chunks a tick; caves sleep too.
 - **Sky:** clouds refresh `CLH / CLOUD_EVERY` rows a tick (storms add only to those rows).
+- **Powers:** `AG.PK = clamp(sqrt(N / 200k), 1, 3)` scales the base radius of every power (meteor
+  `4·PK + brush·0.45`, asteroid `18·PK`, quake length `14·PK` and reach `(8 + 6·sc)·PK`, volcano
+  `(5 + 1.6·vei)·PK`, tsunami reach and wave count, storms `14·PK`, nukes `6·PK`, black hole
+  `3·PK`, goo `8·PK`, locusts `4·PK`, UFO pick-up `12·PK`); the brush default is `round(5·PK)` and
+  its slider `20·PK`. `AG.MK = PK^0.6` scales the lesser sizes: tornado and monster reach (dragon
+  fire, kraken, kaiju trample, tornado speed), crack width, burst counts, and what is drawn (the
+  dragon, kraken, kaiju and sky-ship grow about their feet in view3d; meteor fireball, debris and
+  dust in disaster3d; the 2D tornado). Both are 1 on small worlds, so tests and old saves of
+  screen-sized worlds are unchanged.
 - **Memory:** history snapshots copy ~47 bytes a cell: 2 kept on big worlds, 1 over 1M (plus the
   Dawn); travel fields cached: `40 × 280k / N`, at least 8.
 

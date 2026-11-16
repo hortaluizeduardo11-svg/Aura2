@@ -1613,8 +1613,8 @@
       const bx = ox + t.x * z, by = oy + t.y * z;
       ctx.strokeStyle = 'rgba(205,205,215,0.55)'; ctx.lineWidth = Math.max(1, z / 4);
       for (let h = 0; h < 9; h++) {
-        const r = (0.4 + h * 0.35) * z, wob = Math.sin(t.a + h * 0.7) * z * 0.4;
-        ctx.beginPath(); ctx.ellipse(bx + wob, by - h * z * 0.7, r, r * 0.35, 0, 0, Math.PI * 2); ctx.stroke();
+        const r = (0.4 + h * 0.35) * z * AG.MK, wob = Math.sin(t.a + h * 0.7) * z * 0.4 * AG.MK;
+        ctx.beginPath(); ctx.ellipse(bx + wob, by - h * z * 0.7 * AG.MK, r, r * 0.35, 0, 0, Math.PI * 2); ctx.stroke();
       }
     }
   }
