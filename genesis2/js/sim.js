@@ -30,13 +30,17 @@
     Wd.reset(); Wd.seed = seed;
     Geo.init(seed); Life.init(seed); AG.Sky.reset(seed);
     Geo.paintFine();
-    Sim.geoSeen = 0;
+    Sim.geoSeen = 0; Sim.lifeAcc = 0;
     AG.History.event('genesis', `Year 0: a new world is born (seed ${seed}), one great continent in a world ocean`, { cause: 'creation' });
     AG.creating = false;
   };
+  // (on a big world the regional life model takes every other geology step, with both steps' time)
+  const LIFE_DEEP = AG.N > 1000000 ? 3 : AG.N > 400000 ? 2 : 1;
+  Sim.lifeAcc = 0;
   Sim.deepStep = function (dt) {
     dt = dt || Sim.DEEP_DT;
     time('geo', () => Geo.deepStep(dt));
+    if (LIFE_DEEP > 1) { Sim.lifeAcc += dt; if (Sim.lifeAcc < dt * LIFE_DEEP - 1e-9) return; dt = Sim.lifeAcc; Sim.lifeAcc = 0; }
     time('life', () => Life.deepStep(dt));
     if (Life.sapienceReady(dt)) Sim.dawn(); // people arrive when evolution makes them, not on a set date
   };

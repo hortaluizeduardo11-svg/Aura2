@@ -15,7 +15,10 @@
 (function () {
   const AG = window.AG, Wd = AG.World;
   const { W, H, N, SEA, FT, SO, UG, UF, ROCK, RES } = AG;
-  const CS = 4, GW = Math.ceil(W / CS), GH = Math.ceil(H / CS), GN = GW * GH;
+  // (the coarse cell is 4 fine cells wide, wider on very big worlds so the geology keeps about as
+  // many cells as a screen-sized world: the same continents drawn larger, with the fine detail
+  // painted on top; it always divides life.js's 16-cell regions)
+  const CS = AG.N > 1600000 ? 16 : AG.N > 400000 ? 8 : 4, GW = Math.ceil(W / CS), GH = Math.ceil(H / CS), GN = GW * GH;
   const CONT = 0.37;          // crust above this is buoyant continental crust
   const SEA_AMP = 0.045;      // sea-level fall at full glaciation (exposes the continental shelves)
   const NOP = 255;
@@ -505,6 +508,17 @@
         prev = prev * 0.6 + e * 0.4;
       }
     }
+    // (a big world's rows are long: smooth the rain across them, so neighbouring rows and the edge
+    // of the wind belts blend instead of streaking)
+    if (CS > 4) {
+      const tmpP = Geo._tmpP || (Geo._tmpP = new Float32Array(GN)), R = 2;
+      for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+        let s = 0, n = 0;
+        for (let d = -R; d <= R; d++) { const yy = y + d; if (yy < 0 || yy >= GH) continue; const w = R + 1 - Math.abs(d); s += precip[yy * GW + x] * w; n += w; }
+        tmpP[y * GW + x] = s / n;
+      }
+      precip.set(tmpP);
+    }
   }
   function climateDeep(dt) {
     const cl = Geo.climate;
@@ -632,19 +646,24 @@
     const m = Geo.myr;
     return m < 18 ? 0 : m < 26 ? ((m - 18) / 8) * 0.3 : m < 34 ? 0.3 + ((m - 26) / 8) * 0.7 : 1;
   };
+  const WARP = CS > 4;
   Geo.paintRows = function (yA, yB, quiet) {
     const { elev, fl, ft, frozen, veg, soil, snow, tbase, moist, ice, rock, plate } = Wd;
     const P = Geo.plates, sl = Geo.seaLevel, green = Geo.greening();
     for (let y = yA; y < yB; y++) for (let x = 0; x < W; x++) {
-      const i = y * W + x, c = Geo.cellOf(x, y), p = P[Geo.plate[c]] || P[0];
-      const ux = (x - p.ox * CS) & (T - 1), uy = (y - p.oy * CS) & (T - 1), tI = uy * T + ux;
+      const i = y * W + x, c0 = Geo.cellOf(x, y), p0 = P[Geo.plate[c0]] || P[0];
+      const tI0 = (((y - p0.oy * CS) & (T - 1)) * T) + ((x - p0.ox * CS) & (T - 1));
+      // (on a big world the coarse cells are wide: what is read cell by cell - plate, rock, mountain
+      // roughness - is read through the fine noise, so its borders wander instead of drawing squares)
+      const c = WARP ? Geo.cellOf(x + tileA[(tI0 + 4241) & (T * T - 1)] * CS * 2.4, y + tileA[(tI0 + 9157) & (T * T - 1)] * CS * 2.4) : c0, p = WARP ? P[Geo.plate[c]] || P[0] : p0;
+      const ux = (x - p.ox * CS) & (T - 1), uy = (y - p.oy * CS) & (T - 1), tI = WARP ? uy * T + ux : tI0;
       // continental shelves: flooded continental crust lies shallow (within the reach of an ice-age
       // sea), then the slope drops to the abyss — so glacial seas expose broad plains and land bridges
       let r = sampleCrust(x + 0.5, y + 0.5) - SEA;
       if (r < 0.02 && r > -0.2) { const d = 0.02 - r; r = -(d < 0.1 ? d * 0.42 : 0.042 + (d - 0.1) * 1.58); } // (low coasts sink a little too)
       const base = SEA + r - sl;
       const up = base - SEA;
-      const rug = 0.012 + 0.06 * AG.smooth(0.0, 0.3, up) + Math.min(0.08, Geo.orog[c] * 0.02);
+      const rug = 0.012 + 0.06 * AG.smooth(0.0, 0.3, up) + Math.min(0.08, (WARP ? sampleField(Geo.orog, x + 0.5, y + 0.5) : Geo.orog[c]) * 0.02);
       let e = base + tileA[tI] * (up > 0 ? 0.05 + rug * 0.4 : r > -0.06 ? 0.012 : 0.035) + (up > 0.02 ? tileB[tI] * rug * 1.6 : 0);
       elev[i] = AG.clamp(e, 0.02, 0.985);
       plate[i] = Geo.plate[c]; rock[i] = Geo.rock[c];

@@ -37,6 +37,7 @@
 
   // ============================================================ flow fields (v1)
   const Flow = (AG.Flow = { cache: new Map(), budget: 2, q: new Int32Array(N), computed: 0 });
+  const FLOW_KEEP = Math.max(8, Math.min(40, Math.round((40 * 280000) / N))); // (fields cached: 2 bytes a cell each)
   Flow.get = function (key, tx, ty, mode, seeds) {
     let f = Flow.cache.get(key);
     const stale = !f || AG.tick - f.t > 1500 || (f.epoch !== Wd.epoch && AG.tick - f.t > 200);
@@ -46,7 +47,7 @@
     const d = f ? f.d : new Uint16Array(N);
     computeField(d, seeds || [AG.clamp(ty | 0, 0, H - 1) * W + AG.clamp(tx | 0, 0, W - 1)], mode);
     if (f) { f.t = AG.tick; f.epoch = Wd.epoch; Flow.cache.delete(key); Flow.cache.set(key, f); }
-    else { f = { d, t: AG.tick, epoch: Wd.epoch }; Flow.cache.set(key, f); if (Flow.cache.size > 40) Flow.cache.delete(Flow.cache.keys().next().value); }
+    else { f = { d, t: AG.tick, epoch: Wd.epoch }; Flow.cache.set(key, f); if (Flow.cache.size > FLOW_KEEP) Flow.cache.delete(Flow.cache.keys().next().value); }
     Flow.computed++;
     return d;
   };

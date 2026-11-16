@@ -166,6 +166,7 @@
     const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
     // zoomed far out, nothing is close enough to be worth embodying
     Civ.focus = R.cam.z < 1.6 ? null : { x0, y0, x1, y1 };
+    AG.Life.bodyFocus = { x: R.cam.x, y: R.cam.y }; // (a big world embodies its animals around here)
   }
 
   // ------------------------------------------------------------ scenarios
@@ -237,9 +238,13 @@
         }
         if (steps) AG.stats.simMs = AG.stats.simMs * 0.9 + ((performance.now() - t0) / steps) * 0.1;
         ticks += steps;
-        if (now - lodT > 400) { setFocus(); Civ.lod(); lodT = now; }
+        if (now - lodT > 400) { setFocus(); Civ.lod(); if (R.cam.z >= 3) AG.Life.streamTo(R.cam.x, R.cam.y); lodT = now; }
         // the fluid simulation keeps full detail around what is on screen (two chunks of margin)
-        { const sz = R.size(), a = R.screenToWorld(0, 0), b = R.screenToWorld(sz.w, sz.h), m = R.is3D() ? 6 : 2; AG.Physics.focus = { cx0: Math.floor(Math.min(a.x, b.x) / 16) - m, cx1: Math.floor(Math.max(a.x, b.x) / 16) + m, cy0: Math.floor(Math.min(a.y, b.y) / 16) - m, cy1: Math.floor(Math.max(a.y, b.y) / 16) + m }; }
+        { const sz = R.size(), a = R.screenToWorld(0, 0), b = R.screenToWorld(sz.w, sz.h), m = R.is3D() ? 6 : 2; const f = { cx0: Math.floor(Math.min(a.x, b.x) / 16) - m, cx1: Math.floor(Math.max(a.x, b.x) / 16) + m, cy0: Math.floor(Math.min(a.y, b.y) / 16) - m, cy1: Math.floor(Math.max(a.y, b.y) / 16) + m };
+          // (zoomed far out over a big world the view holds thousands of chunks: full detail stays with
+          // the middle of the screen, the rest runs at the far pace or sleeps)
+          if (AG.N > 400000) { const MAXC = 30, ccx = Math.floor(R.cam.x / 16), ccy = Math.floor(R.cam.y / 16); if (f.cx1 - f.cx0 > MAXC) { f.cx0 = ccx - MAXC / 2; f.cx1 = ccx + MAXC / 2; } if (f.cy1 - f.cy0 > MAXC) { f.cy0 = ccy - MAXC / 2; f.cy1 = ccy + MAXC / 2; } }
+          AG.Physics.focus = f; }
       } else {
         // history: whole steps of Δ years, each spread over as many frames as it needs
         if (!AG.paused) acc += (dt / 1000) * AG.histRate;

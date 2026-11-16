@@ -77,7 +77,7 @@
   R.reset = function () { R.follow = -1; R.bordersDirty = true; lastView = -1; morphReset(); R.invalidate(); Wd.dirty.fill(1); Wd.udirty.fill(1); decoDirty.fill(1); decoSig.fill(0); decoWarm = true; R.fit(); };
 
   // ------------------------------------------------------------ camera
-  // The world is sized to the screen, so the smallest zoom always fills it edge to edge.
+  // The smallest zoom fills the screen edge to edge with the world (on a big world, the rest is a pan away).
   // Zoom and position glide toward targets (zt, tx, ty) for smooth, map-app style motion;
   // past 8x the 3D view (view3d.js) takes over and tilts the camera.
   const MAXZ = 48;
@@ -88,7 +88,7 @@
   R.fit = function () {
     const c = R.cam;
     R.minZoom = Math.max(cw / W, ch / H);
-    c.z = c.zt = Math.max(R.minZoom, AG.BASE_ZOOM); c.x = c.tx = W / 2; c.y = c.ty = H / 2; anchor = null;
+    c.z = c.zt = AG.mode === 'deep' ? R.minZoom : Math.max(R.minZoom, AG.BASE_ZOOM); c.x = c.tx = W / 2; c.y = c.ty = H / 2; anchor = null; // (deep time: the whole world, to watch the continents move)
     clampCam();
   };
   const flatToWorld = (sx, sy) => ({ x: (sx - cw / 2) / R.cam.z + R.cam.x, y: (sy - ch / 2) / R.cam.z + R.cam.y });

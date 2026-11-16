@@ -12,7 +12,8 @@
 (function () {
   const AG = window.AG;
   const History = (AG.History = { events: [], log: [], snaps: [], branches: [], eraMaps: [], nextId: 1, replaying: false, lastSnapYear: -1e9 });
-  const SNAP_EVERY = 500, SNAP_KEEP = 5;
+  // (each snapshot copies every world field, ~47 bytes a cell: a big world keeps fewer of them)
+  const SNAP_EVERY = 500, SNAP_KEEP = AG.N > 1000000 ? 1 : AG.N > 400000 ? 2 : 5;
   const year = () => (AG.Geo.phase === 'deep' ? AG.Geo.myr * 1e6 - 1e10 : AG.Geo.year); // deep-time events sort before the Dawn
   const CHRON = { invention: 'culture', era: 'culture', loss: 'fall', famine: 'plague', plague: 'plague', war: 'war', raid: 'war', battle: 'war', conquest: 'war', march: 'war', peace: 'peace', alliance: 'peace', faith: 'faith', trade: 'trade', government: 'crown', ruler: 'crown', death: 'death', hero: 'hero', fall: 'fall', collapse: 'fall', rebellion: 'war', settle: 'found', dawn: 'found', migration: 'found', flood: 'disaster', quake: 'disaster', eruption: 'disaster', tsunami: 'disaster', language: 'culture', speciation: 'info', extinction: 'fall', domestication: 'culture', institution: 'crown', reform: 'crown', law: 'crown', abandoned: 'fall', god: 'info', omen: 'faith' };
 
@@ -145,7 +146,7 @@
     const spParts = [];
     for (const part of chunks(Life.species, 3)) st.push(() => { spParts.push(clone(part)); });
     st.push(() => { snap.races = AG.Races ? AG.Races.state() : []; });
-    st.push(() => { snap.life = Object.assign(clone({ extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, env: Life.env }), { species: [].concat(...spParts) }); });
+    st.push(() => { snap.life = Object.assign(clone({ extinctions: Life.extinctions, speciations: Life.speciations, massExtinctions: Life.massExtinctions, macro: Life.macro || 0, people: Life.people ? Life.people.id : -1, envYear: Life.envYear, acc: Life.acc || 0, env: Life.env }), { species: [].concat(...spParts) }); });
     st.push(() => {
       snap.people = Object.assign(clone({ alive: AG.People.alive, nextId: AG.People.nextId, births: AG.People.births, deaths: AG.People.deaths, dead: AG.People.dead, famous: AG.People.famous, pruneAt: AG.People.pruneAt }), { entries: entries || peopleEntries() });
       snap.sim = { stripe: AG.Sim ? AG.Sim.stripe : 0, geoSeen: AG.Sim ? Math.max(0, AG.Sim.geoSeen - Math.max(0, Geo.events.length - 60)) : 0 }; // geo events keep their last 60
@@ -203,7 +204,7 @@
     if (AG.Races) AG.Races.restore(s.races);
     const li = clone(s.life);
     Life.species = li.species; Life.extinctions = li.extinctions; Life.speciations = li.speciations; Life.massExtinctions = li.massExtinctions; Life.macro = li.macro;
-    Life.people = li.people >= 0 ? Life.species[li.people] : null; Life.envYear = li.envYear;
+    Life.people = li.people >= 0 ? Life.species[li.people] : null; Life.envYear = li.envYear; Life.acc = li.acc || 0;
     for (const k in li.env) { const v = li.env[k]; if (ArrayBuffer.isView(v)) Life.env[k].set(v); else Life.env[k] = v; }
     const pe = clone(s.people);
     AG.People.map = new Map(pe.entries); AG.People.alive = pe.alive; AG.People.nextId = pe.nextId; AG.People.births = pe.births; AG.People.deaths = pe.deaths; AG.People.dead = pe.dead; AG.People.famous = pe.famous; AG.People.pruneAt = pe.pruneAt || 14000;
@@ -316,7 +317,7 @@
     try { f = JSON.parse(text); } catch (e) { throw new Error('this is not a save file'); }
     if (!f || f.aura !== 'genesis2' || !f.snap) throw new Error('this is not an AURA: Genesis 2 save');
     const d = f.snap.dims;
-    if (d && (d[0] !== AG.W || d[1] !== AG.H)) throw new Error(`it holds a ${d[0]}×${d[1]} world and this window made a ${AG.W}×${AG.H} one. The world takes the shape of the window: open the save in a window of the size it was saved in`);
+    if (d && (d[0] !== AG.W || d[1] !== AG.H)) { const nm = Object.keys(AG.WORLD_SIZES || {}).find((k) => AG.WORLD_SIZES[k][0] === d[0] && AG.WORLD_SIZES[k][1] === d[1]); throw new Error(`it holds a ${d[0]}×${d[1]} world and this one is ${AG.W}×${AG.H}. ${nm ? `Set World size to ${nm[0].toUpperCase() + nm.slice(1)} in the menu's Settings, reload, then load it again` : 'It was a Screen-sized world: set World size to Screen and open it in a window of the size it was saved in'}`); }
     return f;
   };
   History.deserialize = function (text) {

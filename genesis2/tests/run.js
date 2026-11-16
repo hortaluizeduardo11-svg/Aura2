@@ -593,6 +593,31 @@ test('textures: every surface tiles seamlessly, averages a neutral grey, and is 
   return `${T.NAMES.length} surfaces of ${S}x${S} in ${fmt(T.ms)} ms; worst seam ratio ${fmt(worstK)} (${worst})`;
 });
 
+test('big worlds: coarse geology, batched life, and wild animals embodied around the camera that follow it', () => {
+  const W = 832, H = 512, AG = load({ W, H }), Life = AG.Life, U = AG.U;
+  assert(AG.N > 400000 && AG.Geo.CS === 8, `a big world paints from 8-cell geology (CS ${AG.Geo.CS})`);
+  AG.Sim.newWorld(21); AG.Sim.skipDeep();
+  assert(AG.mode !== 'deep' && Life.alive().length > 5, 'deep time reaches the Dawn with life');
+  const y0 = AG.Geo.year; for (let k = 0; k < 7; k++) AG.Sim.yearStep(1);
+  assert(Math.round(AG.Geo.year - y0) === 7 && Life.acc < 2, `history years are gathered into life steps (acc ${Life.acc})`);
+  const land = []; for (let i = 0; i < AG.N; i += 211) { const x = i % W, y = (i / W) | 0; if (AG.World.passLand(i) && Life.env.land[Life.regionOf(x, y)] > 0.8) land.push([x, y]); }
+  const a = land[0]; let b = null; for (const q of land) if (Math.hypot(q[0] - a[0], q[1] - a[1]) > 420) { b = q; break; }
+  assert(b, 'two far-apart stretches of land');
+  // (bodies inside the embodied box of regions, give or take a region for those that wander)
+  const bodies = (box) => { let n = 0, all = 0; for (let i = 0; i < U.hi; i++) { if (!U.alive[i] || U.pid[i] >= 0 || U.sid[i] < 0) continue; all++; const rx = (U.x[i] / Life.RS) | 0, ry = (U.y[i] / Life.RS) | 0; if (rx >= box.rx0 - 1 && rx <= box.rx1 + 1 && ry >= box.ry0 - 1 && ry <= box.ry1 + 1) n++; } return [n, all]; };
+  Life.bodyFocus = { x: a[0], y: a[1] }; AG.Sim.setMode('watch');
+  const boxA = Life.bodyArea, [nA, allA] = bodies(boxA);
+  assert(boxA && allA > 0 && nA === allA, `every wild body is in the box around the camera (${nA} of ${allA})`);
+  assert(Life.streamTo(b[0], b[1]), 'the box follows the camera');
+  const boxB = Life.bodyArea, [nB, allB] = bodies(boxB);
+  const disjoint = boxB.rx0 > boxA.rx1 + 1 || boxB.rx1 < boxA.rx0 - 1 || boxB.ry0 > boxA.ry1 + 1 || boxB.ry1 < boxA.ry0 - 1;
+  const [leftA] = disjoint ? bodies(boxA) : [0];
+  assert(nB > 0 && nB === allB && leftA === 0, `the bodies are now in the new box (${nB} of ${allB}; ${leftA} left in the old one)`);
+  for (let k = 0; k < 60; k++) AG.Sim.tick();
+  AG.Sim.setMode('history');
+  return `CS ${AG.Geo.CS}; ${allA} bodies around the first place, ${allB} around one ${Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]))} cells away`;
+});
+
 // ------------------------------------------------------------------ runner
 const filter = process.argv[2];
 let pass = 0, fail = 0;

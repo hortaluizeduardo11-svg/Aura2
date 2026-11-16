@@ -402,13 +402,27 @@
   Life.fitFor = fitFor;
   // how much two populations of one kind compete for the same food: alike in size and in herd
   // life, fully; very different, little (so big and small, herding and solitary, can share a land)
-  const overlap = (a, b) => { const ds = (a[L.SIZE] - b[L.SIZE]) / 50, dq = (a[L.SOCIAL] - b[L.SOCIAL]) / 60; return Math.exp(-(ds * ds + dq * dq) / 2); };
+  // (overlap = exp(-(dSIZE/50)^2/2 - (dSOCIAL/60)^2/2), worked out pairwise in crowding below)
   // the competition each population feels: the fitness-weighted crowding of its kind in its region
   function crowding(sp) {
     const byKey = new Map();
     for (const s of sp) for (const [r, R] of s.regions) { R.fit = fitFor(s, R.mu, r); const k = s.arch * RN + r; let a = byKey.get(k); if (!a) byKey.set(k, (a = [])); a.push(R); }
-    for (const list of byKey.values()) for (const R of list) { let d = 0; for (const Q of list) d += Q.fit * Q.fit * (Q === R ? 1 : 0.55 + 0.45 * overlap(R.mu, Q.mu)); /* (all of a kind share the food; the alike most) */ R.crowd = Math.max(1e-6, d); }
+    // (all of a kind share the food; the alike most). Each pair's overlap is worked out once and
+    // added to both, in the same order a plain double loop over the list would add it
+    for (const list of byKey.values()) {
+      const n = list.length;
+      if (n === 1) { const R = list[0]; R.crowd = Math.max(1e-6, R.fit * R.fit); continue; }
+      if (cS.length < n) { cS = new Float64Array(n * 2); cQ = new Float64Array(n * 2); cF = new Float64Array(n * 2); cD = new Float64Array(n * 2); }
+      for (let i = 0; i < n; i++) { const R = list[i]; cS[i] = R.mu[L.SIZE]; cQ[i] = R.mu[L.SOCIAL]; cF[i] = R.fit * R.fit; cD[i] = 0; }
+      for (let i = 0; i < n; i++) {
+        cD[i] += cF[i];
+        const si = cS[i], qi = cQ[i], fi = cF[i];
+        for (let j = i + 1; j < n; j++) { const ds = (si - cS[j]) / 50, dq = (qi - cQ[j]) / 60, w = 0.55 + 0.45 * Math.exp(-(ds * ds + dq * dq) / 2); cD[i] += cF[j] * w; cD[j] += fi * w; }
+      }
+      for (let i = 0; i < n; i++) list[i].crowd = Math.max(1e-6, cD[i]);
+    }
   }
+  let cS = new Float64Array(64), cQ = new Float64Array(64), cF = new Float64Array(64), cD = new Float64Array(64);
   // how well a mean phenotype fits a region (0..1): temperature dominates, then body plan
   function fit(arch, mu, r) {
     optimum(arch, r, opt);
@@ -453,6 +467,7 @@
 
   // ------------------------------------------------------------ deep time
   Life.init = function (seed) {
+    Life.acc = 0;
     rng = AG.makeRng((Math.imul(seed, 1597334677) ^ 0x2545f491) >>> 0); Life.rng = rng;
     Life.species = []; Life.extinctions = 0; Life.speciations = 0; Life.massExtinctions = 0; Life.macro = 0;
     Life.envFromGeo();
@@ -752,7 +767,12 @@
   // ------------------------------------------------------------ the Age of People (fast time)
   // Regional dynamics in years: logistic growth, slow adaptation, drift scaled by population and
   // generation time, predation and human hunting pressure.
+  // On a big world the regional model runs every few years, the years gathered into one longer step
+  // (its growth, selection and drift are written for long steps; Millennia mode takes 8 at once).
+  const LIFE_EVERY = AG.N > 400000 ? Math.max(2, Math.round(AG.N / 280000)) : 1;
+  Life.acc = 0;
   Life.yearStep = function (dy) {
+    if (LIFE_EVERY > 1 && dy > 0 && dy < LIFE_EVERY) { Life.acc += dy; if (Life.acc < LIFE_EVERY) return; dy = Life.acc; Life.acc = 0; }
     const t0 = AG.now();
     if (Math.floor(AG.Geo.year / 50) !== Math.floor((AG.Geo.year - dy) / 50) || !Life.envYear) { Life.envFromWorld(); Life.envYear = AG.Geo.year; }
     const prey = new Float32Array(RN), pred = new Float32Array(RN);
@@ -851,6 +871,7 @@
   };
   // Fold bodies back into regions: population, mean phenotype and a fresh reservoir sample.
   Life.fold = function () {
+    Life.bodyArea = null;
     const U = AG.U, ph = new Float32Array(NL);
     const acc = new Map();
     for (let i = 0; i < U.hi; i++) {
@@ -897,10 +918,40 @@
   // fits the species gather around the better ones, grazers first so predators can follow the prey.
   // Songbirds of cold lands are away in winter and bears there are in their dens. Bodies stay
   // inside their region square, so folding them back keeps the regional numbers exact.
-  Life.embody = function () {
+  // On a big world bodies are embodied only in a box around the camera, about as large as a whole
+  // screen-sized world (so animals stand as thick on the ground as there), and the box follows the
+  // camera (Life.streamTo): regions it leaves give up their bodies, regions it reaches get theirs.
+  Life.STREAM = AG.N > 400000 ? 320 : 0;
+  Life.bodyFocus = null; // where the camera is (main.js), for the box
+  Life.bodyArea = null;  // the box embodied now: { cx, cy, rx0, ry0, rx1, ry1 } in regions
+  function areaAt(x, y) {
+    const h = Life.STREAM / 2;
+    const x0 = AG.clamp(x - h, 0, Math.max(0, W - Life.STREAM)), y0 = AG.clamp(y - h, 0, Math.max(0, H - Life.STREAM));
+    return { cx: x, cy: y, rx0: Math.floor(x0 / RS), ry0: Math.floor(y0 / RS), rx1: Math.min(RW - 1, Math.floor((x0 + Life.STREAM) / RS)), ry1: Math.min(RH - 1, Math.floor((y0 + Life.STREAM) / RS)) };
+  }
+  const inBox = (a, r) => { const x = r % RW, y = (r / RW) | 0; return x >= a.rx0 && x <= a.rx1 && y >= a.ry0 && y <= a.ry1; };
+  Life.streamTo = function (x, y) {
+    const a = Life.bodyArea;
+    if (!Life.STREAM || AG.mode !== 'watch' || !a) return false;
+    if (Math.abs(x - a.cx) < Life.STREAM * 0.2 && Math.abs(y - a.cy) < Life.STREAM * 0.2) return false;
+    const na = areaAt(x, y), U = AG.U;
+    // bodies of the regions left behind go back into the regional record as they were
+    for (let i = 0; i < U.hi; i++) {
+      if (!U.alive[i] || U.sid[i] < 0 || U.pid[i] >= 0) continue;
+      const s = Life.species[U.sid[i]]; if (!s || s.sapient || s.domestic) continue;
+      if (!inBox(na, Life.regionOf(U.x[i], U.y[i]))) AG.Ent.remove(i);
+    }
+    for (const s of Life.alive()) if (!s.sapient && !s.domestic) for (const [r, R] of s.regions) if (R.emb && !inBox(na, r)) R.emb = 0;
+    Life.embody(na, a);
+    return true;
+  };
+  Life.embody = function (area, had) {
     const Hab = AG.Habitat;
+    if (Life.STREAM && !area) area = areaAt(Life.bodyFocus ? Life.bodyFocus.x : W / 2, Life.bodyFocus ? Life.bodyFocus.y : H / 2);
+    if (area) Life.bodyArea = area;
+    const want = (r) => !area || (inBox(area, r) && !(had && inBox(had, r))); // (streaming: only the regions newly in the box)
     const tot = [0, 0, 0, 0, 0, 0];
-    for (const s of Life.alive()) if (!s.sapient && !s.domestic && !isSea(s.arch)) for (const R of s.regions.values()) tot[s.arch] += R.n;
+    for (const s of Life.alive()) if (!s.sapient && !s.domestic && !isSea(s.arch)) for (const [r, R] of s.regions) if (!area || inBox(area, r)) tot[s.arch] += R.n;
     const k = tot.map((t, a) => (t > BODY_CAP[a] * Life.bodyK ? (BODY_CAP[a] * Life.bodyK) / t : 1));
     if (Hab) Hab.refresh();
     const list = Life.alive().filter((s) => !s.sapient && !s.domestic && !isSea(s.arch));
@@ -910,8 +961,9 @@
       if (Hab && !preyDone && s.arch !== ARCH.GRAZER) { Hab.refreshPrey(); preyDone = true; }
       const wants = [];
       for (const [r, R] of s.regions) {
+        if (!want(r)) continue;
         R.emb = 0; syncReservoir(R);
-        const want = R.n * k[s.arch], n = Math.floor(want) + (rr() < want % 1 ? 1 : 0);
+        const w = R.n * k[s.arch], n = Math.floor(w) + (rr() < w % 1 ? 1 : 0);
         if (n > 0) wants.push({ r, R, n });
       }
       slotsOut = false;

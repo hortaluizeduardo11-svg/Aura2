@@ -22,7 +22,7 @@
       weather: 'auto',    // weather, clouds, sun rays and far trees: auto | on | off
       water: 'auto',      // rippling water: auto | on | off
       shake: 'on', vignette: 'on', showFps: 'off', ticker: 'on', minimap: 'on',
-      worldSize: 'auto',  // auto | small | medium | large (takes effect when the page loads)
+      worldSize: 'auto',  // auto (huge) | screen | large | huge | colossal | titanic (takes effect when the page loads)
     };
     const KEY = 'aura2.settings', v = Object.assign({}, DEF), subs = [];
     try {
@@ -40,8 +40,12 @@
     };
   })();
 
-  // The world takes the shape of the screen: pick the largest integer zoom at which a world of
-  // ~140k-280k cells exactly covers the viewport, so the map always fills it edge to edge.
+  // The world's size. By default it is far bigger than the screen (Huge: 1024x768 cells, many
+  // screens of land to pan across); Colossal and Titanic go further. The old Screen size takes the
+  // shape of the screen: the largest integer zoom at which a world of ~140k-280k cells exactly
+  // covers the viewport. Either way BASE_ZOOM is that screen-fitting zoom, the close view a new
+  // camera starts from.
+  AG.WORLD_SIZES = { large: [768, 512], huge: [1024, 768], colossal: [1536, 1024], titanic: [2048, 1536] };
   (function sizeWorld() {
     const cfg = window.AG_CONFIG || {};
     if (cfg.W && cfg.H) { AG.W = cfg.W; AG.H = cfg.H; AG.BASE_ZOOM = cfg.zoom || 3; return; } // tests pick a size
@@ -50,7 +54,7 @@
     const saved = AG.Settings.v.quality, size = AG.Settings.v.worldSize;
     const nav = window.navigator || {}, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
     AG.LOW_END = saved === '3' || (saved !== '0' && saved !== '1' && (mem <= 4 || cores <= 2));
-    const RANGE = { small: [60000, 110000], medium: [120000, 190000], large: [200000, 300000] };
+    const RANGE = { small: [60000, 110000], medium: [120000, 190000] };
     const [lo, hi] = RANGE[size] || (AG.LOW_END ? [60000, 120000] : [140000, 280000]); // a chosen world size beats the guess
     let best = null, bestErr = Infinity;
     for (const z of [6, 5, 4, 3, 2]) {
@@ -60,6 +64,10 @@
       if (!err) break;
     }
     AG.W = best.w; AG.H = best.h; AG.BASE_ZOOM = best.z;
+    const pick = size === 'auto' || !size ? (AG.LOW_END ? 'large' : 'huge') : size;
+    const fixed = AG.WORLD_SIZES[pick];
+    if (fixed) { AG.W = fixed[0]; AG.H = fixed[1]; }
+    AG.WORLD_SIZE = fixed ? pick : 'screen';
   })();
   AG.N = AG.W * AG.H;
   AG.SCALE = AG.N / 98304; // relative to the original 384x256 world, for populations and feature counts

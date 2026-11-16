@@ -32,6 +32,12 @@ Every person is a record with:
 - relationships
 - a body that can be hurt
 
+**The world is huge.** By default it is 1024×768 cells, many screens across even on a desktop
+and about nine phone screens at the usual zoom; you pan and pinch around it like a map. Zoomed
+all the way out the world fills the screen's short side, and the rest is a pan away. Menu →
+Settings → World size picks Screen (the world fits your screen exactly), Large (768×512), Huge
+(1024×768, the default), Colossal (1536×1024) or Titanic (2048×1536, for a strong computer).
+
 There's no build step. The only third-party code is three.js r128 (MIT), vendored in `vendor/`
 for the 3D close-up. To play, open `index.html` in a browser or serve the folder:
 
@@ -89,7 +95,8 @@ the title screen back.
 
 **Menu** (the Menu button or `Esc`; the world waits while it is open):
 - **Game:** save and load, time-lapse, a new world from a seed, the two scenarios.
-- **Settings:** frame-rate counter, event ticker, minimap, screen shake, world size.
+- **Settings:** frame-rate counter, event ticker, minimap, screen shake, world size (Screen,
+  Large, Huge, Colossal, Titanic).
 - **Graphics:** quality, resolution, frame rate, the 3D close-up and its detail, weather and far
   trees, moving water, vignette.
 - **Controls:** the keys and gestures.
@@ -391,8 +398,25 @@ steps through four levels. Menu → Graphics can fix one instead, or override si
 - **Minimum:** the canvas at 50%; the 3D close-up off (the map zooms in as 2D pixel art); the
   fewest bodies.
 
-Low-end devices (by reported memory and cores), or a saved Minimum choice, also start with a
-world of about a third as many cells; Menu → Settings → World size chooses it outright. No panel
+Low-end devices (by reported memory and cores), or a saved Minimum choice, start with a Large
+world instead of a Huge one; Menu → Settings → World size chooses it outright.
+
+Big worlds (Large and up) keep their cost close to a screen-sized world's:
+- Geology runs on coarse cells 8 fine cells wide (16 on Titanic), so the plates, climate and
+  erosion have about as many cells as a screen-sized world; the fine map is painted from them
+  with the border lookups warped through fine noise and rainfall smoothed across rows, so it
+  shows no squares or streaks.
+- The regional life model takes every other deep-time step (every third on Colossal and up) and
+  gathers history years into one step every few years (its maths is written for long steps).
+- Wild animals are bodies only in a box around the camera about as large as a screen-sized world
+  (so they stand as thick on the ground), and the box follows the camera: regions it leaves
+  give up their bodies, regions it reaches get theirs.
+- Fluids more than 8 chunks beyond the view sleep (rivers stand as they were until you come near),
+  as do far caves; zoomed far out, full detail stays with the middle of the screen. The slow
+  vegetation and snow pass takes a fixed number of chunks a tick, and clouds refresh a band of
+  rows each tick.
+- History keeps fewer snapshots (two on Large and Huge, one beyond, plus the Dawn), and fewer
+  cached travel fields. No panel
 uses backdrop blur, so the moving map is never re-blurred under the interface.
 
 Work that cannot be seen is not done:

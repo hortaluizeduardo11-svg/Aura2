@@ -994,7 +994,7 @@
       ['ticker', 'Event ticker', [['on', 'On'], ['off', 'Off']], () => 'The latest happenings at the bottom of the screen.'],
       ['minimap', 'Minimap', [['on', 'On'], ['off', 'Off']], () => 'The small map of the whole world.'],
       ['shake', 'Screen shake', [['on', 'On'], ['off', 'Off']], () => 'The jolt of quakes, eruptions and meteor strikes.'],
-      ['worldSize', 'World size', [['auto', 'Auto'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']], () => `How many cells the next world has, and so how many people it can hold. A smaller world runs faster. Takes effect when the page is loaded again${AG.Settings.v.worldSize !== loadedWorldSize ? ': <button type="button" class="link" data-mact="reload">reload now</button> (save your world first)' : ''}. This world: ${fmt(W * H)} cells.`],
+      ['worldSize', 'World size', [['auto', 'Auto'], ['screen', 'Screen'], ['large', 'Large'], ['huge', 'Huge'], ['colossal', 'Colossal'], ['titanic', 'Titanic']], () => `How big the next world is. Screen fits your screen; Large (768×512), Huge (1024×768, the usual), Colossal (1536×1024) and Titanic (2048×1536) are many screens across, to pan and explore. Bigger worlds hold more peoples and take longer to make; Titanic wants a strong computer. Takes effect when the page is loaded again${AG.Settings.v.worldSize !== loadedWorldSize ? ': <button type="button" class="link" data-mact="reload">reload now</button> (save your world first)' : ''}. This world: ${W}×${H}, ${fmt(W * H)} cells.`],
     ],
   };
   function settingRows(list) {

@@ -55,6 +55,8 @@
   P.markWet = (i) => { wet[(((i / W) | 0) >> 4) * CW + ((i % W) >> 4)] = 1; };
   // is cell i in a chunk that the camera-based level of detail is resting this tick?
   P.farEvery = 4; // off-screen chunks run together every Nth tick (AG.Perf raises it on slow machines)
+  const SLEEP_BIG = N > 400000, SLEEP = 8; // big worlds: chunks more than 8 chunks beyond the view sleep
+  const SLOW_PER_TICK = SLEEP_BIG ? 48 : NC / 16; // (the slow pass: every chunk each 16 ticks, or 48 chunks a tick on a big world)
   P.resting = function (i) {
     const f = P.focus; if (!f || AG.tick % P.farEvery === 0) return false;
     const c = Wd.chunkOfIdx(i), cx = c % CW, cy = (c / CW) | 0;
@@ -370,6 +372,12 @@
       const cx = c % CW, cy = (c / CW) | 0;
       if (cx < f.cx0 || cx > f.cx1 || cy < f.cy0 || cy > f.cy1) act[c] = 0;
     }
+    // on a big world, chunks far beyond the view sleep: their water stands as it was until the camera
+    // comes near (the near ring still runs every few ticks, as above)
+    if (f && SLEEP_BIG) {
+      const s0 = f.cx0 - SLEEP, s1 = f.cx1 + SLEEP, r0 = f.cy0 - SLEEP, r1 = f.cy1 + SLEEP;
+      for (let c = 0; c < NC; c++) { if (!act[c]) continue; const cx = c % CW, cy = (c / CW) | 0; if (cx < s0 || cx > s1 || cy < r0 || cy > r1) act[c] = 0; }
+    }
     let na = 0;
     for (let c = 0; c < NC; c++) if (act[c]) list[na++] = c;
     P.stats.active = na;
@@ -391,6 +399,7 @@
       const i = s.i;
       if (ft[i] === FT.LAVA || ft[i] === FT.ACID || frozen[i]) continue;
       if (f && !farTick) { const c = Wd.chunkOfIdx(i), cx = c % CW, cy = (c / CW) | 0; if (cx < f.cx0 || cx > f.cx1 || cy < f.cy0 || cy > f.cy1) continue; } // far springs feed at the far chunks' pace
+      if (f && SLEEP_BIG) { const c = Wd.chunkOfIdx(i), cx = c % CW, cy = (c / CW) | 0; if (cx < f.cx0 - SLEEP || cx > f.cx1 + SLEEP || cy < f.cy0 - SLEEP || cy > f.cy1 + SLEEP) continue; } // (and sleeping ones not at all)
       fl[i] += s.rate; ft[i] = FT.WATER;
       const c = Wd.chunkOfIdx(i); if (!Wd.awake[c]) Wd.wake(s.x, s.y);
     }
@@ -412,14 +421,16 @@
 
     // slow round-robin pass (each chunk every 16 ticks)
     t1 = now();
-    for (let k = 0; k < NC / 16; k++) { slowChunk(slowCursor); slowCursor = (slowCursor + 1) % NC; }
+    for (let k = 0; k < SLOW_PER_TICK; k++) { slowChunk(slowCursor); slowCursor = (slowCursor + 1) % NC; }
     t0 = now(); ema('slow', t0 - t1);
 
     // underground every third tick: cave fluids move slowly
     if (t % 3 === 0) {
       let nu = 0;
+      const sl = f && SLEEP_BIG;
       for (let c = 0; c < NC; c++) {
         if (!Wd.uawake[c]) continue;
+        if (sl) { const cx = c % CW, cy = (c / CW) | 0; if (cx < f.cx0 - SLEEP || cx > f.cx1 + SLEEP || cy < f.cy0 - SLEEP || cy > f.cy1 + SLEEP) continue; } // (far caves sleep too)
         nu++;
         if (underChunk(c)) { Wd.uawake[c] = 40; Wd.udirty[c] = 1; } else Wd.uawake[c]--;
       }

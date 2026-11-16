@@ -104,8 +104,10 @@
     }
     if (Sky.flash > 0) Sky.flash = Math.max(0, Sky.flash - 0.08);
     for (let k = Sky.strikes.length - 1; k >= 0; k--) if (--Sky.strikes[k].t <= 0) Sky.strikes.splice(k, 1);
-    if (t % 5 === 0) Sky.updateClouds();
+    if (!BIG) { if (t % 5 === 0) Sky.updateClouds(); }
+    else Sky.updateClouds(t % CLOUD_EVERY, CLOUD_EVERY); // (a big world refreshes its clouds a band of rows each tick)
   };
+  const BIG = AG.N > 400000, CLOUD_EVERY = Math.max(5, Math.round((5 * AG.N) / 280000));
 
   function precipitate(s, ramp) {
     const Wd = AG.World;
@@ -131,10 +133,11 @@
   }
 
   // Cloud density = scrolling fractal noise thresholded by season + storm cells.
-  Sky.updateClouds = function () {
+  Sky.updateClouds = function (part, parts) {
     const n = Sky.noise, cl = Sky.cloud, dk = Sky.dark;
     const humid = 0.56 - (Sky.season() === 1 ? -0.03 : Sky.season() === 3 ? 0.03 : 0);
-    for (let y = 0; y < CLH; y++) for (let x = 0; x < CLW; x++) {
+    const ya = parts ? Math.floor((part * CLH) / parts) : 0, yb = parts ? Math.floor(((part + 1) * CLH) / parts) : CLH; // (rows [ya, yb): all of them, or one band)
+    for (let y = ya; y < yb; y++) for (let x = 0; x < CLW; x++) {
       const v = n.fbm((x + Sky.offX * 0.25) * 0.06, (y + Sky.offY * 0.25) * 0.06, 4);
       cl[y * CLW + x] = AG.smooth(humid, humid + 0.2, v) * 0.6;
       dk[y * CLW + x] = 0;
@@ -142,7 +145,7 @@
     for (const s of Sky.storms) {
       const def = Sky.STORMS[s.type]; if (!def.dens) continue;
       const r = s.r / 4 * 1.25, cx = s.x / 4, cy = s.y / 4;
-      const x0 = Math.max(0, (cx - r) | 0), x1 = Math.min(CLW - 1, (cx + r) | 0), y0 = Math.max(0, (cy - r) | 0), y1 = Math.min(CLH - 1, (cy + r) | 0);
+      const x0 = Math.max(0, (cx - r) | 0), x1 = Math.min(CLW - 1, (cx + r) | 0), y0 = Math.max(ya, (cy - r) | 0), y1 = Math.min(yb - 1, (cy + r) | 0);
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const d = Math.sqrt(AG.dist2(x, y, cx, cy)) / r; if (d >= 1) continue;
         const f = (1 - d * d) * s.k, j = y * CLW + x;

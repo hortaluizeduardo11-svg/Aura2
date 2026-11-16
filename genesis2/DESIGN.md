@@ -137,7 +137,14 @@ All hot data is in typed arrays. Records with variable shape (persons, communiti
 languages) are plain objects held in id-indexed arrays or Maps, iterated in insertion order so
 runs are deterministic.
 
-### 4.1 Fine world grid (`World`, W×H ≈ 640×368, sized to the screen)
+### 4.1 Fine world grid (`World`, W×H = 1024×768 by default)
+
+The size is a setting (`AG.WORLD_SIZES`): Large 768×512, Huge 1024×768 (default; Large on low-end
+devices), Colossal 1536×1024, Titanic 2048×1536, or Screen, the old fit: the largest integer zoom
+at which a world of 140k-280k cells exactly covers the viewport. `BASE_ZOOM` is always that
+screen-fitting zoom (the close view a camera starts from); `minZoom` fills the screen with the
+world. Deep time opens at `minZoom`, to watch the continents. Worlds over 400k cells ("big")
+switch on the scaling in §6.4.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -152,7 +159,7 @@ runs are deterministic.
 | `owner`, `bgrid`, `traffic` | i16, i32, u8 | territory, buildings, footfall/roads |
 | `ug`, `ugF`, `ugT` | u8 | underground layer (caves, ores including copper, tin, coal and salt; aquifers, magma) |
 
-### 4.2 Coarse geology grid (`Geo`, cell = 4×4 fine cells)
+### 4.2 Coarse geology grid (`Geo`, cell = 4×4 fine cells; 8×8 on big worlds, 16×16 over 1.6M cells)
 
 - **Per cell:**
   - `plate` (u8)
@@ -485,7 +492,11 @@ SIZE). This is a fact of evolution, not a flag.
 
 ### 6.2 Animals
 
-- **Watch mode:** all animals are bodies, up to per-archetype caps.
+- **Watch mode:** all animals are bodies, up to per-archetype caps. On a big world only the
+  regions inside a 320×320-cell box around the camera are embodied (the caps then spread over
+  about a screen-sized world's land, so density matches); `Life.streamTo` moves the box when the
+  camera has gone a fifth of its width, removing bodies outside the new box (the regional record
+  stands) and embodying the regions newly inside.
 - **History or Deep:** bodies fold into species-region aggregates. Each region keeps its gene-pool
   reservoir, its census and its mean and variance.
 - **Re-embodiment:** returning to Watch embodies each region's census (capped) with genomes drawn
@@ -535,6 +546,23 @@ SIZE). This is a fact of evolution, not a flag.
 - Overlays are painted into a low-resolution buffer and scaled.
 
 ---
+
+### 6.4 Big worlds
+
+Over 400k cells the per-cell systems are bounded so a Huge world costs about what a screen-sized
+one does:
+- **Geology:** coarse cells of 8 (16 over 1.6M), so the plate, climate and erosion grids keep
+  ~12k-25k cells. `paintRows` reads plate, rock and orogeny through a noise warp of ±2.4 coarse
+  cells and samples orogeny bilinearly; `baseClimate` smooths rainfall over ±2 rows.
+- **Life:** `Life.deepStep` runs every 2nd geology step (3rd over 1M cells) with the summed time;
+  `Life.yearStep` gathers years into steps of `round(N / 280k)` (`Life.acc`, saved). Regions stay
+  16 cells, so densities, hunting and herds read the same. `crowding` adds each pair's overlap to
+  both members in the order of the plain double loop (bit-identical, half the work).
+- **Physics:** chunks more than 8 beyond the focus never run; the focus is capped at 30×30 chunks
+  around the camera when zoomed far out; the slow pass takes 48 chunks a tick; caves sleep too.
+- **Sky:** clouds refresh `CLH / CLOUD_EVERY` rows a tick (storms add only to those rows).
+- **Memory:** history snapshots copy ~47 bytes a cell: 2 kept on big worlds, 1 over 1M (plus the
+  Dawn); travel fields cached: `40 × 280k / N`, at least 8.
 
 ## 7. Update order
 
