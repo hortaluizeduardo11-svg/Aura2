@@ -33,7 +33,7 @@ ugf/
 cd ugf && python3 -m http.server 8000
 ```
 
-Open http://localhost:8000. Deep links such as `#peca/starburst-hoodie` open a product directly, which is handy for Instagram stories.
+Open http://localhost:8000. Deep links such as `#peca-starburst-hoodie` open a product directly, which is handy for Instagram stories.
 
 ## Behaviour notes
 

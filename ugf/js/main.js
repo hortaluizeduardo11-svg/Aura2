@@ -26,7 +26,7 @@
     gsap.registerPlugin(ScrollTrigger);
     gsap.defaults({ ease: 'power3.out' });
   }
-  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) { /* sandboxed frame */ }
 
   /* ---------- helpers ---------- */
   const pad = (n) => String(n).padStart(2, '0');
@@ -34,6 +34,8 @@
   const waLink = (text) =>
     `https://wa.me/${DATA.site.whatsapp}${text ? '?text=' + encodeURIComponent(text) : ''}`;
   const imgSet = (base, side) => [640, 1000, 1300].map((w) => `${base}-${side}-${w}.webp ${w}w`).join(', ');
+  // Hash updates can be refused inside embedded/sandboxed frames: never let that break the UI.
+  const setHash = (h) => { try { history.replaceState(null, '', h || location.pathname + location.search); } catch (e) { /* ignore */ } };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   /* ======================================================================
@@ -304,12 +306,12 @@
     gsap.set(root, { '--bg': THEMES.dark[0], '--fg': THEMES.dark[1] });
     const setTheme = (name) =>
       gsap.to(root, { '--bg': THEMES[name][0], '--fg': THEMES[name][1], duration: 0.9, ease: 'power2.inOut', overwrite: 'auto' });
-    $$('main [data-theme], body > footer[data-theme]').forEach((sec) => {
+    $$('main [data-tone], body > footer[data-tone]').forEach((sec) => {
       ScrollTrigger.create({
         trigger: sec,
         start: 'top 55%',
         end: 'bottom 55%',
-        onToggle: (self) => self.isActive && setTheme(sec.dataset.theme),
+        onToggle: (self) => self.isActive && setTheme(sec.dataset.tone),
       });
     });
 
@@ -579,7 +581,7 @@
     pdpScroll.scrollTop = 0;
     root.classList.add('pdp-open');
     stopScroll();
-    history.replaceState(null, '', '#peca/' + p.slug);
+    setHash('#peca-' + p.slug);
 
     if (MOTION) {
       gsap.fromTo(pdp, { clipPath: 'inset(100% 0% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1, ease: 'expo.inOut' });
@@ -594,7 +596,7 @@
     pdpOpen = false;
     root.classList.remove('pdp-open');
     startScroll();
-    history.replaceState(null, '', location.pathname + location.search);
+    setHash('');
     const done = () => {
       pdp.hidden = true;
       if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
@@ -742,11 +744,14 @@
 
   runPreloader().then(() => {
     heroIntro();
-    // Deep link: #peca/<slug> opens that product directly (handy for Instagram stories)
-    const m = location.hash.match(/^#peca\/(.+)$/);
-    if (m) {
-      const i = DATA.products.findIndex((p) => p.slug === decodeURIComponent(m[1]));
-      if (i > -1) setTimeout(() => openPdp(i), MOTION ? 900 : 0);
-    }
+    // Deep link: #peca-<slug> opens that product directly (handy for Instagram stories)
+    const fromHash = () => {
+      const m = location.hash.match(/^#peca-([a-z0-9-]+)$/);
+      const i = m ? DATA.products.findIndex((p) => p.slug === m[1]) : -1;
+      if (i > -1) openPdp(i);
+      else if (!location.hash) closePdp();
+    };
+    if (/^#peca-/.test(location.hash)) setTimeout(fromHash, MOTION ? 900 : 0);
+    window.addEventListener('hashchange', fromHash);
   });
 })();
