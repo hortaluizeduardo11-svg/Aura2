@@ -29,6 +29,21 @@ export const PALETAS = {
   },
 };
 
+// visuais variados para a multidão (evita as roupas do protagonista e da amiga)
+export function paletaAleatoria(r) {
+  const escolha = (lista) => lista[Math.floor(r() * lista.length)];
+  const pele = escolha([0xf1c7a5, 0xe2a77f, 0xc98a62, 0xa66b4c, 0x8a5538, 0x6b412b, 0xf5d3b8]);
+  const cabelo = escolha([0x1d1714, 0x2a1d18, 0x4a2e1f, 0x6b4226, 0xa8743f, 0xd7b46a, 0x9c9c9c, 0x7a2f22]);
+  const topo = escolha([0xf2c14e, 0x8cc084, 0x6c8fd6, 0xb58ad6, 0xe66a5a, 0x4fb3a1, 0xf4f1ea, 0xd9a05b, 0x5d6b8a, 0xef8fb1, 0x7fc6d9]);
+  const calca = escolha([0x3d5a80, 0x4a5568, 0x8a7a5a, 0x2f2f38, 0x5e7d4f, 0x9b6a4f, 0x6a5c8a]);
+  const tenis = escolha([0xfbfaf6, 0x2a2a30, 0xe0574a, 0xf2c14e, 0x6c8fd6]);
+  return {
+    pele, cabelo, jaqueta: topo, jaquetaEscura: new THREE.Color(topo).multiplyScalar(0.82).getHex(),
+    camiseta: topo, calca, tenis, faixa: escolha([0xe0574a, 0xf2c14e, 0x4fb3a1, 0x6c8fd6]),
+    bochecha: 0xf08c86, menina: r() < 0.5,
+  };
+}
+
 export class Person {
   constructor(p) {
     this.p = p;
@@ -240,6 +255,24 @@ export class Person {
       spine.add(sh);
       this.arms.push({ sh, el, hand });
     }
+    if (p.simples) this.simplificar();
+    if (p.escala) this.root.scale.setScalar(p.escala);
+  }
+
+  // versão leve para a multidão: sem contorno, sem detalhes minúsculos, sombra só das partes grandes
+  simplificar() {
+    const remover = [];
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.userData.contorno) { remover.push(o); return; }
+      o.geometry.computeBoundingSphere();
+      const r = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z);
+      const essencial = o.material === this.M.pupila || o === this.mouth || o === this.sorriso;
+      if (r < 0.03 && !essencial) remover.push(o);
+      o.castShadow = r > 0.1;
+    });
+    for (const o of remover) o.parent.remove(o);
+    this.sobrancelhas = [];
   }
 
   // pose: {walk, amt, headYaw, headPitch, headRoll, torsoYaw, lean, armR, armL, mouthOpen,
@@ -250,14 +283,15 @@ export class Person {
     const [L, R] = this.legs;
     const sw = Math.sin(ph);
     const crouch = o.crouch || 0;
-    L.thigh.rotation.x = -sw * 0.55 * a - 1.3 * crouch;
-    R.thigh.rotation.x = sw * 0.55 * a - 1.3 * crouch;
-    L.knee.rotation.x = Math.max(0, Math.sin(ph + 1.2)) * 0.8 * a + 2.0 * crouch;
-    R.knee.rotation.x = Math.max(0, Math.sin(ph + Math.PI + 1.2)) * 0.8 * a + 2.0 * crouch;
+    const sent = o.sentado || 0;
+    L.thigh.rotation.x = -sw * 0.55 * a - 1.3 * crouch - 1.45 * sent;
+    R.thigh.rotation.x = sw * 0.55 * a - 1.3 * crouch - 1.45 * sent;
+    L.knee.rotation.x = Math.max(0, Math.sin(ph + 1.2)) * 0.8 * a + 2.0 * crouch + 1.45 * sent;
+    R.knee.rotation.x = Math.max(0, Math.sin(ph + Math.PI + 1.2)) * 0.8 * a + 2.0 * crouch + 1.45 * sent;
     L.ankle.rotation.x = -L.thigh.rotation.x * 0.3 - L.knee.rotation.x * 0.25 - 0.4 * crouch;
     R.ankle.rotation.x = -R.thigh.rotation.x * 0.3 - R.knee.rotation.x * 0.25 - 0.4 * crouch;
     // quique na caminhada; agachar abaixa o quadril
-    this.hips.position.y = 0.72 + Math.abs(Math.cos(ph)) * 0.05 * a - 0.02 * a - 0.33 * crouch;
+    this.hips.position.y = 0.72 + Math.abs(Math.cos(ph)) * 0.05 * a - 0.02 * a - 0.33 * crouch - 0.24 * sent;
     this.hips.rotation.y = sw * 0.1 * a;
     this.spine.rotation.y = -sw * 0.14 * a + (o.torsoYaw || 0);
     this.spine.rotation.x = 0.05 * a + (o.lean || 0) + 0.35 * crouch;
@@ -286,7 +320,7 @@ export class Person {
     const bl = 1 - 0.92 * (o.blink || 0);
     for (const ol of this.olhos) ol.scale.y = bl;
     const br = o.brow || 0;
-    this.sobrancelhas.forEach((s) => (s.position.y = 0.268 + 0.025 * br));
+    (this.sobrancelhas || []).forEach((s) => (s.position.y = 0.268 + 0.025 * br));
     const mo = o.mouthOpen || 0;
     this.mouth.scale.set(1 + 0.3 * mo, 0.2 + 1.6 * mo, 1);
     this.mouth.visible = mo > 0.05;

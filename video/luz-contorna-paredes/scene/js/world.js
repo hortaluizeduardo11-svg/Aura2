@@ -123,11 +123,12 @@ export function buildWorld(scene) {
 
   function building(x0, x1, z0, z1, h, style) {
     const w = x1 - x0, d = z1 - z0;
+    const fundo = z0 >= 38 || z1 <= -47;
     const m = facadeMats[style];
     const g = worldUVBox(w, h, d);
     const mesh = new THREE.Mesh(g, [m.f, m.f, m.roof, m.roof, m.f, m.f]);
     mesh.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2);
-    mesh.castShadow = true;
+    mesh.castShadow = !fundo;
     mesh.receiveShadow = true;
     scene.add(mesh);
     // térreo mais escuro e platibanda
@@ -137,9 +138,19 @@ export function buildWorld(scene) {
     scene.add(pl);
     const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.5, d + 0.3).translate(0, 0.25, 0), m.roof);
     cap.position.set(mesh.position.x, h, mesh.position.z);
-    cap.castShadow = true;
+    cap.castShadow = !fundo;
     scene.add(cap);
-    const b = { mesh, pl, cap, h };
+    const b = { mesh, pl, cap, h, extras: [] };
+    // recuo no topo de alguns prédios altos (silhueta mais urbana)
+    if (h > 30 && r() < 0.35) {
+      const k = 0.55 + r() * 0.25, h2 = 6 + r() * 14;
+      const g2 = worldUVBox(w * k, h2, d * k);
+      const top = new THREE.Mesh(g2, [m.f, m.f, m.roof, m.roof, m.f, m.f]);
+      top.position.set(mesh.position.x, h + 0.5, mesh.position.z - (z0 < 0 ? d * 0.12 : -d * 0.12));
+      top.castShadow = !fundo;
+      scene.add(top);
+      b.extras.push({ m: top, y: h + 0.5 });
+    }
     W.buildings.push(b);
     return b;
   }
@@ -150,32 +161,43 @@ export function buildWorld(scene) {
   let x = -150;
   while (x < -6) {
     if (x >= RT0 && x < RT1) { x = RT1; continue; }
-    let w = 10 + Math.floor(r() * 9);
+    let w = 6 + Math.floor(r() * 8);
     if (x < RT0 && x + w > RT0) w = RT0 - x;
     if (x + w > -18 && x < -18) w = -18 - x; // prédio A termina exatamente em -18
     if (x >= -18) w = 12; // prédio A: [-18, -6]
-    const h = x >= -18 ? 30 : 16 + r() * 30;
+    const h = x >= -18 ? 30 : 18 + r() * 40;
     building(x, x + w, -16, 0, h, Math.floor(r() * 5));
     x += w;
   }
   x = 6;
   while (x < 150) {
-    const w = x === 6 ? 12 : 10 + Math.floor(r() * 9);
-    const h = x === 6 ? 36 : 16 + r() * 30;
+    const w = x === 6 ? 12 : 6 + Math.floor(r() * 8);
+    const h = x === 6 ? 36 : 18 + r() * 40;
     building(x, x + w, -16, 0, h, Math.floor(r() * 5));
     x += w;
   }
   // fundo do pátio e segunda fileira
   building(-6, 6, -30, -16, 24, 1);
-  for (let xx = -150; xx < 150; xx += 14 + Math.floor(r() * 8)) {
+  // segunda fileira contínua e duas fileiras de torres ao fundo (horizonte mais denso)
+  for (let xx = -150; xx < 150;) {
+    const w = 8 + Math.floor(r() * 7);
+    if (!(xx + w > RT0 - 1 && xx < RT1 + 1)) building(xx, xx + w, -48, -32, 34 + r() * 50, Math.floor(r() * 5));
+    xx += w;
+  }
+  for (let xx = -170; xx < 170; xx += 13 + Math.floor(r() * 8)) {
     if (xx + 12 > RT0 - 1 && xx < RT1 + 1) continue;
-    building(xx, xx + 12, -46, -32, 30 + r() * 40, Math.floor(r() * 5));
+    building(xx, xx + 10 + Math.floor(r() * 5), -84, -60, 60 + r() * 70, Math.floor(r() * 5));
+  }
+  for (let xx = -170; xx < 170; xx += 13 + Math.floor(r() * 8)) {
+    building(xx, xx + 10 + Math.floor(r() * 5), 40, 58, 40 + r() * 60, Math.floor(r() * 5));
+    if (r() < 0.6) building(xx + 3, xx + 12, 72, 92, 70 + r() * 70, Math.floor(r() * 5));
   }
   // fileira sul (fachadas em z = 17)
   x = -150;
   while (x < 150) {
-    const w = 10 + Math.floor(r() * 9);
-    building(x, x + w, 17, 33, 14 + r() * 32, Math.floor(r() * 5));
+    const w = 6 + Math.floor(r() * 8);
+    const perto = x > -60 && x < 40;
+    building(x, x + w, 17, 33, perto ? 10 + r() * 7 : 16 + r() * 38, Math.floor(r() * 5));
     x += w;
   }
 
@@ -359,15 +381,17 @@ export function buildWorld(scene) {
     W.fadeables.push(g);
     return g;
   }
-  car(carColors[0], -15, 4.95, 1);
-  car(carColors[1], -27, 4.95, 1);
-  car(carColors[3], 13, 4.95, 1);
-  car(carColors[2], 26, 4.95, 1);
-  car(carColors[5], -52, 12.05, -1);
-  car(carColors[4], 9, 12.05, -1);
-  W.movingCars.push({ g: car(carColors[2], 0, 7.0, 1), x0: -90, v: 7.5 });
-  W.movingCars.push({ g: car(carColors[1], 0, 10.4, -1), x0: 70, v: -6.5 });
-  W.movingCars.push({ g: car(carColors[0], 0, 7.0, 1), x0: -170, v: 7.5 });
+  const rc = rng(31);
+  for (let xx = -118; xx < 118; xx += 5.4 + rc() * 1.4) {
+    // calçada norte: livre perto do muro (|x| < 14) e da esquina da rua transversal
+    if (rc() < 0.8 && Math.abs(xx) > 14 && !(xx > RT0 - 5 && xx < RT1 + 4)) car(carColors[Math.floor(rc() * carColors.length)], xx, 4.95, 1);
+    // calçada sul: livre no ponto de ônibus
+    const x2 = xx + 2.1;
+    if (rc() < 0.75 && !(x2 > 8 && x2 < 21)) car(carColors[Math.floor(rc() * carColors.length)], x2, 12.05, -1);
+  }
+  W.criarTransito = (lista) => {
+    for (const c of lista) W.movingCars.push({ g: car(carColors[c.cor % carColors.length], 0, c.z, c.v > 0 ? 1 : -1), x0: c.x0, v: c.v });
+  };
 
   // --- postes e banco ---
   const poleM = reg(std({ color: 0x3e5a6e }), 0x2c3340);
@@ -465,6 +489,75 @@ export function buildWorld(scene) {
       }
     }
   }
+  // aparelhos de ar-condicionado nas fachadas próximas
+  const acM = reg(std({ color: 0xe7e3dc }), 0x2c3340);
+  for (const b of W.buildings) {
+    const p = b.mesh.position, g = b.mesh.geometry.parameters;
+    if (Math.abs(p.x) > 70 || !(p.z === -8 || p.z === 25)) continue;
+    const frente = p.z < 8 ? 1 : -1;
+    const zf = p.z + frente * (g.depth / 2);
+    const ra = rng(Math.round(p.x * 31) >>> 0);
+    for (let k = 0; k < 3; k++) {
+      const ay = 4.5 + 3.3 * Math.floor(ra() * Math.max(1, (b.h - 6) / 3.3));
+      if (ay > b.h - 1) continue;
+      add(new THREE.BoxGeometry(0.8, 0.5, 0.45), acM, p.x + (ra() - 0.5) * (g.width - 1.5), ay, zf + frente * 0.22);
+    }
+  }
+  // café com mesas e guarda-sóis (calçada sul)
+  const mesaM = reg(std({ color: 0xf4f1ea }), 0x2c3340);
+  const cadeiraM = reg(std({ color: 0x3e5a6e }), 0x2c3340);
+  for (const [mx, mz, cor] of [[-17.5, 15.9, 0xe66a5a], [-12.7, 15.7, 0x4fb3a1]]) {
+    add(new THREE.CylinderGeometry(0.45, 0.45, 0.05, 12).translate(0, 0.74, 0), mesaM, mx, 0.15, mz);
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.74, 6).translate(0, 0.37, 0), cadeiraM, mx, 0.15, mz);
+    add(new THREE.CylinderGeometry(0.03, 0.03, 2.3, 6).translate(0, 1.15, 0), cadeiraM, mx, 0.15, mz);
+    add(new THREE.ConeGeometry(1.4, 0.55, 10).translate(0, 2.4, 0), reg(std({ color: cor }), 0x2c3340), mx, 0.15, mz);
+  }
+  for (const [cx, cz] of [[-18.3, 15.9], [-16.7, 15.9], [-13.6, 15.5], [-11.8, 16.0]]) {
+    add(new THREE.BoxGeometry(0.45, 0.06, 0.45).translate(0, 0.45, 0), cadeiraM, cx, 0.15, cz);
+  }
+  // ponto de ônibus
+  const vidroPontoM = new THREE.MeshToonMaterial({ color: 0xbfe3f0, transparent: true, opacity: 0.45 });
+  add(new THREE.BoxGeometry(4.6, 0.12, 1.6).translate(0, 2.5, 0), cadeiraM, 14.3, 0.15, 15.9);
+  add(new THREE.BoxGeometry(4.6, 2.3, 0.06).translate(0, 1.2, 0), vidroPontoM, 14.3, 0.15, 16.7);
+  add(new THREE.BoxGeometry(2.2, 0.08, 0.45).translate(0, 0.46, 0), mesaM, 14.4, 0.15, 16.3);
+  add(new THREE.BoxGeometry(0.12, 2.5, 0.12).translate(0, 1.25, 0), cadeiraM, 12.1, 0.15, 16.6);
+  add(new THREE.BoxGeometry(0.12, 2.5, 0.12).translate(0, 1.25, 0), cadeiraM, 16.5, 0.15, 16.6);
+  // banca de jornal, bancos, lixeiras e bicicletário
+  const bancaM = reg(std({ color: 0x4f86c6 }), 0x2c3340);
+  add(new THREE.BoxGeometry(2.6, 2.3, 1.8).translate(0, 1.15, 0), bancaM, -60, 0.15, 15.6);
+  add(new THREE.BoxGeometry(3.0, 0.1, 2.3).translate(0, 2.4, 0), reg(std({ color: 0xf2c14e }), 0x2c3340), -60, 0.15, 15.6);
+  const bancoM = reg(std({ color: 0xb4774e }), 0x2c3340);
+  for (const bx of [-48, -26, 30, 52]) {
+    add(new THREE.BoxGeometry(1.8, 0.08, 0.45).translate(0, 0.45, 0), bancoM, bx, 0.15, 16.4);
+    add(new THREE.BoxGeometry(1.8, 0.4, 0.06).translate(0, 0.72, 0), bancoM, bx, 0.15, 16.62);
+  }
+  const lixoM = reg(std({ color: 0x5e7d4f }), 0x2c3340);
+  for (const lx of [-70, -42, -22, 20, 41, 66]) add(new THREE.CylinderGeometry(0.25, 0.22, 0.85, 10).translate(0, 0.42, 0), lixoM, lx, 0.15, 13.6);
+  for (const lx of [-30, -24, 26, 44]) add(new THREE.CylinderGeometry(0.25, 0.22, 0.85, 10).translate(0, 0.42, 0), lixoM, lx, 0.15, 3.6);
+  const bikeM = reg(std({ color: 0xe0574a }), 0x2c3340);
+  for (let k = 0; k < 4; k++) {
+    const bx = 34 + k * 0.7;
+    for (const dz of [-0.45, 0.45]) {
+      const roda = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.03, 4, 14), cadeiraM);
+      roda.position.set(bx, 0.5, 15.0 + dz);
+      roda.rotation.y = Math.PI / 2;
+      props.add(roda);
+    }
+    add(new THREE.BoxGeometry(0.05, 0.05, 0.9).translate(0, 0.72, 0), bikeM, bx, 0.15, 15.0);
+  }
+  // semáforos na esquina da rua transversal
+  const semM = reg(std({ color: 0x2f3440 }), 0x2c3340);
+  for (const [sx, sz] of [[RT1 + 0.4, 3.7], [RT0 - 0.4, 3.7]]) {
+    add(new THREE.CylinderGeometry(0.07, 0.08, 3.4, 8).translate(0, 1.7, 0), semM, sx, 0.15, sz);
+    add(new THREE.BoxGeometry(0.3, 0.8, 0.3).translate(0, 3.5, 0), semM, sx, 0.15, sz);
+    const luzes = [0xe0483c, 0xf2c14e, 0x4fdc8a];
+    luzes.forEach((c, i) => {
+      const l = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshBasicMaterial({ color: c, toneMapped: false, transparent: true, opacity: i === 2 ? 1 : 0.3 }));
+      l.position.set(sx, 0.15 + 3.75 - i * 0.25, sz + 0.16);
+      props.add(l);
+    });
+  }
+
   // vasos e hidrante na calçada
   for (const vx of [-24.5, -12.5, 9.5, 21.5]) vaso(vx, 0.15, 0.7, 1.2);
   const hidM = reg(std({ color: 0xe0483c }), 0x2c3340);
@@ -506,6 +599,41 @@ export function buildWorld(scene) {
     W.fadeables.push(b);
   }
 
+  W.criarLetreiros = () => {
+    const nomes = ['PADARIA', 'CAFÉ', 'FARMÁCIA', 'LIVROS', 'MERCADO', 'FLORES', 'SORVETES', 'BARBEARIA', 'PIZZA', 'ÓTICA', 'PAPELARIA', 'FRUTAS'];
+    const cores = ['#e66a5a', '#4fb3a1', '#6c8fd6', '#f2a541', '#8c6bc9', '#5e9e5a'];
+    const vitrineM = reg(std({ color: 0x46627e }), 0x2c3340);
+    const portaM = reg(std({ color: 0x6b4a36 }), 0x2c3340);
+    let k = 0;
+    for (const b of W.buildings) {
+      const p = b.mesh.position, g = b.mesh.geometry.parameters;
+      if (Math.abs(p.x) > 85 || !(p.z === -8 || p.z === 25)) continue;
+      if (p.z === -8 && (p.x === -12 || p.x === 12)) continue; // prédios ao lado do muro
+      const frente = p.z < 8 ? 1 : -1;
+      const zf = p.z + frente * (g.depth / 2);
+      add(new THREE.BoxGeometry(g.width - 1.2, 2.0, 0.06).translate(0, 1.1, 0), vitrineM, p.x, 0.15, zf + frente * 0.04);
+      add(new THREE.BoxGeometry(1.0, 2.1, 0.08).translate(0, 1.05, 0), portaM, p.x + g.width * 0.25, 0.15, zf + frente * 0.06);
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 112;
+      const gc = c.getContext('2d');
+      gc.fillStyle = cores[k % cores.length];
+      gc.fillRect(0, 0, 512, 112);
+      gc.fillStyle = '#ffffff';
+      gc.font = '600 60px Inter, sans-serif';
+      gc.textAlign = 'center';
+      gc.textBaseline = 'middle';
+      gc.fillText(nomes[k % nomes.length], 256, 60);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const sw = Math.min(g.width - 1.6, 4.4);
+      const placa = new THREE.Mesh(new THREE.PlaneGeometry(sw, sw * 112 / 512), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      placa.position.set(p.x, 3.35, zf + frente * 0.08);
+      placa.rotation.y = frente > 0 ? 0 : Math.PI;
+      props.add(placa);
+      k++;
+    }
+  };
+
   W.update = (t, schem) => {
     for (const n of W.nuvens) n.rotation.y = 0;
     for (const b of W.passaros) {
@@ -523,6 +651,7 @@ export function buildWorld(scene) {
       b.pl.scale.y = flat;
       b.cap.position.y = b.h * flat;
       b.cap.scale.y = flat;
+      for (const e of b.extras) { e.m.visible = schem < 0.5; }
     }
     for (const c of W.movingCars) {
       c.g.position.x = c.x0 + c.v * t;

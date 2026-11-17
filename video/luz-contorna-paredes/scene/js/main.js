@@ -7,6 +7,7 @@ import { buildAnnotations } from './annotations.js';
 import { Overlay } from './overlay.js';
 import * as T from './timeline.js';
 import * as Vn from './vinhetas.js';
+import { construirMultidao, atualizarMultidao, tRua } from './multidao.js';
 
 const W = 1080, H = 1920;
 const { ss, win, lerp, clamp } = T;
@@ -27,7 +28,7 @@ const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 1200);
 const camHalf = new THREE.PerspectiveCamera(50, (W / 2) / H, 0.05, 1200);
 
 // ---------- céu de fim de tarde ----------
-const SUN_DIR = new THREE.Vector3(0.82, 0.4, 0.17).normalize();
+const SUN_DIR = new THREE.Vector3(0.82, 0.47, 0.15).normalize();
 const skyU = {
   uSun: { value: SUN_DIR.clone() }, uSchem: { value: 0 },
   uTop: { value: new THREE.Color('#5f86c0') }, uHor: { value: new THREE.Color('#f1c79c') }, uGround: { value: new THREE.Color('#b9a58f') },
@@ -71,6 +72,7 @@ scene.add(fill);
 
 // ---------- mundo, personagens, ondas ----------
 const world = buildWorld(scene);
+const multidao = construirMultidao(scene);
 const prot = new Person(PALETAS.protagonista);
 const esc = new Person(PALETAS.escondida);
 scene.add(prot.root, esc.root);
@@ -267,7 +269,10 @@ window.renderAt = (tv) => {
   const t = tempoRoteiro(tv);
   const v = Vn.vinheta(t);
   const schem = v ? 0 : T.esquema(t);
-  world.update(t, schem);
+  world.update(tRua(t), schem);
+  // na vinheta da esquina, só o carro da história passa perto da quina
+  for (const mc of world.movingCars) mc.g.visible = !(v && v.nome === 'esquina' && mc.g.position.x > -72 && mc.g.position.x < -8);
+  atualizarMultidao(multidao, t, schem, v);
   // céu, névoa e luzes acompanham o modo esquemático
   skyU.uSchem.value = schem;
   scene.fog.color.lerpColors(FOG0, FOG1, schem);
@@ -356,6 +361,38 @@ window.renderAt = (tv) => {
   overlay.update(tv, st);
   return true;
 };
+
+// Trânsito: candidatos sorteados e testados contra todas as posições de câmera do vídeo;
+// fica só quem nunca passa por dentro ou rente à câmera.
+function escolherTransito() {
+  const dur = window.duracao();
+  const amostras = [];
+  for (let tv = 0; tv < dur; tv += 0.1) {
+    const t = tempoRoteiro(tv);
+    const v = Vn.vinheta(t);
+    if ((v ? 0 : T.esquema(t)) > 0.5 || (v && v.nome === 'radio')) continue;
+    const c = camFor(t);
+    if (c.split) continue;
+    amostras.push({ tr: tRua(t), x: c.pos.x, y: c.pos.y, z: c.pos.z });
+  }
+  let s = 77;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const lista = [];
+  for (let i = 0; i < 200 && lista.length < 10; i++) {
+    const leste = r() < 0.5;
+    const v = (leste ? 1 : -1) * (6 + r() * 3);
+    const cand = { z: leste ? 7.0 : 10.4, v, x0: leste ? -620 + r() * 700 : -80 + r() * 700, cor: Math.floor(r() * 6) };
+    let ok = true;
+    for (const a of amostras) {
+      const x = cand.x0 + cand.v * a.tr;
+      const dx = Math.max(0, Math.abs(a.x - x) - 2.3), dz = Math.max(0, Math.abs(a.z - cand.z) - 1.1), dy = Math.max(0, a.y - 2.0);
+      if (Math.hypot(dx, dy, dz) < 2.0) { ok = false; break; }
+    }
+    if (ok) lista.push(cand);
+  }
+  window._transito = lista;
+  return lista;
+}
 
 // eventos para o áudio, já no tempo do vídeo final
 window.eventos = () => {
@@ -448,6 +485,8 @@ window.renderRetrato = () => {
   await document.fonts.load('600 20px Inter');
   await document.fonts.load('500 20px Inter');
   await document.fonts.ready;
+  world.criarLetreiros();
+  world.criarTransito(escolherTransito());
   renderer.compile(scene, camera);
   window.ready = true;
 })();
