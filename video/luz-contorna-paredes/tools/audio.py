@@ -306,6 +306,16 @@ def ambiente():
         radio = smooth(VIN["radio"]["v0"] - 0.2, VIN["radio"]["v0"] + 0.3, t) * (1 - smooth(VIN["radio"]["v1"] - 0.3, VIN["radio"]["v1"] + 0.2, t))
     g = 0.05 * (1 - 0.8 * esquema) * (1 - 0.85 * radio) * smooth(0, 1.0, t) * (1 - smooth(V(90), V(93), t))
     out = x * g[:, None]
+    # murmúrio de gente (tools/murmurio.py), em laço com duas cópias defasadas
+    caminho = os.path.join(B, "murmurio.wav")
+    if os.path.exists(caminho):
+        mm, srm = sf.read(caminho, dtype="float64")
+        rep = int(np.ceil(N / mm.shape[0])) + 1
+        laco = np.concatenate([mm] * rep)
+        desl = mm.shape[0] // 2
+        mur = laco[:N] + laco[desl:desl + N][:, ::-1]
+        gm = 0.055 * (1 - 0.7 * esquema) * (1 - radio) * smooth(0, 1.5, t) * (1 - smooth(V(90), V(93), t))
+        out += mur * gm[:, None]
     # carros passando ao longe
     for tc in [V(x) for x in (2.0, 27.5, 46.0, 57.0, 66.0, 86.0)]:
         d = 3.5
