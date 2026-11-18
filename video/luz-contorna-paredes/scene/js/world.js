@@ -2,6 +2,7 @@
 // calçadas, carros simplificados, o muro com a abertura de 1 m e o pátio escondido.
 import * as THREE from 'three';
 import { toon } from './toon.js';
+import { carroBonito, TIPOS } from './carros.js';
 
 // gerador pseudoaleatório determinístico
 export function rng(seed) {
@@ -20,31 +21,61 @@ const FLOOR_H = 3.3; // altura de um andar (m)
 
 // Textura de fachada: 8 x 8 vãos, cada um com uma janela escura; poucas acesas/refletindo.
 function facadeTexture(wall, frame, seed) {
-  const N = 8, T = 64;
+  // 8 x 8 vãos por ladrilho (128 px por vão): faixa de andar, janela com moldura, verga,
+  // peitoril, reflexo, cortinas e floreiras em algumas janelas
+  const N = 8, T = 128;
   const c = document.createElement('canvas');
   c.width = c.height = N * T;
   const g = c.getContext('2d');
   const r = rng(seed);
   g.fillStyle = wall;
   g.fillRect(0, 0, c.width, c.height);
-  for (let i = 0; i < N; i++) {
-    for (let j = 0; j < N; j++) {
-      const x = i * T, y = j * T;
-      // moldura e peitoril
+  const cortinas = ['#f4d9c6', '#f7e6a8', '#cfe6e0', '#e9c7d8', '#f2efe8'];
+  for (let j = 0; j < N; j++) {
+    const y = j * T;
+    // faixa de andar (cornija) e sombra logo abaixo
+    g.fillStyle = frame;
+    g.fillRect(0, y + T - 10, c.width, 7);
+    g.fillStyle = 'rgba(0,0,0,0.10)';
+    g.fillRect(0, y + T - 3, c.width, 3);
+    for (let i = 0; i < N; i++) {
+      const x = i * T;
       g.fillStyle = frame;
-      g.fillRect(x + 13, y + 9, 38, 46);
+      g.fillRect(x + 26, y + 14, 76, 86); // moldura
+      g.fillRect(x + 20, y + 10, 88, 8); // verga
+      g.fillStyle = 'rgba(0,0,0,0.14)';
+      g.fillRect(x + 20, y + 98, 88, 6); // sombra do peitoril
+      g.fillStyle = frame;
+      g.fillRect(x + 20, y + 96, 88, 6); // peitoril
       const k = r();
-      let win = '#2a3140';
-      if (k < 0.07) win = '#f1dcae'; // reflexo quente do sol
-      else if (k < 0.18) win = '#3a4558';
-      else if (k < 0.24) win = '#222833';
-      g.fillStyle = win;
-      g.fillRect(x + 16, y + 12, 32, 40);
-      // divisória da janela
+      let vidro = ['#2e3a4f', '#26303f'];
+      if (k < 0.08) vidro = ['#f6e2b5', '#e9c98e']; // reflexo quente do sol
+      else if (k < 0.2) vidro = ['#46566e', '#36445a'];
+      const grd = g.createLinearGradient(0, y + 20, 0, y + 94);
+      grd.addColorStop(0, vidro[1]);
+      grd.addColorStop(1, vidro[0]);
+      g.fillStyle = grd;
+      g.fillRect(x + 32, y + 20, 64, 74);
+      if (r() < 0.35) {
+        // cortinas
+        g.fillStyle = cortinas[Math.floor(r() * cortinas.length)];
+        g.fillRect(x + 32, y + 20, 16, 74);
+        g.fillRect(x + 80, y + 20, 16, 74);
+      }
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(x + 63, y + 20, 3, 74); // caixilho
+      g.fillRect(x + 32, y + 52, 64, 3);
       g.fillStyle = 'rgba(255,255,255,0.10)';
-      g.fillRect(x + 31, y + 12, 2, 40);
-      g.fillStyle = 'rgba(0,0,0,0.12)';
-      g.fillRect(x + 13, y + 53, 38, 3);
+      g.beginPath(); g.moveTo(x + 36, y + 24); g.lineTo(x + 52, y + 24); g.lineTo(x + 36, y + 44); g.fill(); // brilho
+      if (r() < 0.18) {
+        // floreira
+        g.fillStyle = '#9c5b3c';
+        g.fillRect(x + 28, y + 88, 72, 10);
+        for (let f = 0; f < 6; f++) {
+          g.fillStyle = f % 2 ? '#6fae55' : ['#e8574a', '#f2c14e', '#ef8fb1'][Math.floor(r() * 3)];
+          g.beginPath(); g.arc(x + 34 + f * 12, y + 86, 6, 0, Math.PI * 2); g.fill();
+        }
+      }
     }
   }
   const tex = new THREE.CanvasTexture(c);
@@ -341,46 +372,22 @@ export function buildWorld(scene) {
   tree(3.6, -12.5, 0.8, 502);
 
   // --- carros ---
-  const carColors = [0xf2c14e, 0xf4f1ea, 0x4f86c6, 0x8cc084, 0xe66a5a, 0x6c5b9a];
+  const carColors = [0xe85d4f, 0xf4f1ea, 0x4f86c6, 0x7fbf8a, 0xf2a541, 0x6c7fd9, 0x9aa7b8, 0x2f7f8f];
   const glassM = reg(std({ color: 0x3d5470 }), 0x2c3340);
   const hubM = reg(std({ color: 0xe9e6df }), 0x2c3340);
   const tyreM = reg(std({ color: 0x1b1c1f }), 0x2c3340);
   const lightM = new THREE.MeshStandardMaterial({ color: 0xfff3d6, emissive: 0xfff0c8, emissiveIntensity: 0.6, flatShading: true });
-  function car(color, x, z, dir = 1) {
-    // carro "bolha": carroceria arredondada, cabine em domo, rodas grandes
-    const bodyM = reg(std({ color }), 0x2c3340);
-    const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 2.5, 6, 14).rotateZ(Math.PI / 2), bodyM);
-    body.scale.set(1, 0.85, 1.35);
-    body.position.y = 0.78;
-    const cabin = new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), glassM);
-    cabin.scale.set(1.35, 0.85, 0.9);
-    cabin.position.set(-0.15, 1.18, 0);
-    const teto = new THREE.Mesh(new THREE.SphereGeometry(0.97, 16, 10, 0, Math.PI * 2, 0, Math.PI / 5), bodyM);
-    teto.scale.set(1.35, 0.85, 0.9);
-    teto.position.set(-0.15, 1.19, 0);
-    for (const m of [body, cabin, teto]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
-    for (const sx of [-1.25, 1.25]) for (const sz of [-0.82, 0.82]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12).rotateX(Math.PI / 2), tyreM);
-      w.position.set(sx, 0.4, sz);
-      w.castShadow = true;
-      g.add(w);
-      const calota = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.32, 10).rotateX(Math.PI / 2), hubM);
-      calota.position.set(sx, 0.4, sz);
-      g.add(calota);
-    }
-    for (const sz of [-0.55, 0.55]) {
-      const hl = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), lightM);
-      hl.scale.set(0.5, 1, 1);
-      hl.position.set(1.98, 0.85, sz);
-      g.add(hl);
-    }
+  // carros low-poly (scene/js/carros.js): o modelo varia de forma determinística pela posição
+  function car(color, x, z, dir = 1, tipo = null) {
+    const k = Math.abs(Math.round(x * 7 + z * 13));
+    const g = carroBonito(tipo || TIPOS[k % TIPOS.length], color);
     g.position.set(x, 0, z);
     g.rotation.y = dir > 0 ? 0 : Math.PI;
     scene.add(g);
     W.fadeables.push(g);
     return g;
   }
+
   const rc = rng(31);
   for (let xx = -118; xx < 118; xx += 5.4 + rc() * 1.4) {
     // calçada norte: livre perto do muro (|x| < 14) e da esquina da rua transversal
@@ -390,7 +397,7 @@ export function buildWorld(scene) {
     if (rc() < 0.75 && !(x2 > 8 && x2 < 21)) car(carColors[Math.floor(rc() * carColors.length)], x2, 12.05, -1);
   }
   W.criarTransito = (lista) => {
-    for (const c of lista) W.movingCars.push({ g: car(carColors[c.cor % carColors.length], 0, c.z, c.v > 0 ? 1 : -1), x0: c.x0, v: c.v });
+    for (const c of lista) W.movingCars.push({ g: car(c.onibus ? 0x3f8fd8 : carColors[c.cor % carColors.length], 0, c.z, c.v > 0 ? 1 : -1, c.onibus ? 'onibus' : null), x0: c.x0, v: c.v });
   };
 
   // --- postes e banco ---

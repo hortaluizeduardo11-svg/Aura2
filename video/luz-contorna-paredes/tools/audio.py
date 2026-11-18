@@ -357,9 +357,12 @@ def main():
     # cliques do controle fictício
     for k in range(7):
         place(fx, tick(3200), ev["cliques"] + k * 0.1, 0.07)
-    # aparecimento da tela ilustrativa e da fórmula
-    place(fx, blip(520, 780, 0.25), ev["tela"], 0.07)
-    place(fx, blip(880, 1170, 0.2), ev["formula"], 0.05)
+    # transições em onda da cena 6: varredura brilhante + "plim" suave; e o "foco" (10 cm)
+    for to in ev.get("ondas", []):
+        place(fx, np.stack([whoosh(0.9, 500, 5200, 0.45), whoosh(0.9, 500, 5200, 0.5)], 1), to - 0.15, 0.08)
+        place(fx, chime((86, 91), 0.07), to + 0.35, 0.035)
+    for tf in ev.get("foco", []):
+        place(fx, blip(660, 990, 0.35), tf, 0.05)
     # cortes entre trechos que não são vizinhos no roteiro (entradas e saídas das vinhetas)
     for a_, b_ in zip(TRECHOS[:-1], TRECHOS[1:]):
         if abs(a_["s1"] - b_["s0"]) > 1e-6:

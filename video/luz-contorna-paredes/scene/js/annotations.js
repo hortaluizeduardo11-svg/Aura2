@@ -149,6 +149,57 @@ export function buildAnnotations(scene) {
   A.mancha.renderOrder = 40;
   scene.add(A.mancha);
 
+  // --- o que a visão adaptada perceberia: manchas de cor saindo pela abertura ---
+  // Uma mancha por pessoa do pátio. Com lambda = 1 m elas se fundem num brilho só;
+  // com 10 cm se separam (mais detalhe), mas ficam bem mais fracas (menos sinal chega).
+  A.percepcao = new THREE.Group();
+  A.percepcao.renderOrder = 41;
+  scene.add(A.percepcao);
+  A.criarPercepcao = (itens) => {
+    // mancha única (lambda = 1 m): a cor misturada de todos
+    const mix = new THREE.Color(0, 0, 0);
+    itens.forEach((it) => mix.add(new THREE.Color(it.cor)));
+    mix.multiplyScalar(1 / itens.length);
+    // mesma matiz da mistura, mas viva e luminosa (a média pura sai bege, da cor do muro)
+    const hsl = {};
+    mix.getHSL(hsl);
+    mix.setHSL(hsl.h, 0.9, 0.62);
+    A.percUnicaM = new THREE.SpriteMaterial({ map: tex, color: mix, transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false });
+    A.percUnica = new THREE.Sprite(A.percUnicaM);
+    A.percUnica.renderOrder = 41;
+    A.percepcao.add(A.percUnica);
+    A.percItens = itens.map((it) => {
+      const m = new THREE.SpriteMaterial({ map: tex, color: it.cor, transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false });
+      const sp = new THREE.Sprite(m);
+      sp.renderOrder = 41;
+      A.percepcao.add(sp);
+      return { ...it, sp, m };
+    });
+  };
+  A.atualizarPercepcao = (op, foco, t) => {
+    A.percepcao.visible = op > 0.01;
+    if (!A.percItens || !A.percepcao.visible) return;
+    const n = A.percItens.length;
+    A.percItens.forEach((it, i) => {
+      // separado: espalhados na largura da abertura, na ordem em que estão no pátio
+      // a luz difratada sai pela abertura e "vaza" pelas bordas
+      const xs = Math.max(-0.95, Math.min(0.95, it.x * 0.24));
+      const ys = 0.5 + it.alt * 0.6;
+      const x = -0.05 + (xs + 0.05) * foco + 0.03 * Math.sin(t * 1.3 + i);
+      const y = 1.15 + (ys - 1.15) * foco + 0.04 * Math.sin(t * 1.7 + i * 2);
+      it.sp.position.set(x, y, 0.28);
+      const esc = 1.6 + (0.6 - 1.6) * foco;
+      it.sp.scale.set(esc, esc * 1.25, 1);
+      // separadas (10 cm): cada pessoa vira uma mancha própria, mas fraca (menos sinal chega)
+      it.m.opacity = op * 0.8 * foco * (0.9 + 0.1 * Math.sin(t * 3 + i));
+    });
+    // juntas (1 m): um brilho só, mais forte
+    A.percUnica.position.set(-0.05 + 0.03 * Math.sin(t * 1.1), 1.15, 0.3);
+    const pul = 1 + 0.05 * Math.sin(t * 2.6);
+    A.percUnica.scale.set(2.0 * pul, 2.4 * pul, 1);
+    A.percUnicaM.opacity = op * 0.95 * (1 - foco);
+  };
+
   const setRibbons = (grp, op, grow = 1) => grp.children.forEach((m) => {
     if (m.material.uniforms) { m.material.uniforms.uOpacity.value = op; m.material.uniforms.uGrow.value = grow; }
   });

@@ -24,6 +24,38 @@ document.getElementById('gl').appendChild(renderer.domElement);
 const canvas = renderer.domElement;
 
 const scene = new THREE.Scene();
+
+// ---------- transição em onda: o plano B aparece dentro de um círculo que se abre ----------
+const rtOnda = new THREE.WebGLRenderTarget(W, H, { samples: 4 });
+const ondaU = {
+  tB: { value: rtOnda.texture }, uC: { value: new THREE.Vector2(0.5, 0.5) }, uR: { value: 0 },
+  uAsp: { value: W / H }, uTint: { value: 0 }, uCor: { value: new THREE.Color('#ffd9bf') },
+};
+const ondaQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: ondaU, transparent: true, depthTest: false, depthWrite: false, toneMapped: true,
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `uniform sampler2D tB; uniform vec2 uC; uniform float uR, uAsp, uTint; uniform vec3 uCor; varying vec2 vUv;
+    void main(){
+      vec2 d = vUv - uC; d.y /= uAsp;
+      float r = length(d);
+      float borda = uR - r;
+      if (borda < -0.03) discard;
+      // leve refração na frente de onda
+      vec2 n = normalize(d + 1e-5);
+      float anel = smoothstep(0.035, 0.0, abs(borda));
+      vec4 b = texture2D(tB, vUv - n * 0.018 * anel);
+      vec3 c = b.rgb;
+      c = mix(c, c * vec3(1.06, 0.9, 1.02) + vec3(0.05, 0.015, 0.045), uTint);
+      c = mix(c, uCor * 1.6, anel * 0.75);
+      float a = max(smoothstep(-0.004, 0.004, borda), anel);
+      gl_FragColor = vec4(c, a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+}));
+const ondaCena = new THREE.Scene();
+ondaCena.add(ondaQuad);
+const ondaCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 1200);
 const camHalf = new THREE.PerspectiveCamera(50, (W / 2) / H, 0.05, 1200);
 
@@ -98,6 +130,8 @@ const loadTex = (url) => new Promise((res, rej) => loader.load(url, (t) => {
 let som, luz, overlay, timeline, vn3d;
 const v3 = new THREE.Vector3();
 
+const easeOndas = (u) => 1 - Math.pow(1 - u, 2.2);
+
 // piscadas: rápidas, a cada ~3 s, com variação
 function piscar(t, fase) {
   const per = 3.1 + fase;
@@ -156,7 +190,7 @@ const DESTAQUES = [
   { t0: 11.95, t1: 14.9, txt: 'A luz já faz isso.', top: 950 },
   { t0: 42.7, t1: 47.7, txt: 'Agora começa a hipótese.', top: 300 },
   { t0: 57.9, t1: 62.7, txt: 'Mais espalhamento pelas bordas.', top: 270 },
-  { t0: 67.1, t1: 71.6, txt: 'Receber sinal ≠ enxergar detalhes.', top: 140 },
+  { t0: 69.3, t1: 73.0, txt: 'Receber sinal ≠ enxergar detalhes.', top: 220 },
   { t0: 86.3, t1: 90.1, txt: 'O segredo está na escala.', top: 300 },
 ];
 
@@ -199,6 +233,15 @@ function edicao(t, O, camState) {
   P('regua', inn('1 m', false), [0, 1.27, 0.06], win(t, 24.2, 35.8, 0.4, 0.3), 'serif', -10);
   P('senoide', inn('som de 340 Hz<span class="small">λ ≈ 1 m</span>', false), [0.25, 1.78, 0.08], win(t, 32.5, 35.8, 0.35, 0.3), 'chip', -26);
   P('sombra', inn('limite da<br>sombra geométrica', false), [-2.05, 0.2, 8.4], win(t, 58.0, 63.0, 0.5, 0.2), 'chip');
+  // cena 6: quem está de verdade no pátio x o que a visão adaptada percebe
+  const rev = win(t, T.ONDA1[1] - 0.1, T.ONDA2[0] + 0.1, 0.3, 0.25);
+  P('rev_amiga', inn('sua amiga'), [0, 2.05, -6.0], rev, '', -26);
+  P('rev_gente', inn('quem está lá de verdade', false), [-0.6, 3.2, -9.5], rev, 'chip');
+  const foco = ss(T.FOCO[0], T.FOCO[1], t) * (1 - ss(T.FOCO[2], T.FOCO[3], t));
+  const pv = win(t, T.ONDA2[1], 75.2, 0.3, 0.3);
+  // explicação fixa na tela, logo abaixo do brilho
+  R.push({ id: 'perc_1m', html: inn('o que chega até você<span class="small">λ = 1 m: um brilho só, sem detalhes</span>', false), pos: { x: 540, y: 1040 }, op: pv * (1 - foco), cls: 'chip' });
+  R.push({ id: 'perc_10', html: inn('se <span style="text-transform:none">λ</span> fosse 10 cm<span class="small">manchas separadas, mas muito menos sinal</span>', false), pos: { x: 540, y: 1040 }, op: pv * foco, cls: 'chip' });
   st.rotulos = R;
 
   st.def = win(t, 24.4, 28.9, 0.4, 0.35);
@@ -206,11 +249,9 @@ function edicao(t, O, camState) {
   st.lupa = {
     op: win(t, 28.9, 32.3, 0.35, 0.35), zoom: ss(28.95, 29.85, t), ondas: ss(29.75, 30.15, t), nota: ss(30.35, 30.75, t), ancora: anc,
   };
-  // tela ilustrativa: primeiro o caso atual (1 m); em "limita os detalhes", os outros comprimentos de onda
-  st.detector = { op: win(t, 66.8, 75.6, 0.45, 0.4), c1m: ss(66.95, 67.35, t), c10: ss(71.6, 71.95, t), c1: ss(71.85, 72.2, t), formula: ss(72.7, 73.05, t) };
   st.legenda = win(t, 55.8, 63.0, 0.5, 0.2);
   st.split = t >= 78 && t < 84.6 ? win(t, 78.0, 84.6, 0.35, 0.3) : 0;
-  st.visaoAdaptada = Math.max(win(t, 39.4, 42.6, 0.35, 0.1), win(t, 66.6, 75.4, 0.35, 0.6)) * 0.95;
+  st.visaoAdaptada = Math.max(win(t, 39.4, 42.6, 0.35, 0.1) * 0.95, win(t, T.ONDA2[1], 75.4, 0.1, 0.3) * 0.45);
   // transições: linhas de velocidade e desfoque
   const pulsos = [[10.0, 11.4], [23.0, 24.2], [35.9, 36.3], [48.95, 49.6], [62.9, 63.3], [77.9, 78.3], [84.5, 84.9]];
   st.speed = Math.max(0, ...pulsos.map(([a, b]) => 0.75 * win(t, a, b, (b - a) * 0.35, (b - a) * 0.5)));
@@ -285,9 +326,9 @@ window.renderAt = (tv) => {
   const c = window.debugCam ? T.look(window.debugCam.pos, window.debugCam.target, window.debugCam.fov || 40) : camFor(t);
   // desfoque proporcional ao movimento da câmera (acelerações nas transições)
   let blur = 0;
-  if (!c.split) {
+  if (!c.split && !c.wipe) {
     const cp = camFor(tempoRoteiro(Math.max(0, tv - 1 / 30)));
-    if (!cp.split) {
+    if (!cp.split && !cp.wipe) {
       const dPos = c.pos.distanceTo(cp.pos);
       const dAng = c.quat.angleTo(cp.quat) * 180 / Math.PI;
       if (dPos < 3 && dAng < 25) blur = clamp(dAng * 0.4 + dPos * 1.8 - 0.8, 0, 2.2);
@@ -319,20 +360,51 @@ window.renderAt = (tv) => {
     senoide: win(t, 32.3, 35.95, 0.35, 0.3),
     controle: p.device,
     dial: p.dial,
-    mancha: (v ? (v.nome === 'esconde' ? 0.8 * ss(v.K[3], v.K[3] + 0.5, v.u) : 0) : 0.85 * win(t, 67.0, 75.4, 0.6, 0.4)) * (0.85 + 0.15 * Math.sin(t * 3.1)),
+    mancha: (v && v.nome === 'esconde' ? 0.8 * ss(v.K[3], v.K[3] + 0.5, v.u) : 0) * (0.85 + 0.15 * Math.sin(t * 3.1)),
   });
 
   // personagem: no plano em primeira pessoa a cabeça some (câmera dentro dela)
-  const pov = v ? Vn.pov(v) : (t >= 39.4 && t < 42.6) || (t >= 66.6 && t < 75.4);
+  const pov = v ? Vn.pov(v) : (t >= 39.4 && t < 42.6) || (t >= T.ONDA2[1] && t < 75.4);
   prot.head.visible = !pov;
   // ao sair da visão em primeira pessoa, a câmera não pode atravessar a cabeça
   prot.root.visible = true;
-  if (!pov && !c.split) {
+  if (!pov && !c.split && !c.wipe) {
     const cabeca = prot.head.localToWorld(new THREE.Vector3(0, 0.12, 0));
     if (c.pos.distanceTo(cabeca) < 0.55) prot.root.visible = false;
   }
 
-  if (c.split) {
+  // percepção da visão adaptada (cena 6): só nos planos em primeira pessoa
+  const cena6 = !v && t >= T.ONDA2[0] && t < 75.4;
+  const foco = cena6 ? ss(T.FOCO[0], T.FOCO[1], t) * (1 - ss(T.FOCO[2], T.FOCO[3], t)) : 0;
+  const percOp = cena6 ? ss(T.ONDA2[0] + 0.2, T.ONDA2[1] + 0.3, t) * (1 - ss(75.0, 75.4, t)) : 0;
+  ann.atualizarPercepcao(percOp, foco, t);
+  // visão adaptada: a cena de luz comum escurece e o sinal de onda longa brilha por cima
+  renderer.toneMappingExposure = lerp(1.12, 0.48, (c.wipe ? 0 : percOp));
+
+  if (c.wipe) {
+    const w = c.wipe;
+    // plano B no alvo, plano A na tela, B por cima dentro do círculo
+    const percVis = ann.percepcao.visible;
+    ann.percepcao.visible = percVis && w.povB;
+    prot.head.visible = !w.povB;
+    applyCam(camera, w.b);
+    ondaU.uTint.value = w.povB ? 1 : 0;
+    renderer.setRenderTarget(rtOnda);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    ann.percepcao.visible = false;
+    prot.head.visible = true;
+    applyCam(camera, w.a);
+    renderer.render(scene, camera);
+    ondaU.uC.value.set(w.centro[0], 1 - w.centro[1]);
+    ondaU.uR.value = easeOndas(w.u) * 1.05;
+    ondaU.uTint.value = w.povB ? 1 : 0;
+    renderer.autoClear = false;
+    renderer.render(ondaCena, ondaCam);
+    renderer.autoClear = true;
+    ann.percepcao.visible = percVis;
+    if (w.u > 0.5) applyCam(camera, w.b); // rótulos acompanham o plano que está entrando
+  } else if (c.split) {
     const S = T.ondasSplit(t);
     renderer.setScissorTest(true);
     applyCam(camHalf, c.cam);
@@ -373,7 +445,7 @@ function escolherTransito() {
     if ((v ? 0 : T.esquema(t)) > 0.5 || (v && v.nome === 'radio')) continue;
     const c = camFor(t);
     if (c.split) continue;
-    amostras.push({ tr: tRua(t), x: c.pos.x, y: c.pos.y, z: c.pos.z });
+    for (const k of c.wipe ? [c.wipe.a, c.wipe.b] : [c]) amostras.push({ tr: tRua(t), x: k.pos.x, y: k.pos.y, z: k.pos.z });
   }
   let s = 77;
   const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
@@ -381,11 +453,12 @@ function escolherTransito() {
   for (let i = 0; i < 200 && lista.length < 10; i++) {
     const leste = r() < 0.5;
     const v = (leste ? 1 : -1) * (6 + r() * 3);
-    const cand = { z: leste ? 7.0 : 10.4, v, x0: leste ? -620 + r() * 700 : -80 + r() * 700, cor: Math.floor(r() * 6) };
+    const cand = { z: leste ? 7.0 : 10.4, v, x0: leste ? -620 + r() * 700 : -80 + r() * 700, cor: Math.floor(r() * 8), onibus: lista.length === 3 };
+    const meio = cand.onibus ? 5.6 : 2.3;
     let ok = true;
     for (const a of amostras) {
       const x = cand.x0 + cand.v * a.tr;
-      const dx = Math.max(0, Math.abs(a.x - x) - 2.3), dz = Math.max(0, Math.abs(a.z - cand.z) - 1.1), dy = Math.max(0, a.y - 2.0);
+      const dx = Math.max(0, Math.abs(a.x - x) - meio), dz = Math.max(0, Math.abs(a.z - cand.z) - 1.3), dy = Math.max(0, a.y - (cand.onibus ? 3.0 : 2.0));
       if (Math.hypot(dx, dy, dz) < 2.0) { ok = false; break; }
     }
     if (ok) lista.push(cand);
@@ -401,7 +474,7 @@ window.eventos = () => {
   return {
     trocas: E.trocas.map(v), transicoes: E.transicoes.map(v), cortes: E.cortes.map(v),
     painelEntra: v(E.painelEntra), pilula: v(E.pilula), creditos: v(E.creditos),
-    tela: v(66.85), formula: v(70.45), cliques: v(37.7),
+    ondas: E.ondas.map(v), foco: E.foco.map(v), cliques: v(37.7),
     passos: T.passos().map(v), chamado: timeline.chamado, duracao: window.duracao(),
     vinhetas: Vn.deixas(warp && warp.segs),
     // amostras roteiro -> vídeo por trecho, para a trilha acompanhar as cenas
@@ -473,6 +546,8 @@ window.renderRetrato = () => {
   timeline = await (await fetch('./data/timeline.json')).json();
   try { warp = await (await fetch('./data/warp.json')).json(); } catch (e) { warp = null; }
   Vn.configurar(warp, timeline);
+  ann.criarPercepcao([{ cor: PALETAS.escondida.jaqueta, x: 0, alt: 1 }].concat(
+    multidao.patio.map((a) => ({ cor: a.p.p.jaqueta, x: a.x, alt: (a.escala ?? 1) < 0.8 ? 0.55 : (a.tipo === 'sentado' ? 0.7 : 1) }))));
   vn3d = Vn.construir(scene);
   Vn.desenharTela(vn3d, rostoAmiga());
   const maps = {};

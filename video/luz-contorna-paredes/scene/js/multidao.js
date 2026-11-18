@@ -115,6 +115,24 @@ export function construirMultidao(scene) {
       add({ tipo: 'parado', x: gx + 0.55 * Math.cos(ang), z: gz + 0.4 * Math.sin(ang), rot: -Math.PI / 2 - ang, conversa: true, gesto: k === 0 ? 'mao' : undefined });
     }
   }
+  // --- pátio atrás do muro: mais gente além da amiga, sempre fora da linha de visão do
+  // protagonista pela abertura (x <= 1 perto do muro; os de x maior ficam no fundo, z <= -11) ---
+  M.patio = [];
+  const addP = (cfg) => { add({ ...cfg, patio: true, y: 0.06 }); M.patio.push(M.pessoas[M.pessoas.length - 1]); };
+  addP({ tipo: 'parado', x: -3.4, z: -3.5, rot: 2.3, escala: 0.7, gesto: 'bola' });
+  addP({ tipo: 'parado', x: -1.4, z: -5.0, rot: -0.85, escala: 0.72, gesto: 'bola' });
+  addP({ tipo: 'sentado', x: -3.42, z: -6.5, rot: Math.PI / 2, gesto: 'celular' });
+  addP({ tipo: 'parado', x: 2.5, z: -11.7, rot: 1.25, conversa: true, gesto: 'mao' });
+  addP({ tipo: 'parado', x: 3.5, z: -11.3, rot: -1.95, conversa: true });
+  addP({ tipo: 'parado', x: -1.3, z: -13.4, rot: 0.25, gesto: 'celular' });
+  addP({ tipo: 'parado', x: 4.5, z: -14.1, rot: -0.7, conversa: true });
+  const bola = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 1), toon(0xf4f1ea));
+  bola.castShadow = true;
+  const faixaBola = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.02, 4, 12), toon(0xe0574a));
+  bola.add(faixaBola);
+  M.grupo.add(bola);
+  M.bola = bola;
+
   // --- criança com balão e o adulto ao lado ---
   add({ tipo: 'parado', x: -3.0, z: 15.4, rot: Math.PI, escala: 0.68, gesto: 'balao' });
   add({ tipo: 'parado', x: -2.2, z: 15.6, rot: -2.8, conversa: true });
@@ -163,7 +181,7 @@ export function atualizarMultidao(M, t, schem, vinheta) {
     }
     p.root.visible = true;
     const sent = a.tipo === 'sentado';
-    p.root.position.set(a.x, 0.15, a.z);
+    p.root.position.set(a.x, a.y ?? 0.15, a.z);
     p.root.rotation.y = a.rot;
     const fala = a.conversa ? Math.max(0, Math.sin(tr * 7 + a.fase * 5) * Math.sin(tr * 1.3 + a.fase)) : 0;
     const o = { sentado: sent ? 1 : 0, blink: pisc, smile: 0.7, mouthOpen: 0.5 * fala,
@@ -172,8 +190,30 @@ export function atualizarMultidao(M, t, schem, vinheta) {
     if (a.gesto === 'mao') { const g = 0.5 + 0.5 * Math.sin(tr * 2.2 + a.fase); o.armR = { sh: [-0.5 - 0.4 * g, -0.2, 0.3], el: -1.2 }; }
     if (a.gesto === 'bandeja') { o.armR = { sh: [-0.9, 0, 0.25], el: -0.9 }; o.armL = { sh: [-0.9, 0, -0.25], el: -0.9 }; }
     if (a.gesto === 'balao') { o.armR = { sh: [-2.6, 0, 0.25], el: -0.2 }; o.headPitch = -0.35; }
+    if (a.gesto === 'bola') {
+      const pega = 0.5 + 0.5 * Math.sin(tr * 3.2 + a.fase);
+      o.armR = { sh: [-0.9 - 0.4 * pega, -0.1, 0.25], el: -0.5 }; o.armL = { sh: [-0.9 - 0.4 * pega, 0.1, -0.25], el: -0.5 };
+      o.smile = 1; o.mouthOpen = 0.3 * pega;
+    }
+    // no esconde-esconde as crianças do pátio também se escondem
+    if (a.patio && vinheta && vinheta.nome === 'esconde' && (a.escala ?? 1) < 0.8) { o.crouch = 0.85; o.armR = null; o.armL = null; o.smile = 1; }
     p.pose(o);
   }
+  // bola passando entre as duas crianças do pátio (arco)
+  const kids = M.pessoas.filter((a) => a.gesto === 'bola');
+  if (kids.length === 2 && M.bola) {
+    const esconde = vinheta && vinheta.nome === 'esconde';
+    M.bola.visible = true;
+    const ciclo = (tr * 0.55) % 2, ida = ciclo < 1, u = ida ? ciclo : ciclo - 1;
+    const [A, B] = ida ? kids : [kids[1], kids[0]];
+    const pa = new THREE.Vector3(A.x, 0.75, A.z), pb = new THREE.Vector3(B.x, 0.75, B.z);
+    const pos = pa.lerp(pb, u);
+    pos.y += Math.sin(u * Math.PI) * 0.9;
+    if (esconde) pos.set(kids[0].x + 0.4, 0.18, kids[0].z + 0.3);
+    M.bola.position.copy(pos);
+    M.bola.rotation.set(tr * 4, tr * 3, 0);
+  }
+
   // balão preso na mão da criança
   const crianca = M.pessoas.find((a) => a.gesto === 'balao');
   if (crianca) {

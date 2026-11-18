@@ -3,6 +3,7 @@
 // e os eventos internos seguem os inícios dos trechos de legenda (K) da narração atual.
 import * as THREE from 'three';
 import { toon } from './toon.js';
+import { carroBonito } from './carros.js';
 import { Person, PALETAS } from './people.js';
 import { look, ss, win, clamp, lerp, easeIO, LAM_DISP } from './timeline.js';
 
@@ -173,35 +174,10 @@ export function construir(scene) {
 }
 
 function carroBolha(cor) {
-  const g = new THREE.Group();
-  const corpoM = toon(cor), vidroM = toon(0x3d5470), pneuM = toon(0x1b1c1f), calotaM = toon(0xe9e6df);
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 2.5, 6, 14).rotateZ(Math.PI / 2), corpoM);
-  body.scale.set(1, 0.85, 1.35);
-  body.position.y = 0.78;
-  const cabine = new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), vidroM);
-  cabine.scale.set(1.35, 0.85, 0.9);
-  cabine.position.set(-0.15, 1.18, 0);
-  const teto = new THREE.Mesh(new THREE.SphereGeometry(0.97, 16, 10, 0, Math.PI * 2, 0, Math.PI / 5), corpoM);
-  teto.scale.set(1.35, 0.85, 0.9);
-  teto.position.set(-0.15, 1.19, 0);
-  for (const m of [body, cabine, teto]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
-  for (const sx of [-1.25, 1.25]) for (const sz of [-0.82, 0.82]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12).rotateX(Math.PI / 2), pneuM);
-    w.position.set(sx, 0.4, sz);
-    const cal = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.32, 10).rotateX(Math.PI / 2), calotaM);
-    cal.position.set(sx, 0.4, sz);
-    g.add(w, cal);
-  }
-  const farolM = new THREE.MeshBasicMaterial({ color: 0xfff3d6, toneMapped: false });
-  for (const sz of [-0.55, 0.55]) {
-    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), farolM);
-    hl.scale.set(0.5, 1, 1);
-    hl.position.set(1.98, 0.85, sz);
-    g.add(hl);
-  }
-  // antena do rádio
-  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 5), pneuM);
-  ant.position.set(-1.3, 1.5, 0.5);
+  // carro das vinhetas: o mesmo modelo low-poly da cidade, com antena de rádio
+  const g = carroBonito(cor === 0xf2c14e ? 'taxi' : 'hatch', cor);
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.8, 5), toon(0x1d1e22));
+  ant.position.set(-1.2, 1.5, 0.5);
   ant.rotation.z = 0.3;
   g.add(ant);
   return g;

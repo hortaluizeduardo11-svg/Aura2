@@ -119,6 +119,9 @@ const C = {
   s6A: look([0.95, 1.6, 1.35], [-2.2, 1.35, 2.2], 40),
   s6B: look([0.6, 1.58, 1.5], [-2.2, 1.38, 2.2], 38),
   s6volta: look([-3.35, 2.05, 4.75], [-0.6, 1.1, -0.1], 42),
+  // revelação: do alto, o pátio inteiro (a amiga e as outras pessoas)
+  s6rev1: look([-1.8, 10.8, 8.4], [-0.4, 0.2, -6.8], 46),
+  s6rev2: look([-1.3, 11.6, 7.4], [-0.3, 0.2, -7.2], 44),
   s6fim: look([-4.7, 2.7, 5.1], [-0.4, 1.0, -0.4], 40),
   s7A: look([-3.4, 2.02, 6.4], [-0.87, 1.0, 0.17], 44),
   s7B: look([-3.1, 1.95, 5.8], [-0.87, 1.0, 0.17], 43),
@@ -130,6 +133,17 @@ const C = {
 const voo = new THREE.CatmullRomCurve3([
   V(1.5, 2.4, -10.5), V(0.75, 2.45, -6.2), V(0.25, 1.85, -2.6), V(0.0, 1.6, -0.15), V(-0.05, 1.7, 1.6), V(-0.3, 2.6, 3.4),
 ]);
+
+// transições em onda da cena 6 (tempo do roteiro)
+export const ONDA1 = [66.45, 67.1];
+export const ONDA2 = [68.55, 69.2];
+// "foco": o comprimento de onda cai para 10 cm e volta para 1 m
+export const FOCO = [70.6, 71.4, 73.2, 74.0];
+function camPov6(t, ctx) {
+  const e = ctx.olho(t), f = ctx.frente(t);
+  const pos = e.clone().add(f.clone().multiplyScalar(0.14));
+  return look(pos.toArray(), [0.05, 1.05 + 0.03 * Math.sin(t * 0.8), 0.0], 46);
+}
 
 export function camera(t, ctx) {
   // ctx.olho(t) e ctx.mao(t): posições do mundo calculadas a partir do esqueleto
@@ -172,12 +186,12 @@ export function camera(t, ctx) {
     return blend(s, C.s5fim, easeIO(ss(52.6, 55.0, t)));
   }
   if (t < 63.0) return blend(C.s5fim, C.s5fim2, ss(55.0, 63.0, t));
-  if (t < 66.6) return blend(C.s6A, C.s6B, ss(63.0, 66.6, t));
-  if (t < 75.4) {
-    const e = ctx.olho(t), f = ctx.frente(t);
-    const pos = e.clone().add(f.clone().multiplyScalar(0.14));
-    return look(pos.toArray(), [0.1, 1.0 + 0.03 * Math.sin(t * 0.8), -0.2], 50);
-  }
+  // cena 6: plano médio -> (onda) quem está de verdade no pátio -> (onda) o que ele percebe
+  if (t < ONDA1[0]) return blend(C.s6A, C.s6B, ss(63.0, 66.6, t));
+  if (t < ONDA1[1]) return { wipe: { a: blend(C.s6A, C.s6B, ss(63.0, 66.6, ONDA1[0])), b: C.s6rev1, u: ss(ONDA1[0], ONDA1[1], t), centro: [0.5, 0.45], povB: false } };
+  if (t < ONDA2[0]) return blend(C.s6rev1, C.s6rev2, ss(ONDA1[1], ONDA2[0], t));
+  if (t < ONDA2[1]) return { wipe: { a: C.s6rev2, b: camPov6(t, ctx), u: ss(ONDA2[0], ONDA2[1], t), centro: [0.5, 0.5], povB: true } };
+  if (t < 75.4) return camPov6(t, ctx);
   // corte para trás do ombro e recuo até o plano aberto
   if (t < 78.0) return blend(C.s6volta, C.s6fim, easeIO(ss(75.4, 78.0, t)));
   if (t < 84.6) return { split: true, cam: C.split };
@@ -278,7 +292,7 @@ export function esquema(t) {
 // ---------- painel ----------
 export function painel(t) {
   const L = estadoLambda(t);
-  const vis = ss(23.3, 23.9, t) * (1 - ss(77.7, 78.0, t)) * (1 - win(t, 66.6, 75.7, 0.35, 0.4));
+  const vis = ss(23.3, 23.9, t) * (1 - ss(77.7, 78.0, t));
   const valor = { '500nm': '500 nm', '1cm': '1 cm', '10cm': '10 cm', '1m': '1 m' };
   return {
     vis,
@@ -291,6 +305,8 @@ export function painel(t) {
 export const EVENTOS = {
   trocas: TROCAS.map((x) => x.t),
   transicoes: [10.0, 23.0, 36.0, 49.0, 63.0, 78.0, 84.6],
+  ondas: [66.45, 68.55],
+  foco: [70.6, 73.2],
   cortes: [3.4, 6.6, 39.4, 42.6, 66.6, 75.4],
   painelEntra: 23.3,
   pilula: 38.35,

@@ -90,30 +90,6 @@
   #lupaWrap { inset: 0; }
   #lupa { left: 0; top: 0; width: 1080px; height: 1920px; opacity: 0; transform-origin: 770px 470px; }
 
-  /* ---------- tela ilustrativa ---------- */
-  #detector { left: 60px; right: 60px; top: 350px; opacity: 0; border-radius: 22px; overflow: hidden;
-    background: rgba(10,12,18,.8); border: 1px solid rgba(255,255,255,.16); }
-  #detector .hd { display: flex; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,.12);
-    font: 600 16px/1 var(--sans); letter-spacing: .18em; }
-  #detector .hd i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #ff4b4b; margin-right: 10px; box-shadow: 0 0 10px rgba(255,75,75,.8); }
-  #detector .cols { display: flex; gap: 16px; padding: 20px 22px 6px; }
-  #detector .col { position: relative; flex: 1; text-align: center; }
-  #detector .img { position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.14); background: #15181e; }
-  #detector .img img { display: block; width: 100%; height: 100%; object-fit: cover; }
-  #detector .col.agora .img { border: 2px solid rgba(255,140,110,.9); box-shadow: 0 0 24px rgba(255,120,90,.25); }
-  #detector .badge { position: absolute; z-index: 2; top: 10px; left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 6px;
-    background: rgba(255,120,95,.92); font: 600 13px/1 var(--sans); letter-spacing: .18em; }
-  #detector .lam { margin-top: 12px; font: 400 44px/1 var(--serif); }
-  #detector .desc { margin-top: 6px; font: 500 15px/1.25 var(--sans); letter-spacing: .02em; opacity: .85; min-height: 38px; }
-  #detector .sig { margin-top: 8px; }
-  #detector .bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
-  #detector .bar b { display: block; height: 100%; background: linear-gradient(90deg, #c7337f, #fa8c38); }
-  #detector .sig span { display: block; margin-top: 7px; font: 600 14px/1.2 var(--sans); letter-spacing: .06em; opacity: .9; }
-  #detector .ft { display: flex; align-items: baseline; gap: 18px; padding: 14px 22px 4px; border-top: 1px solid rgba(255,255,255,.1); margin-top: 14px; }
-  #detector .ft .f { font: 400 46px/1.1 var(--serif); white-space: nowrap; }
-  #detector .ft .k { font: 500 16px/1.3 var(--sans); letter-spacing: .02em; opacity: .85; }
-  #detector .nota { padding: 4px 22px 16px; font: 500 13px/1.3 var(--sans); letter-spacing: .04em; opacity: .6; }
-
   /* ---------- legenda do mapa de intensidade ---------- */
   #legend { left: 64px; top: 1040px; opacity: 0; text-shadow: var(--shadow); }
   #legend .t { font: 600 17px/1 var(--sans); letter-spacing: .2em; }
@@ -220,33 +196,6 @@
       <text x="770" y="790" fill="#fff" text-anchor="middle" font-family="Instrument Serif, FreeSerif, serif" font-size="46">comprimentos de onda</text>
     </g>
   </svg>
-
-  <div id="detector" class="ov">
-    <div class="hd"><span><i></i>HIPÓTESE: VISÃO ADAPTADA · TELA ILUSTRATIVA</span><span>COMO VOCÊ VERIA A PESSOA</span></div>
-    <div class="cols">
-      <div class="col" id="col1cm">
-        <div class="img"><img src="./data/visao_1cm.png" alt=""></div>
-        <div class="lam">λ = 1 cm</div>
-        <div class="desc">dá para ver a forma do corpo,<br>mas não o rosto</div>
-        <div class="sig"><div class="bar"><b style="width:1.5%"></b></div><span>sinal que chega ≈ 0,04%</span></div>
-      </div>
-      <div class="col" id="col10cm">
-        <div class="img"><img src="./data/visao_10cm.png" alt=""></div>
-        <div class="lam">λ = 10 cm</div>
-        <div class="desc">só manchas de cor<br>no lugar da pessoa</div>
-        <div class="sig"><div class="bar"><b style="width:3%"></b></div><span>sinal que chega ≈ 0,1%</span></div>
-      </div>
-      <div class="col agora" id="col1m">
-        <div class="badge">AGORA</div>
-        <div class="img"><img src="./data/visao_1m.png" alt=""></div>
-        <div class="lam">λ = 1 m</div>
-        <div class="desc">um brilho difuso, sem forma<br>(contraste ampliado)</div>
-        <div class="sig"><div class="bar"><b style="width:72%"></b></div><span>sinal que chega ≈ 4%</span></div>
-      </div>
-    </div>
-    <div class="ft" id="rowFormula"><div class="f">θ<sub style="font-size:.5em">mín</sub> ≈ 1,22 λ / D</div><div class="k">λ maior: o sinal contorna mais a parede,<br>mas a imagem perde detalhes.</div></div>
-    <div class="nota">Simulação: a melhor imagem possível pela abertura de 1 m (D = 1 m). Sinal: % da intensidade que chegaria sem a parede.</div>
-  </div>
 
   <div id="divider" class="ov"></div>
   <div id="splitL" class="ov half"><div class="k">LUZ VISÍVEL</div><div class="v">500 nm</div><div class="s">espalhamento muito pequeno<br>na escala da porta</div></div>
