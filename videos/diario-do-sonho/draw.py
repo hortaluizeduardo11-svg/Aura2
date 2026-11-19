@@ -379,7 +379,7 @@ def hand_text(pen, text, x, y, size, kind="hand", color=None, progress=1.0, alig
 
 def wrap(c, text, kind, size, maxw):
     set_font(c, kind, size)
-    words = text.split()
+    words = [w for w in text.split(" ") if w]   # espaço não separável mantém "22 Hz" junto
     lines, cur = [], ""
     for w_ in words:
         cand = (cur + " " + w_).strip()

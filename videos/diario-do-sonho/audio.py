@@ -294,6 +294,32 @@ def sfx(name, dur=None):
         rip = bp(noise(d), 1500, 7000) * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * 38 * t)))
         sw = bp(noise(d), 300, 2000)
         return (0.10 * rip * np.exp(-t * 3) + 0.14 * sw * np.sin(np.pi * t / d) ** 2)
+    if name == "buzz":
+        d = 0.9
+        t = t_(d)
+        gate = (np.sin(2 * np.pi * 7 * t) > 0).astype(float)
+        x = np.sin(2 * np.pi * 150 * t) * 0.6 + 0.4 * np.sign(np.sin(2 * np.pi * 150 * t))
+        return 0.07 * lp(x * gate, 900) * np.minimum(1, (d - t) * 8)
+    if name == "stamp":
+        d = 0.35
+        t = t_(d)
+        return 0.45 * (np.sin(2 * np.pi * (90 + 80 * np.exp(-t * 30)) * t) * np.exp(-t * 18)
+                       + 0.5 * bp(noise(d), 400, 3000) * np.exp(-t * 40))
+    if name == "splash":
+        d = 0.9
+        t = t_(d)
+        return 0.22 * bp(noise(d), 300, 5000) * np.exp(-t * 5) * np.minimum(1, t * 40)
+    if name == "fall":
+        d = dur or 2.4
+        t = t_(d)
+        f = 900 - 650 * (t / d)
+        x = bp(noise(d), 200, 2500) * 0.7 + 0.3 * np.sin(2 * np.pi * np.cumsum(f) / SR)
+        return 0.14 * x * np.sin(np.pi * t / d) ** 1.5
+    if name == "spin":
+        d = dur or 4
+        t = t_(d)
+        x = bp(noise(d), 1500, 4500) * (0.6 + 0.4 * np.sin(2 * np.pi * 18 * t))
+        return 0.025 * x * np.minimum(1, t * 4) * np.minimum(1, (d - t) * 2)
     raise ValueError(name)
 
 
@@ -311,7 +337,7 @@ def bg_gain_curve(keys, n):
     return curves
 
 
-def build(vdir="build/voice", outdir="build"):
+def build(vdir="build/voice2", outdir="build"):
     tl = timeline.build(vdir)
     n = int((tl["duration"] + 0.5) * SR)
     voice = np.zeros(n)

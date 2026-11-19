@@ -48,7 +48,15 @@ def _hand(pen, x, y, ang, key, hold=None, screen=None, phone_rot=0.0, anchors=No
         c.rotate(-ang + phone_rot)
         pen.shape(rrect(-42, -86, 84, 150, 16), key + "ph", fill=C["phone"], lw=5)
         scr = screen or "idle"
-        pen.fill(rrect(-33, -74, 66, 118, 9), C["blue_l"] if scr != "dark" else C["navy_l"], key + "phs", off=None, wob=0.4)
+        scol = C["yellow"] if scr == "alarm" else (C["blue_l"] if scr != "dark" else C["navy_l"])
+        pen.fill(rrect(-33, -74, 66, 118, 9), scol, key + "phs", off=None, wob=0.4)
+        if scr == "alarm":
+            # despertador tocando: reloginho com tracinhos de vibração
+            pen.stroke(ellipse(0, -18, 19, 19, n=30), key + "alc", lw=4, closed=True)
+            pen.stroke(seg(0, -18, 0, -30, 3), key + "alh1", lw=3.5)
+            pen.stroke(seg(0, -18, 9, -14, 3), key + "alh2", lw=3.5)
+            for sx in (-1, 1):
+                pen.stroke(seg(sx * 26, -44, sx * 32, -52, 3), key + f"alr{sx}", lw=3.5)
         if scr in ("play", "pause"):
             c.set_source_rgba(*C["ink"])
             if scr == "play":

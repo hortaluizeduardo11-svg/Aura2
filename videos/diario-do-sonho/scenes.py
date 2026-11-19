@@ -11,7 +11,7 @@ import re
 import cairo
 import numpy as np
 
-from draw import (C, H, TAU, W, MARGIN_X, Pen, alpha, back_out, bez, catmull, clamp, densify, draw_paper,
+from draw import (C, H, TAU, W, MARGIN_X, Pen, alpha, paper_surface, back_out, bez, catmull, clamp, densify, draw_paper,
                   ease, ease_in, ease_out, ellipse, hand_text, hexc, lerp, lerp2, marker_swash, mix,
                   partial, point_at, prog, rnd, rrect, seg, set_font, text_w, wrap)
 from character import draw_big_hand, draw_doodle, draw_head_only, draw_kid, sleeve
@@ -270,14 +270,26 @@ def shot_A(c, t, final=False):
         draw_big_hand(pen, tipp, ang=0.32, s=1.6, hold="pen", key="handA", sleeve_from=(1450, 1500))
 
 
-# =================================================================== QUARTO DO SONHO
+# =================================================================== QUARTO (real e sonho)
 ROOM_TILT = -0.065
+VOICE_DIR = "build/voice2"
+
+PAL = {
+    "day": dict(dark=False, sky=C["blue_l"], frame=C["ink"], star=C["yellow"], curtain=C["yellow_l"],
+                fold=C["yellow_d"], bed=C["blue"], mattress=C["cream"], blanket=C["blue_l"], blanket_l=C["blue"],
+                pillow=C["white"], floor=hexc("#dcebf6"), floorline=C["ink"], boards=alpha(C["blue_d"], 0.25),
+                poster=C["yellow_l"], poster_ink=C["ink"], stand=C["yellow_l"]),
+    "night": dict(dark=True, sky=C["navy_d"], frame=C["cream"], star=C["cream"], curtain=C["lilac"],
+                  fold=C["lilac_d"], bed=C["lilac_d"], mattress=C["lilac_l"], blanket=C["lilac"], blanket_l=C["lilac_d"],
+                  pillow=C["cream"], floor=C["navy_m"], floorline=C["cream"], boards=alpha(C["lilac"], 0.22),
+                  poster=C["navy_l"], poster_ink=C["cream"], stand=C["navy_l"]),
+}
 
 
-def dream_window(pen, t, x0, y0, w, h, key, curtain=True, slow=1.0):
-    c = pen.c
-    pen.shape(rrect(x0, y0, w, h, 10), key + "win", fill=C["navy_d"], stroke=C["cream"], lw=6)
-    # lua e estrelas
+def dream_window(pen, t, x0, y0, w, h, key, curtain=True, slow=1.0, pal=None, sway=1.0):
+    pal = pal or PAL["night"]
+    pen.shape(rrect(x0, y0, w, h, 10), key + "win", fill=pal["sky"], stroke=pal["frame"], lw=6,
+              op=None if pal["dark"] else cairo.OPERATOR_MULTIPLY)
     mx, my = x0 + w * 0.68, y0 + h * 0.3
     moon = np.vstack([ellipse(mx, my, 38, 38, a0=-2.0, a1=2.0, n=40),
                       ellipse(mx + 18, my - 4, 28, 32, a0=1.8, a1=-1.8, n=40)])
@@ -286,48 +298,47 @@ def dream_window(pen, t, x0, y0, w, h, key, curtain=True, slow=1.0):
         sx = x0 + w * (0.18 + 0.2 * i)
         sy = y0 + h * (0.62 - 0.12 * (i % 2))
         tw = 0.6 + 0.4 * math.sin(t * 2 * slow + i)
-        pen.stroke(seg(sx - 8 * tw, sy, sx + 8 * tw, sy, 3), key + f"s{i}a", color=C["cream"], lw=3)
-        pen.stroke(seg(sx, sy - 8 * tw, sx, sy + 8 * tw, 3), key + f"s{i}b", color=C["cream"], lw=3)
-    pen.stroke(seg(x0 + w / 2, y0, x0 + w / 2, y0 + h, 6), key + "bar1", color=C["cream"], lw=5)
-    pen.stroke(seg(x0, y0 + h * 0.5, x0 + w, y0 + h * 0.5, 6), key + "bar2", color=C["cream"], lw=5)
+        pen.stroke(seg(sx - 8 * tw, sy, sx + 8 * tw, sy, 3), key + f"s{i}a", color=pal["star"], lw=3)
+        pen.stroke(seg(sx, sy - 8 * tw, sx, sy + 8 * tw, 3), key + f"s{i}b", color=pal["star"], lw=3)
+    pen.stroke(seg(x0 + w / 2, y0, x0 + w / 2, y0 + h, 6), key + "bar1", color=pal["frame"], lw=5)
+    pen.stroke(seg(x0, y0 + h * 0.5, x0 + w, y0 + h * 0.5, 6), key + "bar2", color=pal["frame"], lw=5)
     if curtain:
         rod_y = y0 - 26
-        pen.stroke(seg(x0 - 70, rod_y, x0 + w + 40, rod_y, 6), key + "rod", color=C["cream"], lw=7)
+        pen.stroke(seg(x0 - 70, rod_y, x0 + w + 40, rod_y, 6), key + "rod", color=pal["frame"], lw=7)
         top = [(x0 - 60 + i * 26, rod_y + 4) for i in range(7)]
         L = h + 90
         left, right = [], []
         for j in range(18):
             f = j / 17
             yy = rod_y + 4 + L * f
-            sway = (34 * math.sin(t * 1.1 * slow + f * 2.6) + 22 * math.sin(t * 0.7 * slow + 1.3)) * f ** 1.4
-            lift = -40 * f ** 2 * (0.5 + 0.5 * math.sin(t * 0.8 * slow))
-            left.append((x0 - 60 + sway + 10 * math.sin(f * 7 + t * slow), yy + lift * 0.3))
-            right.append((x0 + 96 + sway * 1.3 + 18 * math.sin(f * 5 + t * 1.3 * slow), yy + lift))
+            sw = (34 * math.sin(t * 1.1 * slow + f * 2.6) + 22 * math.sin(t * 0.7 * slow + 1.3)) * f ** 1.4 * sway
+            lift = -40 * f ** 2 * (0.5 + 0.5 * math.sin(t * 0.8 * slow)) * sway
+            left.append((x0 - 60 + sw + 10 * math.sin(f * 7 + t * slow) * sway, yy + lift * 0.3))
+            right.append((x0 + 96 + sw * 1.3 + 18 * math.sin(f * 5 + t * 1.3 * slow) * sway, yy + lift))
         poly = np.vstack([np.array(top), catmull(right, step=10), catmull(left[::-1], step=10)])
-        pen.shape(poly, key + "curt", fill=C["lilac"], stroke=C["ink"], lw=5)
+        pen.shape(poly, key + "curt", fill=pal["curtain"], stroke=C["ink"], lw=5)
         for q in range(3):
             fx = 0.25 + 0.25 * q
             pts = [lerp2(l, r, fx) for l, r in zip(left[2:], right[2:])]
-            pen.stroke(catmull(pts, step=12), key + f"fold{q}", color=alpha(C["lilac_d"], 0.9), lw=4)
+            pen.stroke(catmull(pts, step=12), key + f"fold{q}", color=alpha(pal["fold"], 0.9), lw=4)
 
 
-def bed_back(pen, t):
-    # cabeceira
-    pen.shape(rrect(150, 840, 96, 420, 24), "headb", fill=C["lilac_d"], stroke=C["ink"], lw=5.5)
-    pen.shape(rrect(150, 1150, 830, 70, 16), "frame", fill=C["lilac_d"], stroke=C["ink"], lw=5.5)
-    pen.shape(rrect(220, 1218, 26, 50, 6), "leg1", fill=C["lilac_d"], stroke=C["ink"], lw=4)
-    pen.shape(rrect(930, 1218, 26, 50, 6), "leg2", fill=C["lilac_d"], stroke=C["ink"], lw=4)
-    pen.shape(rrect(240, 1078, 740, 80, 26), "mattress", fill=C["lilac_l"], stroke=C["ink"], lw=5)
+def bed_back(pen, t, pal):
+    pen.shape(rrect(150, 840, 96, 420, 24), "headb", fill=pal["bed"], stroke=C["ink"], lw=5.5)
+    pen.shape(rrect(150, 1150, 830, 70, 16), "frame", fill=pal["bed"], stroke=C["ink"], lw=5.5)
+    pen.shape(rrect(220, 1218, 26, 50, 6), "leg1", fill=pal["bed"], stroke=C["ink"], lw=4)
+    pen.shape(rrect(930, 1218, 26, 50, 6), "leg2", fill=pal["bed"], stroke=C["ink"], lw=4)
+    pen.shape(rrect(240, 1078, 740, 80, 26), "mattress", fill=pal["mattress"], stroke=C["ink"], lw=5)
     pen.shape(catmull([(250, 1000), (380, 985), (420, 1040), (380, 1085), (260, 1088), (232, 1040)], closed=True, step=6),
-              "pillow", fill=C["cream"], stroke=C["ink"], lw=5)
+              "pillow", fill=pal["pillow"], stroke=C["ink"], lw=5)
 
 
-def bed_front(pen, t):
+def bed_front(pen, t, pal):
     edge = [(380, 1060), (500, 1048), (640, 1066), (780, 1050), (930, 1062), (1000, 1070)]
     poly = np.vstack([catmull(edge, step=10), np.array([(1000, 1210), (360, 1210)])])
-    pen.shape(poly, "blanket", fill=C["lilac"], stroke=C["ink"], lw=5.5)
+    pen.shape(poly, "blanket", fill=pal["blanket"], stroke=C["ink"], lw=5.5)
     for i, xx in enumerate([480, 620, 770, 900]):
-        pen.stroke(seg(xx, 1070, xx - 20, 1200, 6), f"bkt{i}", color=alpha(C["lilac_d"], 1), lw=5)
+        pen.stroke(seg(xx, 1070, xx - 20, 1200, 6), f"bkt{i}", color=alpha(pal["blanket_l"], 1), lw=5)
     pen.stroke(catmull([(360, 1206), (480, 1196), (620, 1212), (760, 1196), (1000, 1206)], step=10), "bkhem",
                color=C["ink"], lw=5)
 
@@ -341,29 +352,128 @@ def star(pen, x, y, r, col, key):
     pen.shape(densify(np.array(pts), 6, closed=True), key, fill=col, stroke=C["ink"], lw=4.5)
 
 
-def floor(pen, y=1262):
-    c = pen.c
-    pen.fill([(-200, y), (1300, y), (1300, 2100), (-200, 2100)], C["navy_m"], "floor", off=None, wob=0)
+def floor(pen, y=1262, pal=None):
+    pal = pal or PAL["night"]
+    pen.fill([(-200, y), (1300, y), (1300, 2100), (-200, 2100)], pal["floor"], "floor", off=None, wob=0,
+             op=None if pal["dark"] else cairo.OPERATOR_MULTIPLY)
     for i in range(9):
         xx = -200 + i * 190
-        pen.stroke(seg(xx, y, xx - 180, 2100, 10), f"fb{i}", color=alpha(C["lilac"], 0.22), lw=3)
-    pen.stroke(seg(-200, y, 1300, y, 8), "floorl", color=C["cream"], lw=4)
+        pen.stroke(seg(xx, y, xx - 180, 2100, 10), f"fb{i}", color=pal["boards"], lw=3)
+    pen.stroke(seg(-200, y, 1300, y, 8), "floorl", color=pal["floorline"], lw=4)
+
+
+def spin_top(pen, x, y, s, t, mode="spin", key="top"):
+    """Pião (o 'totem' do narrador). mode: 'lying' parado de lado, 'spin' girando."""
+    c = pen.c
+    c.save()
+    c.translate(x, y)
+    c.scale(s, s)
+    if mode == "lying":
+        c.translate(-6, -16)
+        c.rotate(1.3)
+    body = catmull([(0, 0), (22, -22), (36, -40), (28, -52), (0, -56), (-28, -52), (-36, -40), (-22, -22)],
+                   closed=True, step=4)
+    pen.shape(body, key + "b", fill=C["yellow"], lw=4.5)
+    c.save()
+    pen._path(body, True)
+    c.clip()
+    ph = (t * 3.2) % 1.0 if mode == "spin" else 0.3
+    for k in range(3):
+        xx = -40 + ((ph + k / 3) % 1.0) * 80
+        c.set_source_rgba(*alpha(C["lilac_d"], 0.9))
+        c.rectangle(xx - 5, -60, 10, 64)
+        c.fill()
+    c.restore()
+    pen.stroke(body, key + "bo", lw=4.5, closed=True)
+    pen.shape(rrect(-6, -78, 12, 26, 5), key + "st", fill=C["lilac_d"], lw=4)
+    if mode == "spin":
+        for i, a0 in enumerate((0.2, 3.3)):
+            a0 += t * 9
+            pen.stroke(ellipse(0, -40, 50, 11, a0=a0, a1=a0 + 1.6, n=16), key + f"mv{i}",
+                       color=alpha(C["cream"] if pen.dark else C["ink"], 0.6), lw=3.5)
+    c.restore()
+
+
+def laptop(pen, t, x=780, y=1052, key="lap"):
+    c = pen.c
+    pen.shape([(x - 104, y), (x + 104, y), (x + 116, y + 16), (x - 116, y + 16)], key + "b", fill=C["gray"], lw=4.5)
+    scr = [(x - 96, y - 2), (x + 96, y - 2), (x + 88, y - 122), (x - 88, y - 122)]
+    pen.shape(scr, key + "s", fill=C["phone"], lw=4.5)
+    pen.fill([(x - 84, y - 12), (x + 84, y - 12), (x + 78, y - 112), (x - 78, y - 112)], C["navy"], key + "si", off=None)
+    spin_top(pen, x - 40, y - 30, 0.8, t, "spin", key=key + "tp")
+    hand_text(pen, "A Origem", x + 28, y - 52, 28, kind="note", color=C["cream"], align="center", key=key + "tx")
+
+
+def nightstand(pen, pal):
+    pen.shape(rrect(880, 1000, 150, 262, 10), "stand", fill=pal["stand"], stroke=C["ink"], lw=5,
+              op=None if pal["dark"] else cairo.OPERATOR_MULTIPLY)
+    pen.stroke(seg(880, 1110, 1030, 1110, 8), "stand1", lw=4)
+    pen.dot(955, 1060, 7, C["ink"])
+
+
+def diary_on_bed(pen, pal, key="dbed"):
+    pen.shape([(470, 1052), (580, 1046), (586, 1066), (466, 1072)], key, fill=C["navy"], stroke=C["ink"], lw=4)
+    pen.stroke(seg(476, 1060, 578, 1055, 6), key + "p", color=C["cream"], lw=3)
+
+
+def stamp(pen, text, x, y, k, key, col=None, size=80, out=1.0):
+    if k <= 0 or out <= 0:
+        return
+    c = pen.c
+    col = col or C["red"]
+    sc = lerp(1.9, 1.0, ease_out(clamp(k * 3)))
+    a = clamp(k * 4) * out
+    set_font(c, "big", size)
+    w = c.text_extents(text).x_advance
+    c.save()
+    c.translate(x, y)
+    c.rotate(-0.12)
+    c.scale(sc, sc)
+    c.push_group()
+    pen.stroke(rrect(-w / 2 - 26, -size * 0.92, w + 52, size * 1.22, 16), key, color=col, lw=8, closed=True)
+    c.set_source_rgba(*col)
+    set_font(c, "big", size)
+    c.move_to(-w / 2, 0)
+    c.show_text(text)
+    c.pop_group_to_source()
+    c.paint_with_alpha(a * 0.92)
+    c.restore()
 
 
 KID_B = (560, 930, 0.95)
 
 
+def kid_pose_R(t):
+    """Quarto real: vendo o filme até dormir; o despertador toca."""
+    s0, s1 = tv("sleep")
+    sl = ease(prog(t, s0, s1))
+    p = dict(look=(0.85, 0.35), smile=0.3, blink=max(sl, blink(t, 0.4, 2.4) * (1 - sl)), hand_l=(-118, 100), hold_l="pen",
+             hand_r=(112, 108), hold_r="phone", phone_screen="dark", phone_rot=0.15, tilt=0.16 * sl,
+             mouth_open=talk(t) * 0.0, brow_raise=-3 * sl)
+    if t >= tv("alarm") - 0.05:
+        p["phone_screen"] = "alarm"
+        p["phone_rot"] = 0.15 + 0.08 * math.sin(t * 70) * (1 - prog(t, tv("m1") + 0.9, tv("m1") + 1.2))
+    return p
+
+
 def kid_pose_B(t):
-    """Poses do plano B (antes de olhar embaixo da cama)."""
+    """Nível 1: o despertador grave."""
     lift_t = tv("cup_lift")
     n = tv("m1_slow_notes")
-    p = dict(look=(0.25, 0.35), smile=0.3, blink=blink(t, 0.7, 2.6), hand_l=(-118, 100), hold_l="pen",
-             hand_r=(112, 108), hold_r="phone", phone_screen="play", phone_rot=0.15)
+    w1 = tv("wipe", 1)
+    if t < w1 + 0.15:
+        p = kid_pose_R(t)
+        p["phone_screen"] = "alarm"
+        p["phone_rot"] = 0.15
+        return p
+    op = ease(prog(t, w1 + 0.15, w1 + 0.45))
+    p = dict(look=(0.0, -0.2), smile=0.1, blink=1 - op, hand_l=(-118, 100), hold_l="pen",
+             hand_r=(112, 108), hold_r="phone", phone_screen="alarm", phone_rot=0.15, tilt=0.16 * (1 - op),
+             brow_raise=6 * op)
     if t >= lift_t:
         a = back_out(prog(t, lift_t, lift_t + 0.18))
         p.update(cup_lift=a, eye_wide=clamp(a), brow_raise=14 * clamp(a), mouth_o=0.7 * (1 - prog(t, lift_t + 0.5, lift_t + 0.8)),
-                 look=(-0.7, -0.3), smile=0.0, blink=0.0, hold_l=None)
-        # olhos esticados, devagar (sonho)
+                 look=(-0.7, -0.3), smile=0.0, blink=0.0, hold_l=None, tilt=0.0)
         lk = ease(prog(t, n[1], n[1] + 0.9))
         p["look"] = lerp2((-0.7, -0.3), (0.9, -0.25), lk)
         lk2 = ease(prog(t, n[2] + 0.2, n[2] + 1.0))
@@ -379,8 +489,8 @@ def kid_pose_B(t):
 
 
 def pen_fall(t):
-    """Caneta caindo em câmera lenta: sai da mão no 1º grave e só toca o
-    chão quando a 3ª nota acaba."""
+    """Caneta em câmera lenta: sai da mão no 1º grave e só toca o chão
+    quando a 3ª nota acaba."""
     t0 = tv("cup_lift") + 0.05
     t1 = tv("m1_slow_notes", 2) + 1.1
     k = prog(t, t0, t1)
@@ -404,41 +514,103 @@ def draw_pen_obj(pen, x, y, rot, key="penobj"):
     c.restore()
 
 
-def shot_room(c, t, phase="B"):
-    pen = Pen(c, t, boil_rate=6, dark=True)
-    draw_paper(pen, dark=True)
-    tilt_begin(c, ROOM_TILT + 0.01 * math.sin(t * 0.6))
+def bedroom(c, t, pal_name, pose, tilt=0.0, shadows=False, extras=None, kid=True, zoom=1.1):
+    """Desenha o quarto (real ou sonho) com o narrador sentado na cama.
+    Devolve (âncoras, pontos_do_fio)."""
+    pal = PAL[pal_name]
+    pen = Pen(c, t, boil_rate=6 if pal["dark"] else 10, dark=pal["dark"])
+    extras = extras or {}
+    draw_paper(pen, dark=pal["dark"])
+    tilt_begin(c, tilt)
     c.translate(560, 980)
-    c.scale(1.1, 1.1)
+    c.scale(zoom, zoom)
     c.translate(-560, -940)
-    floor(pen)
-    # pôster na parede
-    pen.shape(rrect(250, 420, 190, 250, 8), "poster", fill=C["navy_l"], stroke=C["cream"], lw=5)
+    floor(pen, pal=pal)
+    pen.shape(rrect(250, 420, 190, 250, 8), "poster", fill=pal["poster"], stroke=pal["poster_ink"], lw=5,
+              op=None if pal["dark"] else cairo.OPERATOR_MULTIPLY)
     star(pen, 345, 545, 52, C["yellow"], "pstar")
-    dream_window(pen, t, 650, 420, 250, 320, "wB", slow=0.6)
+    dream_window(pen, t, 650, 420, 250, 320, "wB", slow=0.6, pal=pal, sway=1.0 if pal["dark"] else 0.15)
+    nightstand(pen, pal)
+    top_mode = extras.get("top", "lying")
+    if top_mode:
+        spin_top(pen, 950, 1000, 0.95, t, top_mode, key="topN")
     kx, ky, ks = KID_B
-    if phase == "B":
+    if shadows:
+        long_shadow(pen, (kx, 1150), lambda: draw_kid(pen, kx, ky, ks, pose, key="kidsh"), shear=0.7, sy=1.25)
+        long_shadow(pen, (200, 1260), lambda: pen.fill(rrect(150, 840, 96, 420, 24), C["navy_d"], "hbs"), shear=0.7, sy=1.2)
+    bed_back(pen, t, pal)
+    anchors = draw_kid(pen, kx, ky, ks, pose, key="kidB") if kid else {}
+    bed_front(pen, t, pal)
+    laptop(pen, t)
+    if extras.get("diary"):
+        diary_on_bed(pen, pal)
+    if extras.get("pen_fall") is not None:
+        x, y, r = extras["pen_fall"]
+        draw_pen_obj(pen, x, y, r)
+    cp = None
+    if kid:
+        side = extras.get("cord_side", "r")
+        cp = sag(anchors["cup_" + side], anchors["phone_" + side], amount=90)
+        cord(pen, cp, "cordB")
+    for fn in extras.get("draw_in_room", []):
+        fn(pen)
+    c.restore()
+    return anchors, cp, pen
+
+
+def zzz(pen, t, t0, key="zzz"):
+    k = prog(t, t0, t0 + 0.4)
+    if k <= 0:
+        return
+    for i in range(3):
+        ph = ((t - t0) * 0.6 + i / 3) % 1.0
+        hand_text(pen, "z", 700 + 60 * ph + 10 * i, 640 - 140 * ph - 20 * i, (34 + 14 * i) * k, color=alpha(C["blue_d"], 1 - ph),
+                  key=f"{key}{i}")
+
+
+def alarm_notes(pen, t, notes, key, col, sx=1.0, pos=None, life=1.4):
+    c = pen.c
+    pos = pos or [(760, 860), (820, 800), (880, 850)]
+    for i, nt in enumerate(notes):
+        a = prog(t, nt, nt + 0.2)
+        if a <= 0:
+            continue
+        fade = 1 - prog(t, nt + life - 0.4, nt + life)
+        if fade <= 0:
+            continue
+        x, y = pos[i]
+        c.save()
+        c.push_group()
+        note(pen, x, y - 30 * ease_out(prog(t, nt, nt + 0.8)), 1.1 * back_out(a), col, sx=sx, key=f"{key}{i}")
+        c.pop_group_to_source()
+        c.paint_with_alpha(fade)
+        c.restore()
+
+
+def shot_RB(c, t):
+    """Quarto real (dormindo) -> o quarto afunda no sonho -> nível 1."""
+    w0, w1 = tv("wipe")
+    kw = ease(prog(t, w0, w1))
+    if kw < 1:
+        pose = kid_pose_R(t) if t < w0 else kid_pose_B(t)
+        _, _, pen = bedroom(c, t, "day", pose)
+        zzz(pen, t, tv("sleep", 1) - 0.2)
+        alarm_notes(pen, t, tv("m1_notes"), "nR", C["yellow"])
+    if kw > 0:
+        cut = lerp(H + 150, -200, kw)
+        c.save()
+        if kw < 1:
+            pts = [(x, cut + 30 * math.sin(x / 90 + t * 3)) for x in range(-20, W + 60, 40)]
+            pts = np.array(pts + [(W + 60, H + 400), (-20, H + 400)], float)
+            c.move_to(*pts[0])
+            for p in pts[1:]:
+                c.line_to(*p)
+            c.close_path()
+            c.clip()
         pose = kid_pose_B(t)
-    else:
-        pose = kid_pose_D(t)
-    # sombras longas (luz baixa da lua)
-    long_shadow(pen, (kx, 1150), lambda: draw_kid(pen, kx, ky, ks, pose, key="kidsh"), shear=0.7, sy=1.25)
-    long_shadow(pen, (200, 1260), lambda: pen.fill(rrect(150, 840, 96, 420, 24), C["navy_d"], "hbs"), shear=0.7, sy=1.2)
-    bed_back(pen, t)
-    anchors = draw_kid(pen, kx, ky, ks, pose, key="kidB")
-    bed_front(pen, t)
-    # caneta (cai devagar no sonho)
-    if phase == "B":
-        if t >= tv("cup_lift") + 0.05:
-            x, y, r = pen_fall(t)
-            draw_pen_obj(pen, x, y, r)
-    else:
-        draw_pen_obj(pen, 410, 1300, 2.7)
-    # fio do fone: concha direita -> celular
-    cp = sag(anchors["cup_r"], anchors["phone_r"], amount=90)
-    cord(pen, cp, "cordB")
-    # notas graves e esticadas
-    if phase == "B":
+        an, cp, pen = bedroom(c, t, "night", pose, tilt=ROOM_TILT * kw + 0.01 * math.sin(t * 0.6) * kw, shadows=kw >= 1,
+                              extras={"pen_fall": pen_fall(t) if t >= tv("cup_lift") + 0.05 else None})
+        # notas graves e esticadas
         for i, nt in enumerate(tv("m1_slow_notes")):
             a = prog(t, nt, nt + 0.6)
             if a <= 0:
@@ -452,30 +624,32 @@ def shot_room(c, t, phase="B"):
             c.pop_group_to_source()
             c.paint_with_alpha(clamp(fade))
             c.restore()
-    c.restore()
-    if phase == "D":
-        draw_D_notes(pen, t)
-    return anchors, cp
+        c.restore()
 
 
 def kid_pose_D(t):
     tc = tv("touch")
     p = dict(look=(0, 0.1), smile=0.0, cup_lift=1.0, brow_raise=10, eye_wide=0.6, blink=blink(t, 0.2, 2.8),
-             hand_l=(-118, 100), hand_r=(112, 108), hold_r="phone", phone_screen="play", phone_rot=0.15)
+             hand_l=(-118, 100), hand_r=(112, 108), hold_r="phone", phone_screen="alarm", phone_rot=0.15)
     k = ease(prog(t, tc, tc + 0.3))
     if k > 0:
         p["hand_l"] = lerp2((-118, 100), (-150, -168), k)
         p["front_l"] = k > 0.35
         p["cup_lift"] = 1 - ease(prog(t, tc + 0.18, tc + 0.38))
-    l2 = tv("L2")
-    era = l2 + TL_word_time("L2", 1)
-    if t >= l2:
+    n3 = tv("N3")
+    era = n3 + TL_word_time("N3", 1)
+    if t >= n3:
         p.update(brow_angle=-0.32, brow_raise=0, eye_wide=0.0, look=(-0.3, 0.2))
     if t >= era - 0.1:
         e = ease(prog(t, era - 0.1, era + 0.2))
         p.update(brow_angle=lerp(-0.32, 0.22, e), brow_raise=16 * e, eye_wide=0.9 * e, look=lerp2((-0.3, 0.2), (-0.5, -0.7), e))
         p["hand_l"] = lerp2((-150, -168), (-118, 100), ease(prog(t, era + 0.9, era + 1.3)))
         p["front_l"] = t < era + 1.1
+    n4 = tv("N4")
+    if t >= n4:
+        e = ease(prog(t, n4, n4 + 0.4))
+        p.update(look=lerp2(p["look"], (0.0, 0.0), e), smile=lerp(0.0, 0.55, e), brow_angle=lerp(p.get("brow_angle", 0), 0.0, e),
+                 brow_raise=lerp(p.get("brow_raise", 0), 10, e), eye_wide=0.5)
     p["mouth_open"] = talk(t)
     return p
 
@@ -485,30 +659,375 @@ VOICE_WORDS = {}
 
 def TL_word_time(lid, idx):
     if lid not in VOICE_WORDS:
-        with open(f"build/voice/{lid}.json") as f:
+        with open(f"{VOICE_DIR}/{lid}.json") as f:
             VOICE_WORDS[lid] = json.load(f)["words"]
     w = VOICE_WORDS[lid]
     return w[min(idx, len(w) - 1)]["t"]
 
 
 def draw_D_notes(pen, t):
-    era = tv("L2") + TL_word_time("L2", 1)
-    k = prog(t, era + 0.1, era + 1.0)
+    era = tv("N3") + TL_word_time("N3", 4)
+    k = prog(t, era, era + 0.8)
     if k > 0:
-        w, _ = hand_text(pen, "mesma música?", 205, 300, 74, progress=k, key="mm")
-        circle_mark(pen, 205 + w / 2, 276, w / 2 + 40, 56, prog(t, era + 1.0, era + 1.5), C["lilac"], "mmc", lw=6)
-    k2 = prog(t, tv("L2") + 0.2, tv("L2") + 0.6)
+        w, _ = hand_text(pen, "despertador?!", 205, 300, 74, progress=k, key="mm")
+        circle_mark(pen, 205 + w / 2, 276, w / 2 + 40, 56, prog(t, era + 0.8, era + 1.3), C["lilac"], "mmc", lw=6)
+    k2 = prog(t, tv("N3") + 0.2, tv("N3") + 0.6)
     if k2 > 0:
         for i, (x, y, s) in enumerate([(880, 520, 80), (930, 610, 56)]):
             hand_text(pen, "?", x, y, s * back_out(k2), color=C["lilac"], key=f"qD{i}")
-
-
-def shot_B(c, t):
-    shot_room(c, t, "B")
+    stamp(pen, "NÍVEL 1", 790, 410, prog(t, tv("stamp1"), tv("stamp1") + 0.4), "st1")
 
 
 def shot_D(c, t):
-    return shot_room(c, t, "D")
+    an, cp, pen = bedroom(c, t, "night", kid_pose_D(t), tilt=ROOM_TILT + 0.01 * math.sin(t * 0.6), shadows=True,
+                          extras={"pen_fall": (410, 1300, 2.7)})
+    draw_D_notes(pen, t)
+    return an, cp
+
+
+CORD_D_CACHE = {}
+
+
+def render_D_with_cord(t):
+    s, c = new_surface()
+    _, cp = shot_D(c, t)
+    CORD_D_CACHE["cord"] = cp
+    return s, cp
+
+
+def shot_D_nocord(c, t):
+    shot_D(c, t)
+
+
+# =================================================================== CENA 3: níveis do filme
+RAIL_Y = 840
+STACK_RAIL = 640
+BANDS = [(660, 895, "sonho 1"), (910, 1140, "sonho 2"), (1155, 1378, "sonho 3")]
+CLOCK_RATE = [0.07, 0.3, 1.2, 4.0]      # voltas por segundo: cada nível corre mais rápido
+
+
+def draw_train(pen, t, xoff, key="tr", rail_y=RAIL_Y, scale=0.92):
+    c = pen.c
+    bob = 2.5 * math.sin(t * 14)
+    c.save()
+    c.translate(xoff, bob)
+    c.translate(540, rail_y)
+    c.scale(scale, scale)
+    c.translate(-540, -RAIL_Y)
+    pen.shape(rrect(180, 486, 720, 300, 40), key + "body", fill=C["blue"], lw=6, op=cairo.OPERATOR_MULTIPLY)
+    pen.shape(rrect(170, 470, 740, 46, 22), key + "roof", fill=C["blue_d"], lw=5)
+    pen.fill(rrect(186, 712, 708, 30, 6), C["yellow"], key + "stripe", off=None, op=cairo.OPERATOR_MULTIPLY)
+    pen.stroke(seg(186, 712, 894, 712, 8), key + "sl1", lw=4)
+    pen.stroke(seg(186, 742, 894, 742, 8), key + "sl2", lw=4)
+    wx, wy, ww, wh = 270, 540, 540, 160
+    pen.fill(rrect(wx, wy, ww, wh, 22), C["cream"], key + "wint", off=None)
+    c.save()
+    pen._path(rrect(wx, wy, ww, wh, 22), True)
+    c.clip()
+    for sx in (300, 560):
+        pen.shape(rrect(sx, 600, 120, 140, 18), key + f"seat{sx}", fill=C["yellow_l"], lw=4)
+    draw_doodle(pen, 380, 606, 0.7, mood="sleep", phones=tv("phones_on") <= t, key=key + "pas", tilt=0.18)
+    pp = tv("play_press")
+    up = ease(prog(t, pp - 0.6, pp - 0.2)) * (1 - ease(prog(t, pp + 1.2, pp + 1.6)))
+    draw_doodle(pen, 640, 600, 0.7, mood="awake", phones=False, look=(-1, 0), key=key + "tm", arm_up=0.8 * up,
+                body_col=C["yellow"], mouth=0.0)
+    if up > 0.05:
+        px, py = 640 - 46 - 4, 600 + 104 - up * 119 + 40
+        pen.shape(rrect(px - 20, py - 34, 40, 64, 8), key + "tph", fill=C["phone"], lw=3.5)
+        tri = [(px - 7, py - 12), (px + 10, py - 2), (px - 7, py + 8)]
+        pen.fill(tri, C["yellow"] if t < pp else C["green"], key + "tpl", off=None)
+    c.restore()
+    pen.stroke(rrect(wx, wy, ww, wh, 22), key + "wfr", closed=True, lw=6)
+    for i, wxp in enumerate([270, 390, 690, 810]):
+        rot = -t * 9
+        pen.shape(ellipse(wxp, 800, 36, 36, n=40), key + f"wh{i}", fill=C["phone"], lw=5)
+        pen.fill(ellipse(wxp, 800, 12, 12), C["gray"], key + f"hub{i}", off=None)
+        pen.stroke(seg(wxp + 26 * math.cos(rot), 800 + 26 * math.sin(rot), wxp - 26 * math.cos(rot),
+                       800 - 26 * math.sin(rot), 4), key + f"sp{i}", color=C["gray"], lw=4, wob=0)
+    c.restore()
+
+
+def train_pt(x, y, scale=0.85, rail_y=STACK_RAIL):
+    return 540 + (x - 540) * scale, rail_y + (y - RAIL_Y) * scale
+
+
+def rail(pen, t, y=RAIL_Y, x0=-30, x1=1110, scroll=0.0, sleepers=1.0, lw=10, key="rail"):
+    if sleepers > 0:
+        sp = 72
+        off = scroll % sp
+        x = x0 - off
+        i = 0
+        while x < x1:
+            h = 16 * sleepers
+            pen.shape(rrect(x - 20, y + 6, 40, h, 4), f"{key}sl{i}", fill=C["wood"], lw=3.5, wob=0.4)
+            x += sp
+            i += 1
+    pen.tube(seg(x0, y, x1, y, 10), key, lw, C["phone"], lw=3)
+
+
+def strip_poly(y0, y1, key):
+    top = [(x, y0 + 5 * (rnd(key + "t", i % 8) - 0.5)) for i, x in enumerate(range(160, 1061, 30))]
+    bot = [(x, y1 + 5 * (rnd(key + "b", i % 8) - 0.5)) for i, x in enumerate(range(1060, 159, -30))]
+    return np.array(top + bot, float)
+
+
+def band_scene(pen, t, idx, y0, y1):
+    """Conteúdo de cada nível (rabiscos genéricos inspirados nos cenários do filme)."""
+    c = pen.c
+    cy = (y0 + y1) / 2
+    if idx == 0:   # sonho 1: cidade com chuva, ponte, rio e a van
+        for i in range(6):
+            bx = 330 + i * 110
+            bh = 70 + 40 * rnd("bld", i)
+            pen.shape(rrect(bx, y1 - 120 - bh, 80, bh + 40, 4), f"bld{i}", fill=C["navy_l"], stroke=C["lilac"], lw=3)
+            for j in range(3):
+                pen.fill(rrect(bx + 14 + (j % 2) * 30, y1 - 100 - bh + j * 26, 16, 14, 2), alpha(C["yellow"], 0.8),
+                         f"bw{i}{j}", off=None, wob=0)
+        pen.fill([(160, y1 - 52), (1060, y1 - 52), (1060, y1 + 10), (160, y1 + 10)], C["blue_d"], "river", off=None, wob=0)
+        for i in range(5):
+            xx = 240 + i * 170 + 20 * math.sin(t + i)
+            pen.stroke(bez((xx, y1 - 30), (xx + 20, y1 - 38), (xx + 40, y1 - 22), (xx + 60, y1 - 30)), f"rw{i}",
+                       color=alpha(C["cream"], 0.7), lw=3)
+        deck = y1 - 96
+        pen.stroke(seg(300, deck, 960, deck, 8), "deck", color=C["cream"], lw=7)
+        pen.stroke(bez((360, deck + 4), (500, deck + 60), (760, deck + 60), (900, deck + 4)), "arch", color=C["cream"], lw=5)
+        for xx in (420, 540, 660, 780):
+            yy = deck + 4 + 50 * math.sin(math.pi * (xx - 360) / 540) * 0.9
+            pen.stroke(seg(xx, deck, xx, yy, 6), f"pil{xx}", color=C["cream"], lw=4)
+        van(pen, t, deck)
+        # chuva
+        for i in range(26):
+            rx = 170 + (i * 37 + t * 260) % 890
+            ry = y0 + ((i * 53 + t * 420) % (y1 - y0))
+            pen.stroke(seg(rx, ry, rx - 8, ry + 22, 6), f"rain{i}", color=alpha(C["lilac_l"], 0.5), lw=2.5, wob=0)
+    elif idx == 1:  # sonho 2: corredor de hotel
+        vp = (650, cy - 4 + 0)
+        c.save()
+        c.translate(*vp)
+        c.rotate(0.12 * math.sin(t * 0.7))
+        c.translate(-vp[0], -vp[1])
+        ox0, ox1, oy0, oy1 = 300, 1000, y0 + 14, y1 - 14
+        ix0, ix1, iy0, iy1 = vp[0] - 50, vp[0] + 50, vp[1] - 34, vp[1] + 34
+        for a, b in [((ox0, oy0), (ix0, iy0)), ((ox1, oy0), (ix1, iy0)), ((ox0, oy1), (ix0, iy1)), ((ox1, oy1), (ix1, iy1))]:
+            pen.stroke(seg(*a, *b, 8), f"cor{a}", color=C["lilac"], lw=4)
+        pen.shape(rrect(ix0, iy0, ix1 - ix0, iy1 - iy0, 4), "corend", fill=C["navy_d"], stroke=C["lilac"], lw=4)
+        for k, f in enumerate((0.25, 0.55)):
+            for side in (-1, 1):
+                xa = lerp(ox0 if side < 0 else ox1, ix0 if side < 0 else ix1, f)
+                xb = lerp(ox0 if side < 0 else ox1, ix0 if side < 0 else ix1, f + 0.16)
+                ya0, ya1 = lerp(oy0, iy0, f) + 18, lerp(oy1, iy1, f)
+                yb0, yb1 = lerp(oy0, iy0, f + 0.16) + 14, lerp(oy1, iy1, f + 0.16)
+                pen.shape([(xa, ya0), (xb, yb0), (xb, yb1), (xa, ya1)], f"door{k}{side}", fill=C["lilac_d"],
+                          stroke=C["ink"], lw=3.5)
+        pen.shape(ellipse(vp[0], oy0 + 30, 20, 9), "lamp", fill=C["yellow"], stroke=C["ink"], lw=3)
+        c.restore()
+    else:          # sonho 3: montanhas de neve
+        for i, (mx, mh, mw) in enumerate([(380, 150, 170), (600, 190, 200), (830, 140, 160)]):
+            base = y1 - 10
+            pen.shape([(mx - mw, base), (mx, base - mh), (mx + mw, base)], f"mt{i}", fill=C["cream"], stroke=C["ink"], lw=4)
+            pen.fill([(mx, base - mh), (mx + mw, base), (mx + mw * 0.2, base)], alpha(C["lilac"], 0.6), f"mts{i}", off=None)
+        pen.shape(rrect(570, y1 - 230, 70, 46, 4), "fort", fill=C["navy_l"], stroke=C["cream"], lw=3)
+        for i in range(30):
+            sx = 170 + (i * 61) % 880
+            sy = y0 + ((i * 37 + t * 40) % (y1 - y0))
+            pen.dot(sx + 6 * math.sin(t + i), sy, 3.2, alpha(C["cream"], 0.85))
+
+
+def van(pen, t, deck):
+    """A van no nível 1; no fim da cena ela cai no rio em câmera lenta."""
+    c = pen.c
+    f0, f1 = tv("van_fall")
+    k = prog(t, f0, f1)
+    x = lerp(560, 800, ease(clamp(k / 0.35)))
+    y = deck - 2
+    rot = 0.0
+    if k > 0.35:
+        q = (k - 0.35) / 0.65
+        rot = 1.1 * ease(q)
+        x += 70 * q
+        y += 160 * q ** 1.6
+    c.save()
+    c.translate(x, y)
+    c.rotate(rot)
+    pen.shape(rrect(-66, -62, 132, 50, 12), "vanb", fill=C["cream"], stroke=C["ink"], lw=4.5)
+    pen.fill(rrect(-52, -54, 34, 20, 4), C["lilac"], "vanw1", off=None)
+    pen.fill(rrect(-10, -54, 34, 20, 4), C["lilac"], "vanw2", off=None)
+    pen.shape(ellipse(-38, -10, 13, 13), "vanwh1", fill=C["phone"], lw=3.5)
+    pen.shape(ellipse(38, -10, 13, 13), "vanwh2", fill=C["phone"], lw=3.5)
+    c.restore()
+    if t >= f1 - 0.12:
+        sp = prog(t, f1 - 0.12, f1 + 0.8)
+        for i in range(3):
+            r = 30 + 90 * sp + i * 26
+            pen.stroke(ellipse(880, deck + 70, r, r * 0.25, a0=math.pi, a1=TAU, n=30), f"spl{i}",
+                       color=alpha(C["cream"], 1 - sp), lw=4)
+
+
+def strip(pen, t, idx, y0, y1, k_in, content=True):
+    c = pen.c
+    if k_in <= 0:
+        return
+    key = f"strip{idx}"
+    dx = (1 - ease_out(k_in)) * 1200
+    rot = [-0.012, 0.01, -0.008][idx]
+    cy = (y0 + y1) / 2
+    c.save()
+    c.translate(dx, 0)
+    c.translate(540, cy)
+    c.rotate(rot)
+    c.translate(-540, -cy)
+    poly = strip_poly(y0, y1, key)
+    c.save()
+    c.set_source_rgba(0, 0, 0, 0.25)
+    pen._path(poly + (8, 10), True)
+    c.fill()
+    c.restore()
+    c.save()
+    pen._path(poly, True)
+    c.clip()
+    c.set_source_surface(paper_surface("night"), 0, 0)
+    c.paint()
+    c.set_source_rgba(0.02, 0.02, 0.08, 0.16 * idx)
+    c.paint()
+    c.set_source_rgba(*alpha(C["lilac"], 0.22))
+    c.set_line_width(2)
+    yy = y0 + 40
+    while yy < y1:
+        c.move_to(160, yy)
+        c.line_to(1060, yy)
+        yy += 66
+    c.stroke()
+    pend = Pen(c, t, boil_rate=6, dark=True)
+    if content:
+        band_scene(pend, t, idx, y0, y1)
+    c.restore()
+    pen.stroke(poly, key + "edge", color=alpha(C["cream"], 0.6), lw=2.5, closed=True, wob=0.3)
+    for sx in (200, 980):
+        c.save()
+        c.translate(sx, y0 + 2)
+        c.rotate(0.5 if sx < 500 else -0.5)
+        c.set_source_rgba(*alpha(C["yellow"], 0.65))
+        c.rectangle(-32, -12, 64, 24)
+        c.fill()
+        c.restore()
+    c.restore()
+
+
+def band_label(pen, text, x, y, col, k, key, dark=True):
+    if k <= 0:
+        return
+    w = text_w(pen.c, text, "note", 44)
+    marker_swash(pen, x - 8, y - 38, w + 18, 46, col, key + "sw", progress=k, op=None)
+    p2 = Pen(pen.c, pen.t, dark=False)
+    hand_text(p2, text, x, y, 44, kind="note", key=key, progress=k, color=C["ink"])
+
+
+def shot_stack(c, t):
+    tr0, tr1 = tv("trans_rail")
+    pen = Pen(c, t, boil_rate=10)
+    z0, z1 = tv("zoom_van")
+    kz = ease(prog(t, z0, z1))
+    c.save()
+    if kz > 0:
+        s = lerp(1.0, 2.3, kz)
+        bcx, bcy = 700, BANDS[0][1] - 110
+        cx, cy = lerp(540, bcx, kz), lerp(960, bcy, kz)
+        c.translate(540, 960)
+        c.scale(s, s)
+        c.translate(-cx, -cy)
+    draw_paper(pen)
+    k_tr = prog(t, tr0, tr1)
+    scroll = 240 * max(0.0, t - (tr0 + 0.6))
+    hand_text(pen, "sonho dentro de sonho", 200, 196, 70, progress=prog(t, tr0 + 0.6, tr0 + 1.5), key="tS")
+    band_label(pen, "realidade", 190, 302, alpha(C["blue"], 0.95), prog(t, tr0 + 0.9, tr0 + 1.3), "lb0")
+    # nível 0: o trem (realidade), alguém dormindo de fone
+    tx = lerp(-1100, 0, ease_out(prog(t, tr0 + 0.7, tr0 + 1.6)))
+    rail_k = ease(prog(t, tr0 + 0.15, tr0 + 0.85))
+    if rail_k >= 1:
+        rail(pen, t, y=STACK_RAIL, scroll=scroll, sleepers=ease_out(prog(t, tr0 + 0.6, tr0 + 1.0)), key="srail")
+    draw_train(pen, t, tx, rail_y=STACK_RAIL, scale=0.85)
+    # tiras dos níveis entrando
+    n6, n7 = tv("N6"), tv("N7")
+    ins = [prog(t, n6, n6 + 0.45), prog(t, n7, n7 + 0.45), prog(t, n7 + 0.35, n7 + 0.8)]
+    for i, (y0, y1, lbl) in enumerate(BANDS):
+        strip(pen, t, i, y0, y1, ins[i])
+        band_label(pen, lbl, 190, y0 + 52, alpha(C["lilac"], 0.95), prog(t, [n6, n7, n7 + 0.35][i] + 0.3,
+                                                                          [n6, n7, n7 + 0.35][i] + 0.7), f"lb{i + 1}")
+    # relógios: quanto mais fundo, mais rápido
+    kc = prog(t, tv("clocks"), tv("clocks") + 0.4)
+    if kc > 0:
+        tt = max(0.0, t - tv("clocks"))
+        pos = [(960, 300), (250, BANDS[0][0] + 120), (250, BANDS[1][0] + 120), (250, BANDS[2][0] + 120)]
+        for i, (x, y) in enumerate(pos):
+            pp = Pen(c, t, dark=i > 0)
+            c.save()
+            c.translate(x, y)
+            c.scale(back_out(kc), back_out(kc))
+            c.translate(-x, -y)
+            clock(pp, x, y, 38, tt * TAU * CLOCK_RATE[i], C["yellow"] if i == 0 else C["lilac_l"], f"ckS{i}")
+            c.restore()
+    # "chute = queda"
+    kq = prog(t, tv("chute_note"), tv("chute_note") + 0.6) * (1 - prog(t, tv("play_press") - 0.3, tv("play_press")))
+    if kq > 0:
+        deck = BANDS[0][1] - 96
+        pd = Pen(c, t, dark=True)
+        hand_text(pd, "chute = queda!", 330, deck - 66, 58, color=C["yellow"], progress=kq, key="chq")
+        arrow(pd, catmull([(650, deck - 84), (700, deck - 74), (560 + 40, deck - 46)], step=5), clamp(kq * 1.4 - 0.4), "chqa",
+              col=C["yellow"])
+    # a música desce os níveis, cada vez mais esticada
+    sp_ = train_pt(380, 560)
+    for i, nt in enumerate(tv("m2_notes")):
+        a = prog(t, nt, nt + 0.12)
+        if a > 0 and t < tv("descend", 0):
+            note(pen, sp_[0] + i * 50, sp_[1] - 30 - 50 * prog(t, nt, nt + 0.6) - i * 10, 0.85 * back_out(a), C["yellow"],
+                 key=f"nE{i}")
+    d0, d1 = tv("descend")
+    kd = prog(t, d0, d1)
+    y_b1 = BANDS[0][0] + 80
+    if 0 < kd < 1:
+        for i in range(3):
+            y = lerp(sp_[1] - 60 - i * 10, y_b1, ease_in(kd))
+            note(pen, sp_[0] + i * 50 + kd * (i - 1) * 80, y, lerp(0.85, 0.9, kd), mix(C["yellow"], C["lilac"], kd),
+                 sx=lerp(1, 2.2, kd), key=f"nD{i}")
+    zfade = 1 - prog(t, z0, z0 + 0.4)
+    if zfade > 0:
+        for lvl, (notes_t, sx, ybase, scale_) in enumerate([
+                (tv("m2_slow_notes"), 2.2, BANDS[0][0] + 80, 0.9),
+                ([tv("deeper", 0) + i * 0.35 for i in range(3)], 4.0, BANDS[1][0] + 80, 0.8),
+                ([tv("deeper", 0) + 0.9 + i * 0.45 for i in range(3)], 7.0, BANDS[2][0] + 80, 0.7)]):
+            for i, nt in enumerate(notes_t):
+                a = prog(t, nt, nt + 0.6)
+                if a <= 0:
+                    continue
+                age = t - nt
+                x = [380, 560, 760][i] if lvl == 0 else [420, 700, 980][i]
+                pd = Pen(c, t, boil_rate=6, dark=True)
+                c.save()
+                c.push_group()
+                note(pd, x + 6 * age / (lvl + 1), ybase - 4 * age + 6 * math.sin(age * 0.8 + i), scale_ * ease_out(a),
+                     C["lilac"] if lvl < 2 else C["pink"], sx=sx, key=f"nS{lvl}{i}", ink=C["cream"])
+                c.pop_group_to_source()
+                c.paint_with_alpha(zfade)
+                c.restore()
+    c.restore()
+    # transição: o fio do fone vira o trilho
+    if k_tr < 1:
+        ks = ease(prog(t, tr0, tr0 + 0.3))
+        if ks < 1:
+            sd = render_to_surface(shot_D_nocord, tr0)
+            c.save()
+            c.set_source_surface(sd, 0, 0)
+            c.paint_with_alpha(1 - ks)
+            c.restore()
+        cp = CORD_D_CACHE.get("cord")
+        if cp is None:
+            _, cp = render_D_with_cord(tr0)
+        line = np.stack([np.linspace(-30, 1110, len(cp)), np.full(len(cp), STACK_RAIL)], 1)
+        line = line[::-1] if cp[0][0] > cp[-1][0] else line
+        pts = cp * (1 - rail_k) + line * rail_k
+        cord(pen, pts, "cordmorph", width=lerp(9, 10, rail_k), shadow=False)
+        if rail_k < 1 and k_tr >= 1:
+            rail(pen, t, y=STACK_RAIL, scroll=scroll)
 
 
 # =================================================================== CENA C (embaixo da cama)
@@ -562,203 +1081,6 @@ def shot_C(c, t):
     an = draw_head_only(pen, hx, 820, 1.08, -math.pi / 2 + 0.1, pose, key="kidC")
     cord(pen, sag(an["cup_r"], (hx + 150, 1050), 60), "cordC")
     c.restore()
-
-
-# =================================================================== CENA E (trem x sonho)
-RAIL_Y = 840
-
-
-def draw_train(pen, t, xoff, key="tr"):
-    c = pen.c
-    bob = 2.5 * math.sin(t * 14)
-    c.save()
-    c.translate(xoff, bob)
-    c.translate(540, RAIL_Y)
-    c.scale(0.92, 0.92)
-    c.translate(-540, -RAIL_Y)
-    # vagão
-    pen.shape(rrect(180, 486, 720, 300, 40), key + "body", fill=C["blue"], lw=6, op=cairo.OPERATOR_MULTIPLY)
-    pen.shape(rrect(170, 470, 740, 46, 22), key + "roof", fill=C["blue_d"], lw=5)
-    pen.fill(rrect(186, 712, 708, 30, 6), C["yellow"], key + "stripe", off=None, op=cairo.OPERATOR_MULTIPLY)
-    pen.stroke(seg(186, 712, 894, 712, 8), key + "sl1", lw=4)
-    pen.stroke(seg(186, 742, 894, 742, 8), key + "sl2", lw=4)
-    # janela-recorte com o interior
-    wx, wy, ww, wh = 270, 540, 540, 160
-    pen.fill(rrect(wx, wy, ww, wh, 22), C["cream"], key + "wint", off=None)
-    c.save()
-    pen._path(rrect(wx, wy, ww, wh, 22), True)
-    c.clip()
-    for sx in (300, 560):
-        pen.shape(rrect(sx, 600, 120, 140, 18), key + f"seat{sx}", fill=C["yellow_l"], lw=4)
-    draw_doodle(pen, 380, 606, 0.7, mood="sleep", phones=True, key=key + "pas", tilt=0.18)
-    pp = tv("play_press")
-    up = ease(prog(t, pp - 0.6, pp - 0.2)) * (1 - ease(prog(t, pp + 1.2, pp + 1.6)))
-    draw_doodle(pen, 640, 600, 0.7, mood="awake", phones=False, look=(-1, 0), key=key + "tm", arm_up=0.8 * up,
-                body_col=C["yellow"], mouth=0.0)
-    # celular do colega
-    if up > 0.05:
-        px, py = 640 - 46 - 4, 600 + 104 - up * 119 + 40
-        pen.shape(rrect(px - 20, py - 34, 40, 64, 8), key + "tph", fill=C["phone"], lw=3.5)
-        tri = [(px - 7, py - 12), (px + 10, py - 2), (px - 7, py + 8)]
-        pen.fill(tri, C["yellow"] if t < pp else C["green"], key + "tpl", off=None)
-    c.restore()
-    pen.stroke(rrect(wx, wy, ww, wh, 22), key + "wfr", closed=True, lw=6)
-    # rodas
-    for i, wxp in enumerate([270, 390, 690, 810]):
-        rot = -t * 9
-        pen.shape(ellipse(wxp, 800, 36, 36, n=40), key + f"wh{i}", fill=C["phone"], lw=5)
-        pen.fill(ellipse(wxp, 800, 12, 12), C["gray"], key + f"hub{i}", off=None)
-        pen.stroke(seg(wxp + 26 * math.cos(rot), 800 + 26 * math.sin(rot), wxp - 26 * math.cos(rot),
-                       800 - 26 * math.sin(rot), 4), key + f"sp{i}", color=C["gray"], lw=4, wob=0)
-    c.restore()
-
-
-def rail(pen, t, y=RAIL_Y, x0=-30, x1=1110, scroll=0.0, sleepers=1.0, lw=10, key="rail"):
-    if sleepers > 0:
-        sp = 72
-        off = scroll % sp
-        x = x0 - off
-        i = 0
-        while x < x1:
-            h = 16 * sleepers
-            pen.shape(rrect(x - 20, y + 6, 40, h, 4), f"{key}sl{i}", fill=C["wood"], lw=3.5, wob=0.4)
-            x += sp
-            i += 1
-    pen.tube(seg(x0, y, x1, y, 10), key, lw, C["phone"], lw=3)
-
-
-def dream_half(pen, t, k_in=1.0):
-    """Metade de baixo: quarto do sonho com o boneco que sonha."""
-    c = pen.c
-    tilt_begin(c, ROOM_TILT, 540, 1120)
-    pen.fill([(-100, 1330), (1200, 1330), (1200, 2000), (-100, 2000)], C["navy_m"], "flE", off=None, wob=0)
-    pen.stroke(seg(-100, 1330, 1200, 1330, 8), "flEl", color=C["cream"], lw=4)
-    dream_window(pen, t, 660, 930, 200, 230, "wE", slow=0.5)
-    m2s = tv("m2_slow")
-    wow = prog(t, m2s, m2s + 0.4)
-    look = (0.6, -0.9) if wow > 0 else (0.5, 0.2)
-    bobv = 6 * math.sin(t * 1.2)
-    long_shadow(pen, (320, 1330), lambda: draw_doodle(pen, 320, 1035 + bobv, 1.2, mood="awake", phones=False, key="dsh"),
-                shear=0.8, sy=0.9)
-    draw_doodle(pen, 320, 1035 + bobv, 1.2, mood="wow" if wow > 0 else "awake", phones=False, look=look, key="dreamer",
-                tilt=-0.15 * wow)
-    c.restore()
-
-
-def shot_E(c, t):
-    s2 = tv("s2")
-    tr0, tr1 = tv("trans_rail")
-    pen = Pen(c, t, boil_rate=10)
-    draw_paper(pen)
-    pend = Pen(c, t, boil_rate=6, dark=True)
-    c.save()
-    c.rectangle(0, RAIL_Y, W, H)
-    c.clip()
-    draw_paper(pend, dark=True)
-    dream_half(pend, t)
-    c.restore()
-    k_tr = prog(t, tr0, tr1)
-    scroll = 260 * max(0.0, t - (tr0 + 0.6))
-    # paisagem: postes passando
-    if k_tr > 0.6:
-        for i in range(7):
-            px = ((i * 250 - scroll) % 1750) - 250
-            pen.stroke(seg(px, 490, px, 530, 6), f"trk{i}", lw=6)
-            pen.shape(ellipse(px, 468, 48, 44, n=40), f"tree{i}", fill=C["green"], lw=5, op=cairo.OPERATOR_MULTIPLY)
-    # trem entra
-    tx = lerp(-1100, 0, ease_out(prog(t, tr0 + 0.7, tr0 + 1.6)))
-    rail_k = ease(prog(t, tr0 + 0.15, tr0 + 0.85))
-    if rail_k >= 1:
-        rail(pen, t, scroll=scroll, sleepers=ease_out(prog(t, tr0 + 0.6, tr0 + 1.0)))
-    draw_train(pen, t, tx)
-    # notas normais saindo do fone do passageiro
-    for i, nt in enumerate(tv("m2_notes")):
-        a = prog(t, nt, nt + 0.12)
-        if a > 0 and t < tv("descend", 0):
-            note(pen, 350 + i * 60, 570 - 70 * prog(t, nt, nt + 0.6) - i * 14, 1.05 * back_out(a), C["yellow"], key=f"nE{i}")
-    d0, d1 = tv("descend")
-    kd = prog(t, d0, d1)
-    if 0 < kd < 1:
-        for i in range(3):
-            y = lerp(500 - i * 14, 990, ease_in(kd))
-            note(pen, 360 + i * 46 + kd * (i - 1) * 60, y, lerp(0.7, 1.0, kd), mix(C["yellow"], C["lilac"], kd),
-                 sx=lerp(1, 2.2, kd), key=f"nD{i}", ink=C["ink"] if y < RAIL_Y else C["cream"])
-    for i, nt in enumerate(tv("m2_slow_notes")):
-        a = prog(t, nt, nt + 0.6)
-        if a > 0:
-            age = t - nt
-            x, y = [(200, 1000), (430, 930), (640, 1000)][i]
-            fade = 1 - prog(t, nt + 9.0, nt + 10.0)
-            c.save()
-            c.push_group()
-            note(pend, x + 8 * age, y - 6 * age + 8 * math.sin(age * 0.8 + i), 1.05 * ease_out(a), C["lilac"], sx=2.2,
-                 key=f"nS{i}", ink=C["cream"])
-            c.pop_group_to_source()
-            c.paint_with_alpha(clamp(fade))
-            c.restore()
-    # títulos e etiquetas
-    kt = prog(t, tr0 + 0.8, tr0 + 1.8)
-    hand_text(pen, "a cena dos fones", 205, 292, 84, progress=kt, key="tE")
-    if kt > 0.3:
-        w = text_w(c, "realidade", "note", 46)
-        marker_swash(pen, 196, 343, w + 18, 46, alpha(C["blue"], 0.9), "rsw", progress=prog(t, tr0 + 1.2, tr0 + 1.6))
-        hand_text(pen, "realidade", 205, 380, 46, kind="note", key="rl", progress=prog(t, tr0 + 1.2, tr0 + 1.6))
-        w = text_w(c, "sonho", "note", 46)
-        marker_swash(pend, 196, 878, w + 18, 46, alpha(C["lilac_d"], 0.95), "ssw", progress=prog(t, tr0 + 1.4, tr0 + 1.8))
-        hand_text(pend, "sonho", 205, 915, 46, kind="note", key="sn", progress=prog(t, tr0 + 1.4, tr0 + 1.8))
-    # relógios: lá dentro passa mais tempo
-    l5 = tv("L5")
-    kc = prog(t, l5 + 0.4, l5 + 0.8)
-    if kc > 0:
-        tt = max(0.0, t - (l5 + 0.4))
-        c.save()
-        c.translate(880, 300)
-        c.scale(back_out(kc), back_out(kc))
-        c.translate(-880, -300)
-        clock(pen, 880, 300, 56, tt * TAU / 10, C["yellow"], "ck1")
-        c.restore()
-        c.save()
-        c.translate(800, 1215)
-        c.scale(back_out(kc), back_out(kc))
-        c.translate(-800, -1215)
-        clock(pend, 800, 1215, 64, tt * TAU / 1.1, C["lilac"], "ck2")
-        c.restore()
-        arrow(pend, catmull([(600, 1262), (660, 1270), (722, 1240)], step=5), prog(t, l5 + 1.4, l5 + 1.9), "ckar",
-              col=C["cream"])
-        hand_text(pend, "+ tempo", 590, 1282, 58, color=C["cream"], align="right", progress=prog(t, l5 + 1.6, l5 + 2.2), key="mt")
-    # transição: fio do fone vira o trilho
-    if k_tr < 1:
-        ks = ease(prog(t, tr0, tr0 + 0.3))
-        if ks < 1:
-            sd = render_to_surface(shot_D_nocord, tr0)
-            c.save()
-            c.set_source_surface(sd, 0, 0)
-            c.paint_with_alpha(1 - ks)
-            c.restore()
-        cp = CORD_D_CACHE.get("cord")
-        if cp is None:
-            sd, cp = render_D_with_cord(tr0)
-        line = np.stack([np.linspace(cp[0][0] * 0 - 30, 1110, len(cp)), np.full(len(cp), RAIL_Y)], 1)
-        line = line[::-1] if cp[0][0] > cp[-1][0] else line
-        km = rail_k
-        pts = cp * (1 - km) + line * km
-        cord(pen, pts, "cordmorph", width=lerp(9, 10, km), shadow=False)
-    if rail_k < 1 and k_tr >= 1:
-        rail(pen, t, scroll=scroll)
-
-
-CORD_D_CACHE = {}
-
-
-def render_D_with_cord(t):
-    s, c = new_surface()
-    _, cp = shot_room(c, t, "D")
-    CORD_D_CACHE["cord"] = cp
-    return s, cp
-
-
-def shot_D_nocord(c, t):
-    shot_room(c, t, "D")
 
 
 # =================================================================== CENA F (frequência)
@@ -855,43 +1177,24 @@ def axes(pen, x0, x1, y, h, k, key, ylab=None):
 
 
 def shot_F(c, t):
-    s3 = tv("s3")
-    a0, a1 = tv("trans_axis")
-    ka = prog(t, a0, a1)
+    s4 = tv("s4")
     pen = Pen(c, t, boil_rate=10)
     draw_paper(pen)
-    # ---- transição: trilho -> eixo do tempo
-    if ka < 1:
-        wipe = ease(prog(t, a0 + 0.15, a0 + 0.75))
-        ytop = lerp(RAIL_Y, H, wipe)
-        if ytop < H:
-            pend = Pen(c, t, boil_rate=6, dark=True)
-            c.save()
-            c.rectangle(0, ytop, W, H)
-            c.clip()
-            draw_paper(pend, dark=True)
-            c.translate(0, ytop - RAIL_Y)
-            dream_half(pend, t)
-            c.restore()
-        tx = 1400 * ease_in(prog(t, a0, a0 + 0.55))
-        if tx < 1300:
-            draw_train(pen, t, tx)
-    km = ease(prog(t, a0 + 0.3, a0 + 0.95))
-    y = lerp(RAIL_Y, AX_Y, km)
-    x0 = lerp(-30, AX_X0 - 10, km)
-    x1 = lerp(1110, AX_X1 + 10, km)
+    hand_text(pen, "foi o tempo!", 205, 300, 88, progress=prog(t, tv("N13") + 0.05, tv("N13") + 0.8), key="foiT",
+              color=C["ink"]) if t < tv("t440a", 0) - 0.15 else None
     explain = tv("explain")
-    l11 = tv("L11")
+    l11 = tv("N17")
     phase3 = t >= l11
     if not phase3:
-        rail(pen, t, y=y, x0=x0, x1=x1, sleepers=1 - km, lw=lerp(10, 5, km), key="axr")
+        km = ease(prog(t, s4 + 0.3, s4 + 0.9))
+        pen.stroke(seg(AX_X0 - 10, AX_Y, AX_X1 + 10, AX_Y, 8), "axx", lw=5, progress=km)
         if km >= 1:
             pen.stroke(seg(AX_X1 + 10, AX_Y, AX_X1 - 12, AX_Y - 13, 3), "axa1", lw=5)
             pen.stroke(seg(AX_X1 + 10, AX_Y, AX_X1 - 12, AX_Y + 13, 3), "axa2", lw=5)
             for i in range(11):
                 xx = AX_X0 + i * 66
                 pen.stroke(seg(xx, AX_Y - 8, xx, AX_Y + 8, 3), f"tick{i}", lw=3.5, wob=0.3)
-        ky = ease(prog(t, a0 + 0.7, a1))
+        ky = ease(prog(t, s4 + 0.6, s4 + 1.1))
         if ky > 0:
             pen.stroke(seg(AX_X0, AX_Y + 190, AX_X0, AX_Y - 190, 8), "yax", lw=5, progress=ky)
     # ---- fase 1: celular, 440 Hz -> 0,5x -> 220 Hz
@@ -960,7 +1263,7 @@ def shot_F(c, t):
         look = (0.8, -0.8)
         p = dict(look=look, mouth_open=talk(t), smile=0.35, blink=blink(t, 1.2), hand_r=(118, 150), hold_r="phone",
                  phone_screen="pause" if playing2 else "play", phone_rot=0.1, brow_raise=4, legs=True)
-        if t >= tv("L12"):
+        if t >= tv("graphs_done"):
             p.update(brow_raise=12, eye_wide=0.5)
         an = draw_kid(pen, kx, ky, 0.8, p, key="kidF")
         cord(pen, sag(an["cup_r"], an["phone_r"], 70), "cordF")
@@ -974,7 +1277,9 @@ def press_curve(t, tt_):
 
 def explain_visuals(pen, t):
     c = pen.c
-    l7, l8, l9, l10 = tv("L7"), tv("L8"), tv("L9"), tv("L10")
+    l7, l7e, l9, l10 = tv("N14"), tv("N14_end"), tv("N15"), tv("N16")
+    l8 = l7e - 0.9
+    st0 = l9 + TL_word_time("N15", 4) - 0.2
     # título manuscrito
     hand_text(pen, "frequência =", 205, 300, 96, progress=prog(t, l7 + 0.2, l7 + 0.9), key="fq1")
     hand_text(pen, "vibrações por segundo", 205, 392, 72, progress=prog(t, l7 + 0.9, l7 + 2.3), key="fq2")
@@ -987,7 +1292,7 @@ def explain_visuals(pen, t):
                   progress=prog(t, l7 + 1.0, l7 + 1.5), key="1s")
     # onda densa (440) desenhada, depois esticada (0,5x)
     k_draw = prog(t, l7 + 0.8, l8 + 0.9)
-    stretch = ease(prog(t, l9 + 1.5, l9 + 3.4))
+    stretch = ease(prog(t, st0, st0 + 1.5))
     cycles = 22 / (1 + stretch)
     col = mix(C["yellow"], C["lilac"], stretch)
     if k_draw > 0:
@@ -995,14 +1300,14 @@ def explain_visuals(pen, t):
         pen.stroke(pts, "dense", color=col, lw=10, wob=0.25)
         pen.stroke(pts, "densei", lw=3.2, wob=0.25)
     # um ciclo destacado: dura o dobro
-    if t >= l9 + 1.2:
+    if t >= st0 - 0.3:
         cw = (AX_X1 - AX_X0) / cycles
-        kk = prog(t, l9 + 1.2, l9 + 1.5)
+        kk = prog(t, st0 - 0.3, st0)
         yb = AX_Y + 150
         pen.stroke(np.array([(AX_X0, yb - 14), (AX_X0, yb), (AX_X0 + cw, yb), (AX_X0 + cw, yb - 14)]), "cyc", lw=4.5,
                    progress=kk, color=C["lilac_d"] if stretch > 0.5 else C["ink"])
         if stretch > 0.95:
-            hand_text(pen, "×2", AX_X0 + cw + 18, yb + 16, 64, color=C["lilac_d"], progress=prog(t, l9 + 3.4, l9 + 3.7), key="x2")
+            hand_text(pen, "×2", AX_X0 + cw + 18, yb + 16, 64, color=C["lilac_d"], progress=prog(t, st0 + 1.5, st0 + 1.8), key="x2")
     # contador
     cnt = int(round(440 * clamp(k_draw)))
     if t >= l10:
@@ -1027,7 +1332,7 @@ def explain_visuals(pen, t):
 
 def graphs(pen, t):
     c = pen.c
-    l11 = tv("L11")
+    l11 = tv("N17")
     ka = prog(t, l11 + 0.1, l11 + 0.9)
     for gy, key in ((G1_Y, "g1"), (G2_Y, "g2")):
         axes(pen, AX_X0, AX_X1, gy, 135, ka, key)
@@ -1065,12 +1370,12 @@ def graphs(pen, t):
             for j in range(14):
                 yy = G1_Y - 140 + j * 36
                 pen.stroke(seg(xx, yy, xx, yy + 16, 4), f"dash{xx}{j}", color=alpha(C["blue_d"], 0.8 * kl), lw=3, wob=0.2)
-    l12 = tv("L12")
-    circle_mark(pen, (AX_X0 + AX_X1) / 2, G2_Y + 5, 375, 158, prog(t, l12 + 0.9, l12 + 1.8), alpha(C["lilac_d"], 0.9), "g2c", lw=7)
-    kg = prog(t, l12 + 1.6, l12 + 2.2)
+    l12 = gd - 0.6
+    circle_mark(pen, (AX_X0 + AX_X1) / 2, G2_Y + 5, 375, 158, prog(t, l12 + 0.9, l12 + 1.6), alpha(C["lilac_d"], 0.9), "g2c", lw=7)
+    kg = prog(t, l12 + 1.4, l12 + 1.9)
     if kg > 0:
         hand_text(pen, "mais grave", 560, G2_Y + 210, 60, color=C["lilac_d"], progress=kg, key="mg")
-        arrow(pen, catmull([(540, G2_Y + 190), (500, G2_Y + 150), (470, G2_Y + 110)], step=5), prog(t, l12 + 2.0, l12 + 2.4),
+        arrow(pen, catmull([(540, G2_Y + 190), (500, G2_Y + 150), (470, G2_Y + 110)], step=5), prog(t, l12 + 1.8, l12 + 2.1),
               "mga", col=C["lilac_d"])
 
 
@@ -1117,15 +1422,15 @@ def band_positions(t, t0):
 def shot_G(c, t, freeze=None):
     pen = Pen(c, t, boil_rate=10)
     draw_paper(pen)
-    s4 = tv("s4")
+    s4 = tv("s3")
     x, y, w, h = TANK
     # título e hipótese
-    hand_text(pen, "Será que foi refração?", 205, 292, 86, progress=prog(t, s4 + 0.4, s4 + 1.4), key="tG")
-    l13 = tv("L13")
-    hyp_k = prog(t, l13 + 1.5, l13 + 2.6)
+    hand_text(pen, "Será que foi a água?", 205, 292, 90, progress=prog(t, s4 + 0.4, s4 + 1.4), key="tG")
+    l13 = tv("N10")
+    hyp_k = prog(t, l13 + 0.2, l13 + 1.3)
     if hyp_k > 0:
-        hw, _ = hand_text(pen, "hipótese: sonho = água?", 225, 395, 44, kind="note", progress=hyp_k, key="hyp")
-        circle_mark(pen, 225 + hw / 2, 380, hw / 2 + 34, 38, prog(t, l13 + 2.6, l13 + 3.1), alpha(C["blue_d"], 0.9), "hypc", lw=5)
+        hw, _ = hand_text(pen, "hipótese: van no rio = som grave?", 225, 395, 44, kind="note", progress=hyp_k, key="hyp")
+        circle_mark(pen, 225 + hw / 2, 380, hw / 2 + 34, 38, prog(t, l13 + 1.3, l13 + 1.8), alpha(C["blue_d"], 0.9), "hypc", lw=5)
         kx_ = prog(t, tv("cross_out"), tv("cross_out") + 0.5)
         if kx_ > 0:
             pen.stroke(catmull([(215, 400), (330, 370), (460, 392), (580, 362), (225 + hw + 10, 380)], step=6), "hx1",
@@ -1162,6 +1467,15 @@ def shot_G(c, t, freeze=None):
             c.paint()
         c.restore()
         if kf >= 1:
+            c.save()
+            c.translate(x + w - 170, y + h - 40)
+            c.rotate(0.25)
+            pen.shape(rrect(-60, -44, 120, 44, 10), "svan", fill=C["cream"], lw=4)
+            pen.fill(rrect(-48, -36, 30, 16, 4), C["lilac"], "svw1", off=None)
+            pen.fill(rrect(-10, -36, 30, 16, 4), C["lilac"], "svw2", off=None)
+            pen.shape(ellipse(-34, 0, 11, 11), "svwh1", fill=C["phone"], lw=3)
+            pen.shape(ellipse(34, 0, 11, 11), "svwh2", fill=C["phone"], lw=3)
+            c.restore()
             surf = [(x + 4 + i * 40, WS + 6 * math.sin(i * 1.3 + t * 3)) for i in range(17)]
             pen.stroke(catmull(surf, step=6), "surf", color=C["blue_d"], lw=5)
     # frentes de compressão
@@ -1182,8 +1496,8 @@ def shot_G(c, t, freeze=None):
         c.paint_with_alpha(kb)
         c.restore()
         # espaçamento: colchetes entre duas frentes
-        l15 = tv("L15")
-        ks = prog(t, l15 + TL_word_time("L15", 9), l15 + TL_word_time("L15", 9) + 0.5)
+        l15 = tv("N11")
+        ks = prog(t, l15 + TL_word_time("N11", 9), l15 + TL_word_time("N11", 9) + 0.5)
         if ks > 0:
             air = [b[0] for b in bands if b[1] == "a" and b[0] > y + 20]
             wat = [b[0] for b in bands if b[1] == "w"]
@@ -1223,8 +1537,8 @@ def shot_G(c, t, freeze=None):
         pen.shape(rrect(ex - 56, ey2 - 44, 112, 76, 30), "emit", fill=C["phone"], lw=5)
         pen.fill(rrect(ex - 46, ey2 + 20, 92, 12, 6), C["pink"], "emitc", off=None)
     # rótulos
-    l15 = tv("L15")
-    kl = prog(t, l15 + TL_word_time("L15", 7), l15 + TL_word_time("L15", 7) + 0.5)
+    l15 = tv("N11")
+    kl = prog(t, l15 + TL_word_time("N11", 4), l15 + TL_word_time("N11", 4) + 0.5)
     if kb > 0:
         hand_text(pen, "ar", x + 26, 545, 60, progress=prog(t, tb, tb + 0.3), key="ar")
         hand_text(pen, "água", x + 26, 800, 60, progress=prog(t, tb + 0.2, tb + 0.5), key="agua")
@@ -1232,18 +1546,17 @@ def shot_G(c, t, freeze=None):
         freq_label(pen, "440 Hz", 560, 830, 50, alpha(C["yellow"], 0.95), prog(t, tb + 0.4, tb + 0.8), "g440w")
     if kl > 0:
         hand_text(pen, "≈ 340 m/s", x + 26, 600, 40, kind="note", progress=kl, key="va")
-        hand_text(pen, "≈ 1.500 m/s", x + 26, 855, 40, kind="note", progress=prog(t, l15 + TL_word_time("L15", 7) + 0.2,
-                                                                                l15 + TL_word_time("L15", 7) + 0.7), key="vw")
+        hand_text(pen, "≈ 1.500 m/s", x + 26, 855, 40, kind="note", progress=prog(t, l15 + TL_word_time("N11", 4) + 0.2,
+                                                                                l15 + TL_word_time("N11", 4) + 0.7), key="vw")
     # narrador espiando no canto
-    l14 = tv("L14")
+    l14 = tv("N11") - 0.2
     kk = ease_out(prog(t, l14 - 0.1, l14 + 0.35))
     if kk > 0:
-        l17 = tv("L17")
-        sad = ease(prog(t, l17 + 0.3, l17 + 0.8))
+        sad = ease(prog(t, tv("cross_out") - 0.2, tv("cross_out") + 0.3))
         p = dict(look=(0.85, -0.75), mouth_open=talk(t), smile=lerp(0.6, -0.4, sad), blink=blink(t, 0.4),
                  brow_raise=lerp(12, 0, sad), brow_angle=lerp(0.0, 0.3, sad), eye_wide=0.4 * (1 - sad),
                  hand_r=(140, 150), hold_r="marker", legs=True)
-        if t > tv("L15"):
+        if t > tv("N11"):
             p["look"] = (0.9, -0.5 + 0.25 * math.sin(t * 1.5))
         draw_kid(pen, 210, lerp(1900, 1395, kk), 0.72, p, key="kidG")
     # mão com caneta / marca-texto
@@ -1272,224 +1585,278 @@ def bracket_v(pen, xx, ya, yb, k, key, col):
     pen.stroke(np.array([(xx - 14, ya), (xx, ya), (xx, yb), (xx - 14, yb)]), key, color=col, lw=4.5, progress=k)
 
 
-# =================================================================== CENA H (fechamento em loop)
-BOOK = (270, 900, 540, 480)   # x, y, w, h (aberto); página direita = 1/4 da tela
+# =================================================================== CENA 6: nível 2, 22 Hz e o chute
+L2_KID = (540, 1000, 0.9)
 
 
-def room_H(pen, t, dark, tilt=0.0):
-    c = pen.c
-    draw_paper(pen, dark=dark)
-    tilt_begin(c, tilt, 540, 1000)
-    if dark:
-        dream_window(pen, t, 640, 330, 240, 300, "wH", slow=0.5)
-        pen.shape(rrect(240, 360, 170, 220, 8), "posterH", fill=C["navy_l"], stroke=C["cream"], lw=5)
-        note(pen, 315, 500, 1.2, C["lilac"], key="pnH")
-    else:
-        pen.shape(rrect(640, 330, 240, 300, 10), "winH", fill=C["blue_l"], lw=6, op=cairo.OPERATOR_MULTIPLY)
-        pen.shape(ellipse(820, 400, 34, 34, n=40), "sunH", fill=C["yellow"], lw=4, op=cairo.OPERATOR_MULTIPLY)
-        pen.stroke(seg(760, 330, 760, 630, 6), "wbH1", lw=5)
-        pen.stroke(seg(640, 480, 880, 480, 6), "wbH2", lw=5)
-        pen.shape(rrect(240, 360, 170, 220, 8), "posterH", fill=C["yellow_l"], lw=5, op=cairo.OPERATOR_MULTIPLY)
-        note(pen, 315, 500, 1.2, C["blue"], key="pnH")
-    c.restore()
-
-
-def kid_pose_H(t):
-    s5 = tv("s5")
-    c0, c1 = tv("close_diary")
-    pt = tv("pause_tap")
-    n3 = tv("m3_notes")
-    lc = tv("look_cam")
-    p = dict(look=(0.0, 0.5), smile=0.35, blink=blink(t, 0.5, 3.0), mouth_open=talk(t),
-             hand_l=(-272, 179), hand_r=(272, 179), hold_r=None, phone_screen="pause", phone_rot=0.0, legs=True)
-    # depois de fechar: abaixa o diário, pega o celular
-    lower = ease(prog(t, c1 + 0.3, c1 + 0.8))
-    p["hand_l"] = lerp2(p["hand_l"], (-150, 318), lower)
-    p["hand_r"] = lerp2(p["hand_r"], (150, 318), lower)
-    up = ease(prog(t, pt - 1.0, pt - 0.5))
-    if up > 0:
-        p["hand_r"] = lerp2(p["hand_r"], (96, 128), up)
-        p["hold_r"] = "phone"
-        p["look"] = lerp2((0.0, 0.5), (0.45, 0.9), up)
-        tap = ease(prog(t, pt - 0.35, pt)) * (1 - ease(prog(t, pt + 0.15, pt + 0.5)))
-        p["hand_l"] = lerp2(p["hand_l"], (60, 118), tap)
-        p["front_l"] = tap > 0.3
-        p["phone_screen"] = "pause" if t < pt else "play"
-    if t > lower and t < pt - 1.0:
-        p["look"] = (0.0, 0.0)
-    # sonho: notas ainda mais graves, movimentos bem lentos
-    if t >= n3[0]:
-        a = ease(prog(t, n3[0] + 0.05, n3[0] + 1.0))
-        p.update(cup_lift=a, eye_wide=a, brow_raise=14 * a, smile=0.0)
-        p["look"] = lerp2((0.45, 0.9), (-0.8, -0.4), ease(prog(t, n3[1], n3[1] + 1.2)))
-        p["look"] = lerp2(p["look"], (0.85, -0.4), ease(prog(t, n3[2], n3[2] + 1.2)))
-        p["blink"] = 0.0
-        p["phone_screen"] = "play"
-    if t >= lc:
-        e = ease(prog(t, lc, lc + 0.5))
+def kid_pose_L2(t):
+    m3 = tv("m3_notes")
+    p = dict(look=(0.0, -0.3), smile=0.2, blink=blink(t, 0.6, 3.1), hand_l=(-150, 318), hand_r=(112, 140), hold_r="phone",
+             phone_screen="alarm", phone_rot=0.1, legs=True, mouth_open=talk(t), brow_raise=6)
+    if t >= m3[0]:
+        a = ease(prog(t, m3[0] + 0.05, m3[0] + 1.2))          # bem devagar: o tempo esticou de novo
+        p.update(cup_lift=a, eye_wide=a, brow_raise=6 + 10 * a, smile=0.1 * (1 - a), mouth_o=0.6 * a * (1 - prog(t, m3[2], m3[2] + 1)))
+        p["look"] = lerp2((0.0, -0.3), (-0.8, -0.5), ease(prog(t, m3[1], m3[1] + 1.4)))
+        p["look"] = lerp2(p["look"], (0.8, -0.6), ease(prog(t, m3[2], m3[2] + 1.4)))
+    n20 = tv("N20")
+    if t >= n20:
+        e = ease(prog(t, n20, n20 + 0.4))
         p["look"] = lerp2(p["look"], (0.0, 0.0), e)
-        p["brow_angle"] = lerp(0.0, -0.18, e)
-        p["brow_raise"] = lerp(14, 2, e)
-        p["eye_wide"] = lerp(1, 0.2, e)
-        p["cup_lift"] = 1.0
-        l21 = tv("L21")
-        if t >= l21:
-            q = ease(prog(t, l21, l21 + 0.3))
-            p["brow_angle"] = lerp(-0.18, 0.25, q)
-            p["brow_raise"] = lerp(2, 16, q)
-            p["eye_wide"] = lerp(0.2, 0.8, q)
-        p["blink"] = blink(t, 0.1, 2.5)
+        p["mouth_o"] = 0.0
+    if t >= tv("hz22"):
+        e = ease(prog(t, tv("hz22"), tv("hz22") + 0.3))
+        p.update(brow_angle=0.3 * e, eye_wide=0.8, look=(-0.6, -0.9))
+    n22 = tv("N22")
+    if t >= n22:
+        e = ease(prog(t, n22, n22 + 0.4))
+        p.update(eye_wide=1.0, brow_raise=18 * e, brow_angle=0.35, look=(0.0, 0.6))
     return p
 
 
-def draw_book(pen, t, k_close):
-    """Diário aberto (segurado de frente). k_close: 0 aberto, 1 fechado."""
-    c = pen.c
-    x, y, w, h = BOOK
-    sp = x + w / 2
-    pen.shape(rrect(x - 12, y - 12, w + 24, h + 24, 14), "bkcov", fill=C["navy"], lw=5)
-    # página esquerda (verso com restos do gráfico)
-    if k_close < 0.5:
-        sx = 1 - 2 * k_close
+def l2_page(c, t):
+    """Nível 2: página mais escura, quarto bem mais inclinado, móveis flutuando."""
+    pen = Pen(c, t, boil_rate=5, dark=True)
+    draw_paper(pen, dark=True)
+    c.set_source_rgba(0.02, 0.02, 0.07, 0.35)
+    c.paint()
+    n22 = tv("N22")
+    f0, f1 = tv("fall")
+    k_kick = ease(prog(t, n22 + 0.4, f0 + 0.6))
+    tilt = -0.13 + 0.03 * math.sin(t * 0.5) - 0.32 * k_kick
+    tilt_begin(c, tilt, 540, 980)
+    floor(pen, 1330)
+    for i, (x, y, w, h, r) in enumerate([(150, 880, 110, 200, 0.2), (880, 1130, 150, 110, -0.3), (300, 1240, 120, 70, 0.5)]):
         c.save()
-        c.translate(sp, 0)
-        c.scale(sx, 1)
-        c.translate(-sp, 0)
-        pen.fill(rrect(x, y, w / 2, h, 6), C["paper"], "bkl", off=None, wob=0.2)
-        for i in range(7):
-            pen.stroke(seg(x + 10, y + 80 + i * 58, sp - 10, y + 80 + i * 58, 20), f"bkll{i}", color=alpha(C["rule"], 0.8), lw=2)
-        pen.stroke(wave_pts(x + 40, sp - 30, y + 200, 30, 2), "bklw", color=alpha(C["lilac"], 0.7), lw=6)
-        pen.stroke(rrect(x, y, w / 2, h, 6), "bklo", lw=4, closed=True)
+        c.translate(x, y + 14 * math.sin(t * 0.6 + i))
+        c.rotate(r + 0.05 * math.sin(t * 0.4 + i))
+        if i == 0:
+            pen.shape(rrect(-w / 2, -h / 2, w, h, 8), f"fl{i}", fill=C["lilac_d"], stroke=C["cream"], lw=5)
+            pen.dot(w / 2 - 24, 0, 7, C["yellow"])
+        elif i == 1:
+            dream_window(pen, t, -w / 2, -h / 2, w, h, f"flw{i}", curtain=False, slow=0.4)
+        else:
+            pen.shape(rrect(-w / 2, -h / 2, w, h, 12), f"fl{i}", fill=C["lilac"], stroke=C["ink"], lw=5)
         c.restore()
-    return (sp, y, w / 2, h)
-
-
-def draw_cover(pen, k):
-    c = pen.c
-    x, y, w, h = BOOK
-    sp = x + w / 2
-    sx = 2 * k - 1
-    c.save()
-    c.translate(sp, 0)
-    c.scale(max(sx, 0.001), 1)
-    c.translate(-sp, 0)
-    pen.shape(rrect(sp - 4, y - 12, w / 2 + 16, h + 24, 14), "cov", fill=C["navy"], lw=5.5)
-    pen.shape(rrect(sp + 40, y + 70, w / 2 - 70, 120, 10), "covl", fill=C["cream"], lw=4)
-    hand_text(pen, "diário", sp + 60, y + 118, 46, color=C["ink"], key="cv1")
-    hand_text(pen, "de sonhos", sp + 60, y + 166, 42, color=C["ink"], key="cv2")
-    moon = np.vstack([ellipse(sp + 190, y + 320, 44, 44, a0=-2.0, a1=2.0, n=40),
-                      ellipse(sp + 210, y + 316, 32, 36, a0=1.8, a1=-1.8, n=40)])
-    pen.shape(moon, "covm", fill=C["yellow"], lw=4)
-    for i, (sx_, sy_) in enumerate([(sp + 80, y + 300), (sp + 110, y + 400), (sp + 230, y + 430)]):
-        pen.stroke(seg(sx_ - 10, sy_, sx_ + 10, sy_, 3), f"cs{i}a", color=C["yellow"], lw=4)
-        pen.stroke(seg(sx_, sy_ - 10, sx_, sy_ + 10, 3), f"cs{i}b", color=C["yellow"], lw=4)
     c.restore()
+    return pen
 
 
-def shot_H_base(c, t):
-    """Quarto do fechamento, com a transição para o sonho e o empurrão de câmera."""
+def shot_L2(c, t):
     s5 = tv("s5")
-    z0, z1 = tv("zoom_out")
-    c0, c1 = tv("close_diary")
+    d0, d1 = tv("descend2")
+    kd = ease(prog(t, d0, d1))
+    f0, f1 = tv("fall")
+    if kd < 1:
+        sf = render_to_surface(shot_F, t)
+        c.save()
+        c.translate(0, -H * kd)
+        c.set_source_surface(sf, 0, 0)
+        c.paint()
+        c.restore()
+        c.save()
+        c.translate(0, H * (1 - kd))
+    pen = l2_page(c, t)
+    # o narrador: de pé no nível 2, depois cai em câmera lenta
+    kx, ky, ks = L2_KID
+    pose = kid_pose_L2(t)
+    kf = prog(t, f0, f1)
+    rot = 0.0
+    if kf > 0:
+        e = kf ** 1.7                                   # queda esticada: começa bem devagar
+        ky = ky + 1700 * e
+        kx = kx + 60 * math.sin(kf * 3)
+        rot = 0.9 * e
+        pose.update(hand_l=(-210, -250), hand_r=(210, -250), hold_r=None, front_l=True, front_r=True, mouth_o=1.0,
+                    eye_wide=1.0, cup_lift=1.0)
+        for i in range(10):
+            lx = 140 + i * 90 + 20 * math.sin(i)
+            ly = (H + 300) - ((t - f0) * 900 + i * 230) % (H + 600)
+            pen.stroke(seg(lx, ly, lx, ly + 160, 10), f"spd{i}", color=alpha(C["lilac"], 0.55), lw=4)
+    c.save()
+    c.translate(kx, ky - 300)
+    c.rotate(rot)
+    c.translate(-kx, -(ky - 300))
+    an = draw_kid(pen, kx, ky, ks, pose, key="kidL2")
+    if pose.get("hold_r") == "phone":
+        cord(pen, sag(an["cup_r"], an["phone_r"], 80), "cordL2")
+    else:
+        cord(pen, bez(an["cup_r"], (an["cup_r"][0] + 60, an["cup_r"][1] + 200), (kx + 200, ky + 500), (kx + 120, ky + 900)),
+             "cordL2")
+    c.restore()
+    # notas gravíssimas (0,25x) e o valor: 110 Hz
+    m3 = tv("m3_notes")
+    n20 = tv("N20")
+    for i, nt in enumerate(m3):
+        a = prog(t, nt, nt + 0.8)
+        if a <= 0:
+            continue
+        fade = 1 - prog(t, n20 - 0.2, n20 + 0.4)
+        if fade <= 0:
+            continue
+        x, y = [(300, 620), (600, 520), (860, 640)][i]
+        c.save()
+        c.push_group()
+        note(pen, x - 10 * (t - nt), y - 6 * (t - nt), 1.0 * ease_out(a), C["pink"], sx=4.0, key=f"n3{i}", ink=C["cream"])
+        c.pop_group_to_source()
+        c.paint_with_alpha(fade)
+        c.restore()
+    kl = prog(t, tv("m3"), tv("m3") + 0.3) * (1 - prog(t, n20 + 0.9, n20 + 1.3))
+    freq_label(pen, "110 Hz", 225, 420, 112, alpha(C["pink"], 0.95), kl, "fl110")
+    stamp(pen, "NÍVEL 2", 760, 300, prog(t, tv("stamp2"), tv("stamp2") + 0.4), "st2", col=C["pink"],
+          out=1 - prog(t, tv("m3") - 0.4, tv("m3") - 0.1))
+    # 440 -> 220 -> 110 ... e no filme: ÷20 por nível -> 22 Hz
+    pcr = Pen(c, t, dark=True)
+    kch = prog(t, n20 + 0.05, n20 + 1.0)
+    xx = 205
+    for j, (txt, col) in enumerate([("440", C["yellow"]), ("220", C["lilac"]), ("110", C["pink"])]):
+        kj = clamp(kch * 3 - j)
+        if kj <= 0:
+            break
+        w_, _ = hand_text(pcr, txt, xx, 300, 76, color=col, progress=kj, key=f"ch{j}")
+        xx += w_ + 22
+        if j < 2 and kj >= 1:
+            arrow(pcr, seg(xx, 276, xx + 70, 276, 6), 1.0, f"cha{j}", col=C["cream"], lw=5)
+            xx += 100
+    wv = n20 + TL_word_time("N20", 5)
+    hand_text(pcr, "no filme: ÷20 a cada nível", 205, 380, 48, kind="note", color=C["lilac_l"],
+              progress=prog(t, wv, wv + 1.2), key="div20")
+    h22 = tv("hz22")
+    k22 = prog(t, h22, h22 + 0.35)
+    freq_label(pen, "22 Hz", 225, 520, 112, alpha(C["pink"], 0.95), k22 * (1 - prog(t, f0 + 0.3, f0 + 0.7)), "fl22")
+    if k22 > 0:
+        pts = wave_pts(560, 900, 480, 40 * k22, 0.5)
+        pen.stroke(pts, "w22", color=C["pink"], lw=8)
+        pen.stroke(pts, "w22i", color=C["cream"], lw=3)
+        hand_text(pcr, "quase inaudível", 560, 560, 40, kind="note", color=C["cream"],
+                  progress=prog(t, h22 + 0.8, h22 + 1.6), key="inaud")
+    if kd < 1:
+        c.restore()
+    # clarão: o chute acorda
+    kw = prog(t, f1 - 0.35, f1)
+    if kw > 0:
+        c.set_source_rgba(1, 1, 1, kw)
+        c.paint()
+
+
+# =================================================================== CENA 7: acordar (?) e o loop
+def kid_pose_W(t):
+    wk = tv("wake")
+    p = dict(look=(0.0, 0.0), smile=0.0, blink=blink(t, 0.3, 2.9), hand_l=(-118, 100), hold_l="phone",
+             hand_r=(150, 318), hold_r=None, phone_screen="alarm", phone_rot=-0.15, mouth_open=talk(t))
+    j = prog(t, wk, wk + 0.9)
+    p.update(eye_wide=1.0 - 0.6 * j, brow_raise=18 * (1 - j) + 6, mouth_o=1.0 * (1 - prog(t, wk + 0.5, wk + 0.8)),
+             look=lerp2((0.0, -0.4), (-0.5, 0.4), ease(prog(t, wk + 0.4, wk + 0.9))))
+    if tv("m4") <= t < tv("m4") + 1.0:
+        p["phone_rot"] = -0.15 + 0.08 * math.sin(t * 70)
+    # gira o pião
+    sp = tv("spin")
+    ks = ease(prog(t, sp - 0.45, sp)) * (1 - ease(prog(t, sp + 0.3, sp + 0.8)))
+    if ks > 0:
+        p["hand_r"] = lerp2((150, 318), (402, 60), ks)
+        p["look"] = lerp2(p["look"], (1.0, 0.6), ks)
+    if t >= sp:
+        p["look"] = lerp2(p["look"], (0.9, 0.5), ease(prog(t, sp, sp + 0.3)) * (1 - ease(prog(t, sp + 1.6, sp + 2.0))))
+    # anota no diário
+    w0, w1 = tv("write2")
+    kw = ease(prog(t, w0 - 0.2, w0 + 0.1)) * (1 - ease(prog(t, w1 - 0.1, w1 + 0.2)))
+    if kw > 0:
+        p["hand_r"] = lerp2(p["hand_r"], (-40 + 30 * math.sin(t * 18), 126 + 6 * math.sin(t * 11)), kw)
+        p["hold_r"] = "pen" if kw > 0.5 else None
+        p["look"] = lerp2(p["look"], (-0.2, 1.0), kw)
+    # pausa o despertador
+    pt = tv("pause_tap")
+    kt = ease(prog(t, pt - 0.35, pt)) * (1 - ease(prog(t, pt + 0.2, pt + 0.6)))
+    if kt > 0:
+        p["hand_r"] = lerp2(p["hand_r"], (-96, 60), kt)
+        p["front_r"] = kt > 0.3
+        p["look"] = lerp2(p["look"], (-0.6, 0.6), kt)
+    if t >= pt:
+        p["phone_screen"] = "play"
+    # as notas voltam graves: tudo devagar
+    m5 = tv("m5_notes")
+    if t >= m5[0]:
+        a = ease(prog(t, m5[0] + 0.05, m5[0] + 0.9))
+        p.update(cup_lift=a, eye_wide=a, brow_raise=6 + 10 * a, blink=0.0)
+        p["look"] = lerp2((-0.6, 0.6), (0.95, 0.3), ease(prog(t, m5[1], m5[1] + 0.9)))
+    lc = tv("look_cam")
+    if t >= lc:
+        e = ease(prog(t, lc, lc + 0.5))
+        p["look"] = lerp2(p["look"], (0.0, 0.0), e)
+        p.update(brow_angle=-0.18 * e, brow_raise=lerp(16, 2, e), eye_wide=lerp(1, 0.2, e), cup_lift=1.0,
+                 blink=blink(t, 0.1, 2.5))
+        n26 = tv("N26")
+        if t >= n26:
+            q = ease(prog(t, n26, n26 + 0.3))
+            p.update(brow_angle=lerp(-0.18, 0.25, q), brow_raise=lerp(2, 16, q), eye_wide=lerp(0.2, 0.8, q))
+    return p
+
+
+def shot_W_base(c, t):
+    wk = tv("wake")
     ds0, ds1 = tv("dream_shift")
     lc = tv("look_cam")
-    kz = ease(prog(t, z0, z1))
     kd = ease(prog(t, ds0, ds1))
-    tilt = ROOM_TILT * kd
     push = 1 + 0.13 * ease(prog(t, lc, lc + 2.5))
-    kx, ky, ks = 540, 960, 0.95
-    head = (kx, ky - 172 * ks)
+    jolt = -26 * math.sin(math.pi * prog(t, wk, wk + 0.35))
+    head = (560, 760)
     c.save()
     c.translate(head[0], head[1])
     c.scale(push, push)
-    c.translate(-head[0], -head[1])
-    pen = Pen(c, t, boil_rate=10)
-    room_H(pen, t, False)
+    c.translate(-head[0], -head[1] + jolt)
+    pose = kid_pose_W(t)
+    ex = {"top": "spin" if t >= tv("spin") else "lying", "diary": True, "cord_side": "l"}
+    an, cp, pen = bedroom(c, t, "day", pose, extras=ex)
+    alarm_notes(pen, t, tv("m4_notes"), "nW", C["yellow"])
     if kd > 0:
-        pend = Pen(c, t, boil_rate=6, dark=True)
         c.save()
-        r = 2300 * kd
+        r = 2400 * kd
         circ = ellipse(head[0], head[1], r, r, n=90)
-        circ = pend.wobble(circ, "wipe", closed=True, amp=6)
-        pend._path(circ, True)
+        circ = pen.wobble(circ, "wipe", closed=True, amp=6)
+        pen._path(circ, True)
         c.clip()
-        room_H(pend, t, True, tilt)
-        pose = kid_pose_H(t)
-        long_shadow(pend, (kx, 1700), lambda: draw_kid(pend, kx, ky, ks, pose, key="kidHs"), shear=0.6, sy=1.15)
+        an, cp, pen = bedroom(c, t, "night", pose, tilt=ROOM_TILT * kd + 0.01 * math.sin(t * 0.6), shadows=kd >= 1,
+                              extras=ex)
+        for i, nt in enumerate(tv("m5_notes")):
+            a = prog(t, nt, nt + 0.6)
+            if a <= 0:
+                continue
+            x, y = [(330, 470), (820, 380), (230, 800)][i]
+            note(pen, x - 20 * (t - nt), y - 8 * (t - nt), 1.2 * ease_out(a), C["lilac"], sx=2.1, key=f"n5{i}", ink=C["cream"])
         c.restore()
-    pk = pend if kd >= 1 else pen
-    pose = kid_pose_H(t)
-    an = draw_kid(pk, kx, ky, ks, pose, key="kidH")
-    # diário
-    kc = prog(t, c0, c1)
-    low = ease_in(prog(t, c1 + 0.3, c1 + 0.8))
-    if low < 1:
-        c.save()
-        c.translate(0, 1100 * low)
-        page = draw_book(pen, t, kc)
-        if kc < 1 and kz >= 1:
-            g = render_to_surface(shot_G, t)
-            px, py, pw, ph = page
-            c.save()
-            c.rectangle(px, py, pw, ph)
-            c.clip()
-            c.translate(px, py)
-            c.scale(pw / W, ph / H)
-            c.set_source_surface(g, 0, 0)
-            c.paint()
-            c.restore()
-            pen.stroke(rrect(px, py, pw, ph, 6), "bkro", lw=4, closed=True)
-        if kc > 0.5:
-            draw_cover(pen, kc)
-        # mãos segurando as bordas
-        for hx in (BOOK[0] - 4, BOOK[0] + BOOK[2] + 4):
-            pen.shape(ellipse(hx, 1130, 30, 34, n=40), f"bkh{hx}", fill=C["skin"], lw=5)
-        c.restore()
-    # fio: concha -> celular (ou bolso)
-    if pose.get("hold_r") == "phone":
-        cp = sag(an["cup_r"], an["phone_r"], 80)
     else:
-        cp = sag(an["cup_r"], (kx + 150 * ks, ky + 330 * ks), 60)
+        pend = None
+    # o fio fica tenso antes de puxar a página
     pull0 = tv("pull", 0)
-    if t >= pull0 - 0.3:
+    if t >= pull0 - 0.3 and cp is not None:
         tight = ease(prog(t, pull0 - 0.3, pull0))
-        straight = seg(an["cup_r"][0], an["cup_r"][1], an["cup_r"][0] + 40, H + 60, 8)
-        straight = np.stack([np.interp(np.linspace(0, 1, len(cp)), np.linspace(0, 1, len(straight)), straight[:, 0]),
-                             np.interp(np.linspace(0, 1, len(cp)), np.linspace(0, 1, len(straight)), straight[:, 1])], 1)
-        cp = cp * (1 - tight) + straight * tight
-    cord(pk, cp, "cordH")
+        a0 = cp[0]
+        straight = seg(a0[0], a0[1], a0[0] - 40, H + 80, 8)
+        idx = np.linspace(0, 1, len(cp))
+        si = np.linspace(0, 1, len(straight))
+        straight = np.stack([np.interp(idx, si, straight[:, 0]), np.interp(idx, si, straight[:, 1])], 1)
+        cord(Pen(c, t, dark=kd >= 1), cp * (1 - tight) + straight * tight, "cordW2")
     c.restore()
-    # entrada: a página do aquário encolhe para dentro do diário
-    if kz < 1:
-        g = render_to_surface(shot_G, t)
-        px, py, pw, ph = BOOK[0] + BOOK[2] / 2, BOOK[1], BOOK[2] / 2, BOOK[3]
-        sc = lerp(1.0, pw / W, kz)
-        ox, oy = lerp(0, px, kz), lerp(0, py, kz)
-        c.save()
-        c.translate(ox, oy)
-        c.scale(sc, sc)
-        c.set_source_surface(g, 0, 0)
+    flash = 1 - prog(t, wk, wk + 0.35)
+    if flash > 0:
+        c.set_source_rgba(1, 1, 1, flash)
         c.paint()
-        c.restore()
 
 
-def shot_H(c, t):
+def shot_W(c, t):
     p0, p1 = tv("pull")
     if t < p0:
-        shot_H_base(c, t)
+        shot_W_base(c, t)
         return
-    # o fio puxa a página e revela o primeiro quadro
     shot_A(c, 0.0)
     k = prog(t, p0, p1)
     if k >= 1:
         return
-    page = render_to_surface(shot_H_base, min(t, p0 + 0.001))
+    page = render_to_surface(shot_W_base, min(t, p0 + 0.001))
     e = ease_in(k)
     dy = 2150 * e
     rot = 0.16 * e
     dx = -120 * e
     c.save()
-    # sombra da página puxada
     c.translate(dx + 18, dy + 14)
     c.translate(540, 1920)
     c.rotate(rot)
@@ -1541,7 +1908,7 @@ def page_flip(c, t, fa, fb, rng):
 
 
 # =================================================================== LEGENDAS
-HL = [(re.compile(r"440"), "yellow"), (re.compile(r"220"), "lilac")]
+HL = [(re.compile(r"440"), "yellow"), (re.compile(r"220"), "lilac"), (re.compile(r"110|22\sHz"), "pink")]
 
 
 def draw_caption(c, t):
@@ -1617,23 +1984,27 @@ def compose(c, t):
     if t < tv("flip", 0):
         shot_A(c, t)
     elif t < tv("flip", 1):
-        page_flip(c, t, shot_A, shot_B, tv("flip"))
+        page_flip(c, t, shot_A, shot_RB, tv("flip"))
     elif t < tv("cut_under"):
-        shot_B(c, t)
+        shot_RB(c, t)
     elif t < tv("cut_back"):
         shot_C(c, t)
     elif t < tv("s2"):
         shot_D(c, t)
-    elif t < tv("s3"):
-        shot_E(c, t)
     elif t < tv("flip2", 0):
-        shot_F(c, t)
+        shot_stack(c, t)
     elif t < tv("flip2", 1):
-        page_flip(c, t, shot_F, shot_G, tv("flip2"))
-    elif t < tv("s5"):
+        page_flip(c, t, shot_stack, shot_G, tv("flip2"))
+    elif t < tv("flip3", 0):
         shot_G(c, t)
+    elif t < tv("flip3", 1):
+        page_flip(c, t, shot_G, shot_F, tv("flip3"))
+    elif t < tv("s5"):
+        shot_F(c, t)
+    elif t < tv("wake"):
+        shot_L2(c, t)
     else:
-        shot_H(c, t)
+        shot_W(c, t)
 
 
 def frame(t):
